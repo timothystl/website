@@ -4942,5 +4942,80 @@ group('a news post carries a time, so it is a whole event and nothing is retyped
   } finally { globalThis.fetch = realFetch; }
 }
 
+group('the newsletter picks its events from the posts, instead of retyping them');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 12 * 864e5).toISOString().slice(0, 10);
+
+  db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
+              VALUES ('Council meeting','In the fellowship hall.',?,?,'19:00','Fellowship Hall','web')`).run(today, soon);
+  const postId = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+
+  // ⚠ THE LOOP THIS CLOSES. The composer used to offer a blank date/name/time
+  // to type into, and those rows reached the email and NOTHING else.
+  const form = await (await call(env, '/new', { cookie: admin.cookie })).text();
+  ok(form.includes('name="event_news_ids"'), 'the composer offers the posts that already carry a date');
+  ok(form.includes('Council meeting'), 'including the one just written');
+  ok(!form.includes('name="event_ids"'), 'and no longer offers a blank row to type into');
+  ok(!/addEvent\(\)/.test(form), 'the "+ Add an event" path is gone, not merely hidden');
+
+  // ⚠ A DATED POST IS OFFERED WHETHER OR NOT IT IS TICKED FOR EMAIL. The email
+  // channel means "worth a paragraph"; a date is a fact about the week, and
+  // leaving it out of the offer sends somebody back to typing it.
+  ok(!form.includes('name="news_item_ids" value="' + postId + '"'),
+    'the post is not offered by the news picker, which is email-channel only');
+
+  const made = await call(env, '/publish', { cookie: admin.cookie, method: 'POST', form: {
+    subject: 'This week at Timothy', published_at: today, format: 'weekly',
+    action: 'draft', event_news_ids: String(postId),
+  } });
+  eq(made.status, 302, 'the issue saves');
+  const nl = db.prepare("SELECT id FROM newsletters WHERE subject='This week at Timothy'").get();
+  const rows = db.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').all(nl.id);
+  eq(rows.length, 1, 'and one event row is materialized from the post');
+  eq(rows[0].event_name, 'Council meeting');
+  eq(rows[0].event_time, '7:00 pm', 'with the clock written as somebody would read it aloud');
+  eq(rows[0].event_desc, 'In the fellowship hall.');
+  eq(rows[0].news_item_id, postId, 'remembering which post it came from');
+
+  // The tick survives a round trip, which is the whole job of news_item_id.
+  const edit = await (await call(env, `/edit/${nl.id}`, { cookie: admin.cookie })).text();
+  ok(edit.includes(`name="event_news_ids" value="${postId}" checked`), 'reopening the issue re-ticks the event');
+
+  // ⚠ MATERIALIZED, NOT RESOLVED AT SEND TIME. A sent issue's archive has to
+  // keep saying what was actually sent, so renaming the post next March must
+  // not rewrite an issue six hundred people already have.
+  db.prepare("UPDATE news_items SET title='Council meeting (moved)' WHERE id=?").run(postId);
+  eq(db.prepare('SELECT event_name FROM events WHERE newsletter_id = ?').get(nl.id).event_name, 'Council meeting',
+    'editing the post afterwards does not rewrite an issue already written');
+
+  // ⚠ A HAND-TYPED ROW FROM BEFORE THE PICKER IS KEPT, NOT SILENTLY DROPPED.
+  db.prepare(`INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id)
+              VALUES (?, '2000-01-01', 'Typed by hand', '6:30 pm', 'From the old composer', 9, NULL)`).run(nl.id);
+  const withTyped = await (await call(env, `/edit/${nl.id}`, { cookie: admin.cookie })).text();
+  ok(withTyped.includes('Typed by hand'), 'the old row is shown');
+  ok(withTyped.includes('name="typed_event_ids"'), 'and posted back so a save does not delete it');
+
+  await call(env, '/publish', { cookie: admin.cookie, method: 'POST', form: {
+    newsletter_id: String(nl.id), subject: 'This week at Timothy', published_at: today, format: 'weekly',
+    action: 'draft', event_news_ids: String(postId),
+    typed_event_ids: '0', typed_event_date_0: '2000-01-01', typed_event_name_0: 'Typed by hand',
+    typed_event_time_0: '6:30 pm', typed_event_desc_0: 'From the old composer',
+  } });
+  const after = db.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').all(nl.id);
+  eq(after.length, 2, 'both rows survive the save');
+  eq(after[0].event_name, 'Typed by hand', 'and the earlier date prints first, whichever kind of row it is');
+  eq(after[0].news_item_id, null, 'a hand-typed row still has no post behind it');
+
+  // The preview reads the same ticks, so it cannot flatter what will send.
+  const preview = await (await call(env, '/newsletter/preview', { cookie: admin.cookie, method: 'POST', form: {
+    subject: 'x', published_at: today, format: 'weekly', block_events: '1',
+    event_news_ids: String(postId),
+  } })).text();
+  ok(preview.includes('Council meeting (moved)'), 'the preview shows the post as it reads right now');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

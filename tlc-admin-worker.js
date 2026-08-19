@@ -112,7 +112,8 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          blockOn, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
          issueStatus, sendSummary, parseSubscriberCsv,
-         parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
+         parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
+         prettyClock, eventRowFromPost, orderEventRows } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -848,6 +849,137 @@ async function buildNewsletterEmailPayload(env, id) {
 
   const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes));
   return { row, emailHtml };
+}
+
+// ── THE NEWSLETTER'S UPCOMING EVENTS ────────────────────────────────────────
+// See the long note at the foot of admin/newsletter.js for why the `events`
+// table stays and is still materialized. These three are the composer's half:
+// which posts are offered, what the card looks like, and what a save reads.
+
+// Every post carrying a date from today onward — the same records the church
+// calendar and the printed month are drawn from, which is the whole point.
+//
+// ⚠ NOT filtered to the email channel, unlike the news picker above it. That
+// tick means "this is worth writing about in the letter"; an event's date is a
+// fact about the week whether or not anybody wanted a paragraph on it, and
+// leaving a dated post out of the offer would send somebody back to typing it.
+async function upcomingEventPosts(env) {
+  const today = churchDate();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, title, summary, event_date, event_time, event_location FROM news_items
+        WHERE event_date IS NOT NULL AND event_date >= ?
+        ORDER BY event_date ASC, id ASC LIMIT 60`
+    ).bind(today).all();
+    return rows.results || [];
+  } catch (_) { return []; }
+}
+
+// The rows an issue already carries, split into the two kinds. Anything with a
+// news_item_id is a tick; anything without is a row somebody typed before the
+// picker existed and is carried through untouched.
+async function newsletterEventRows(env, id) {
+  if (!id) return { picked: [], typed: [] };
+  try {
+    const rows = (await env.DB.prepare(
+      'SELECT news_item_id, event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
+    ).bind(id).all()).results || [];
+    return {
+      picked: rows.filter((r) => r.news_item_id != null).map((r) => String(r.news_item_id)),
+      typed: rows.filter((r) => r.news_item_id == null),
+    };
+  } catch (_) { return { picked: [], typed: [] }; }
+}
+
+// ⚠ DELEGATED off the container, not bound per button. There is no rebuild
+// here today, but the picker is server-rendered into two different forms and a
+// handler on each button is the shape that silently stops working the first
+// time either of them redraws.
+const TYPED_EVENT_JS = `<script>
+(function(){
+  var c = document.getElementById('events-container');
+  if (!c) return;
+  c.addEventListener('click', function(e){
+    var b = e.target.closest('[data-typed]');
+    if (!b) return;
+    e.preventDefault();
+    var row = document.getElementById('typed-event-' + b.getAttribute('data-typed'));
+    if (row) row.remove();
+  });
+})();
+</script>`;
+
+function eventPickerHtml(posts, picked = [], typed = []) {
+  const chosen = new Set((picked || []).map(String));
+  // ⚠ ANCHORED AT NOON, the same way admin/email.js and admin/blocks.js already
+  // print a picked date. `new Date('2026-09-01')` is parsed as UTC midnight,
+  // which renders as August 31 for a reader in Central — so the label under a
+  // checkbox would name the day BEFORE the one the event is on, on a screen
+  // whose whole job is getting the date right once.
+  const when = (p) => {
+    const d = p.event_date
+      ? new Date(String(p.event_date) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      : '';
+    const t = prettyClock(p.event_time);
+    return [d, t].filter(Boolean).join(' · ');
+  };
+  const list = posts.length === 0
+    ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No upcoming events yet. Add a News &amp; Events post with an event date and it will appear here — and on the calendar and the printed month, without being typed again.</div>`
+    : posts.map((p) => `
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+          <input type="checkbox" name="event_news_ids" value="${p.id}"${chosen.has(String(p.id)) ? ' checked' : ''} style="margin-top:3px;flex-shrink:0;">
+          <span style="flex:1;min-width:0;">
+            <span style="display:block;font-weight:600;">${escapeHtml(p.title || '')}</span>
+            <span style="display:block;font-size:12px;color:var(--gray);">${escapeHtml(when(p))}${p.event_location ? ' · ' + escapeHtml(p.event_location) : ''}</span>
+          </span>
+        </label>`).join('');
+
+  // ⚠ A HAND-TYPED ROW IS KEPT, SHOWN AND REMOVABLE — and there is no way to
+  // add another. Dropping them on the next save would silently delete work out
+  // of somebody's draft; offering a "+ Add an event" beside them would reopen
+  // the very loop this closes.
+  const legacy = (typed || []).length === 0 ? '' : `
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Typed into this issue by hand, before events could be picked. They will print exactly as they are. Remove one and add the event as a post instead, and it will reach the calendar too.</div>
+      ${typed.map((t, i) => `
+        <div class="event-block" id="typed-event-${i}" style="position:relative;">
+          <button type="button" class="remove-event" data-typed="${i}">×</button>
+          <div style="font-weight:600;">${escapeHtml(t.event_name || '(untitled)')}</div>
+          <div style="font-size:12px;color:var(--gray);">${escapeHtml([t.event_date, t.event_time].filter(Boolean).join(' · '))}${t.event_desc ? ' — ' + escapeHtml(t.event_desc) : ''}</div>
+          <input type="hidden" name="typed_event_ids" value="${i}">
+          <input type="hidden" name="typed_event_date_${i}" value="${escapeHtml(t.event_date || '')}">
+          <input type="hidden" name="typed_event_name_${i}" value="${escapeHtml(t.event_name || '')}">
+          <input type="hidden" name="typed_event_time_${i}" value="${escapeHtml(t.event_time || '')}">
+          <input type="hidden" name="typed_event_desc_${i}" value="${escapeHtml(t.event_desc || '')}">
+        </div>`).join('')}
+    </div>`;
+
+  return `<div id="events-container">${list}${legacy}</div>${typed && typed.length ? TYPED_EVENT_JS : ''}`;
+}
+
+// What a save reads back. The picked posts are re-read from the database
+// rather than taken from the form, so what is printed is what the record
+// actually says — a stale tab cannot post a title of its own.
+async function newsletterEventsFromForm(env, form) {
+  const ids = form.getAll('event_news_ids').map((v) => String(v).trim()).filter(Boolean);
+  let picked = [];
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    try {
+      const rows = (await env.DB.prepare(
+        `SELECT id, title, summary, event_date, event_time FROM news_items WHERE id IN (${ph})`
+      ).bind(...ids).all()).results || [];
+      picked = rows.map(eventRowFromPost);
+    } catch (_) { picked = []; }
+  }
+  const typed = form.getAll('typed_event_ids').map((i) => ({
+    news_item_id: null,
+    event_date: form.get(`typed_event_date_${i}`) || '',
+    event_name: form.get(`typed_event_name_${i}`) || '',
+    event_time: form.get(`typed_event_time_${i}`) || '',
+    event_desc: form.get(`typed_event_desc_${i}`) || '',
+  })).filter((e) => e.event_name || e.event_date);
+  return orderEventRows(picked.concat(typed));
 }
 
 // Reject anything that isn't an http(s) URL — guards Link Card saves against
@@ -1731,7 +1863,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-6'; // bumped: news_items.event_time/event_end_time/event_location, so a post is a whole event
+    const SCHEMA_VERSION = '2026-08-19-7'; // bumped: news_items event clock, and events.news_item_id so the newsletter picks rather than retypes
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2342,6 +2474,13 @@ export default {
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_time TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_time TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_location TEXT').run(); } catch (_) {}
+    // ⚠ WHICH POST AN ISSUE'S EVENT ROW CAME FROM. The rows themselves stay
+    // materialized — a sent issue's archive has to keep saying what was
+    // actually sent — and this is only what lets the composer tick the right
+    // boxes again on a later edit. NULL means somebody typed the row by hand
+    // before the picker existed: still shown, still printed, and there is no
+    // longer any way to create another one.
+    try { await env.DB.prepare('ALTER TABLE events ADD COLUMN news_item_id INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
     // Menu visibility, separate from published state. Taking a ministry out of
     // the header must not unpublish it — the page stays live at its address,
@@ -6793,6 +6932,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
            AND (channels IS NULL OR channels LIKE '%email%')
          ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today, today).all();
+      const eventPicker = eventPickerHtml(await upcomingEventPosts(env));
       const newsPickerHtml = emailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
         : emailItems.results.map(item => `
@@ -6874,9 +7014,9 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
       </div>
 
       <div class="card">
-        <div class="card-title">Upcoming events</div>
-        <div id="events-container"></div>
-        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+        <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
+        ${eventPicker}
       </div>
 
       <div class="card">
@@ -6975,40 +7115,6 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
 </div>
 
 <script>
-let eventCount = 0;
-function addEvent() {
-  const c = document.getElementById('events-container');
-  const id = ++eventCount;
-  const div = document.createElement('div');
-  div.className = 'event-block';
-  div.id = 'event-'+id;
-  div.innerHTML = \`
-    <button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-    <div class="event-grid">
-      <div class="form-group" style="margin:0;">
-        <label>Date</label>
-        <input type="date" name="event_date_\${id}">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Time</label>
-        <input type="text" name="event_time_\${id}" placeholder="e.g. 6:30 pm">
-      </div>
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-      <label>Event name</label>
-      <input type="text" name="event_name_\${id}" placeholder="e.g. Wednesday Lenten Service">
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-      <label>Short description <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(optional)</span></label>
-      <input type="text" name="event_desc_\${id}" placeholder="One line — location, special note, etc.">
-    </div>
-    <input type="hidden" name="event_ids" value="\${id}">
-  \`;
-  c.appendChild(div);
-}
-function removeEvent(id) {
-  document.getElementById('event-'+id).remove();
-}
 let classCount = 0;
 function addBibleClass(date, topic, location, leader) {
   const c = document.getElementById('classes-container');
@@ -7047,8 +7153,6 @@ function pickFormat(fmt) {
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
-// Add one event by default for weekly
-addEvent();
 </script>`, 'New Newsletter', TINYMCE_HEAD);
     }
 
@@ -7145,22 +7249,11 @@ addEvent();
       // Combine for storage: quick announcements store message in pastor_note
       const savedNote = fmt === 'quick' ? quickBody : pastorNote;
 
-      // Collect events (weekly only)
-      const eventIds = form.getAll('event_ids');
-      const events = [];
-      if (fmt === 'weekly') {
-        for (const id of eventIds) {
-          const name = form.get(`event_name_${id}`);
-          if (!name) continue;
-          events.push({
-            event_date: form.get(`event_date_${id}`) || '',
-            event_name: name,
-            event_time: form.get(`event_time_${id}`) || '',
-            event_desc: form.get(`event_desc_${id}`) || '',
-            sort_order: events.length
-          });
-        }
-      }
+      // The upcoming events, picked from the posts rather than typed here.
+      // Materialized into `events` at save time — see the note at the foot of
+      // admin/newsletter.js for why a sent issue's rows must be frozen copies
+      // rather than a lookup resolved when the email is built.
+      const events = fmt === 'weekly' ? await newsletterEventsFromForm(env, form) : [];
 
       // Collect bible classes (weekly only)
       const classIds = form.getAll('class_ids');
@@ -7214,8 +7307,8 @@ addEvent();
       // Save events
       for (const e of events) {
         await env.DB.prepare(
-          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
+          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order, e.news_item_id ?? null).run();
       }
 
       // Approval workflow: editors without newsletter_approve submit for approval
@@ -7457,7 +7550,6 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const editId = path.split('/').pop();
       const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(editId).first();
       if (!row) return new Response('Not found', { status: 404 });
-      const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(editId).all();
       const fmt = row.format || 'weekly';
       const today2 = churchDate();
       const savedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -7467,6 +7559,8 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
            AND (channels IS NULL OR channels LIKE '%email%')
          ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today2, today2).all();
+      const editEventState = await newsletterEventRows(env, editId);
+      const editEventPicker = eventPickerHtml(await upcomingEventPosts(env), editEventState.picked, editEventState.typed);
       const editNewsPickerHtml = editEmailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
         : editEmailItems.results.map(item => `
@@ -7497,24 +7591,6 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
             <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
           </div>
         </div>`).join('') : '';
-
-      // Build prefilled events JS
-      const eventsJs = eventsRows.results.map((e, i) => `
-        (function(){
-          const id = ++eventCount;
-          const div = document.createElement('div');
-          div.className = 'event-block'; div.id = 'event-'+id;
-          div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-            <div class="event-grid">
-              <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}" value="${e.event_date||''}"></div>
-              <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" value="${(e.event_time||'').replace(/"/g,'&quot;')}" placeholder="e.g. 6:30 pm"></div>
-            </div>
-            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" value="${(e.event_name||'').replace(/"/g,'&quot;')}"></div>
-            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" value="${(e.event_desc||'').replace(/"/g,'&quot;')}"></div>
-            <input type="hidden" name="event_ids" value="\${id}">\`;
-          document.getElementById('events-container').appendChild(div);
-        })();
-      `).join('');
 
       const existingClasses = JSON.parse(row.bible_classes || '[]');
       const classesJs = existingClasses.map(c => c.template_id ? `
@@ -7669,9 +7745,9 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
         ${editNewsPickerHtml}
       </div>
       <div class="card">
-        <div class="card-title">Upcoming events</div>
-        <div id="events-container"></div>
-        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+        <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
+        ${editEventPicker}
       </div>
       <div class="card">
         <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
@@ -7855,23 +7931,6 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
   refresh();
 })();</script>
 <script>
-let eventCount = 0;
-function addEvent() {
-  const c = document.getElementById('events-container');
-  const id = ++eventCount;
-  const div = document.createElement('div');
-  div.className = 'event-block'; div.id = 'event-'+id;
-  div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-    <div class="event-grid">
-      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}"></div>
-      <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" placeholder="e.g. 6:30 pm"></div>
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" placeholder="e.g. Wednesday Lenten Service"></div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" placeholder="One line"></div>
-    <input type="hidden" name="event_ids" value="\${id}">\`;
-  c.appendChild(div);
-}
-function removeEvent(id) { document.getElementById('event-'+id).remove(); }
 let classCount = 0;
 function addBibleClass(date, topic, location, leader) {
   const c = document.getElementById('classes-container');
@@ -7909,7 +7968,6 @@ function pickFormat(fmt) {
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
-${eventsJs}
 ${classesJs}
 </script>`, 'Edit Newsletter', TINYMCE_HEAD);
     }
@@ -8051,15 +8109,11 @@ ${classesJs}
       const fmt = f.get('format') || 'weekly';
       const on = (key) => f.get('block_' + key) === '1';
 
-      // Events come from the form as they are being edited, so the preview
-      // shows unsaved changes rather than what is in the database.
-      const evIds = f.getAll('event_ids');
-      const events = on('events') ? evIds.map((eid) => ({
-        event_date: f.get(`event_date_${eid}`) || '',
-        event_name: f.get(`event_name_${eid}`) || '',
-        event_time: f.get(`event_time_${eid}`) || '',
-        event_desc: f.get(`event_desc_${eid}`) || '',
-      })).filter((e) => e.event_name || e.event_date) : [];
+      // Events come from the form as it is being edited, so the preview shows
+      // unsaved ticks rather than what is in the database — read through the
+      // SAME collector the save uses, or the preview would flatter what will
+      // actually send.
+      const events = on('events') ? await newsletterEventsFromForm(env, f) : [];
 
       let newsItems = [];
       const newsIds = on('news') ? f.getAll('news_item_ids').filter(Boolean) : [];
@@ -8133,8 +8187,8 @@ ${classesJs}
       const newId = result.meta.last_row_id;
       for (const e of eventsRows.results) {
         await env.DB.prepare(
-          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(newId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
+          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(newId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order, e.news_item_id ?? null).run();
       }
       return new Response('', { status: 302, headers: { Location: `/edit/${newId}?copied=1` } });
     }
