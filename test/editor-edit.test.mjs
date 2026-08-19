@@ -178,6 +178,46 @@ eq(await page.locator('#edUrl').inputValue(), 'https://www.timothystl.org', 'typ
 await page.waitForFunction(() => (document.getElementById('edSaved') || {}).textContent.indexOf('Autosaved') === 0, null, { timeout: 8000 });
 eq(savedBlocks()[4].url, 'https://www.timothystl.org', 'and the correct address is what actually saves, not the scrambled one');
 
+group('a slow render response cannot undo what was typed after it was sent');
+await reload();
+// Dinger, reporting a deeper version of the bug above: "the editing of the
+// slugs is finicky, random typing or deletes happen." The round trip that
+// turns a debounced field edit into a redrawn canvas takes real network
+// time, and typing more into the field WHILE that request is in flight used
+// to be lost outright: the response — a snapshot of the block as it was
+// BEFORE those later keystrokes — would land and blindly replace S.blocks,
+// discarding the newer edit rather than merely mis-placing the caret. Worse,
+// the next autosave would then persist that discarded state as the draft.
+//
+// ⚠ The field is edited by setting .value and dispatching a real 'input'
+// event rather than page.keyboard.type(). The editor's whole script is one
+// IIFE, so its `S`/`rerender` are not reachable from window for a more
+// direct race — and lining up per-key timing, the 700ms debounce and an
+// artificial network delay so a keystroke lands inside the in-flight window
+// is its own flaky race to get right. Dispatching 'input' still runs the
+// real inspectorInput() path a keystroke does; only the timing is pinned.
+await page.route('**/ministries/api/render', async (route) => {
+  await new Promise((r) => setTimeout(r, 900));
+  await route.continue();
+});
+await page.click('.ed-paper .tlcb--download');
+await page.click('#edUrl');
+await page.evaluate(() => {
+  var el = document.querySelector('#edUrl');
+  el.value = 'https://www.timothystl.org/a';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+});
+await settle(750); // past the 700ms debounce — the delayed render request is now in flight
+await page.evaluate(() => {
+  var el = document.querySelector('#edUrl');
+  el.value = 'https://www.timothystl.org/about';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+});
+await page.waitForFunction(() => (document.getElementById('edSaved') || {}).textContent.indexOf('Autosaved') === 0, null, { timeout: 8000 });
+eq(await page.locator('#edUrl').inputValue(), 'https://www.timothystl.org/about', 'the field is not clobbered once the delayed, now-stale response lands');
+eq(savedBlocks()[4].url, 'https://www.timothystl.org/about', 'and the full address is what is actually saved, not a stale partial one');
+await page.unroute('**/ministries/api/render');
+
 group('single-line fields do not take newlines');
 await page.click('.ed-paper .tlcb--textphoto [data-field="title"]');
 await page.keyboard.press('End');

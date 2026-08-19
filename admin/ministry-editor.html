@@ -1192,8 +1192,26 @@ function rerender() {
   return renderChain;
 }
 async function doRerender() {
+  // ⚠ STALE-RESPONSE GUARD. This request round-trips to the Worker and back,
+  // which takes real network time — and nothing stops somebody from typing
+  // more into a field (the Jump-to name, an item's title, a URL…) while it
+  // is in flight. Without this, the response landing later would blindly
+  // `S.blocks = out.blocks` — REPLACING the whole array with a snapshot from
+  // BEFORE those later keystrokes, discarding them outright, not just on
+  // screen: the very next autosave (a separate, shorter debounce) would then
+  // persist that discarded state as the draft. That is "type and it goes
+  // crazy" one layer deeper than the caret fix above — a stale network
+  // response undoing a keystroke, rather than a caret landing in the wrong
+  // place. The body sent and a freshly-serialized body compared byte for
+  // byte is a cheap, exact answer to "did anything change since I asked":
+  // if they still match, nothing local moved and it is safe to apply; if
+  // they differ, somebody typed more, and the debounce that typing already
+  // reset will send a fully up-to-date request of its own — this one is
+  // simply dropped rather than allowed to overwrite something newer.
+  var sentBody = JSON.stringify({ blocks: S.blocks, slug: S.slug });
   try {
-    var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+    var out = await api(API + '/render', { method: 'POST', body: sentBody });
+    if (JSON.stringify({ blocks: S.blocks, slug: S.slug }) !== sentBody) return;
     S.blocks = out.blocks; // take the server's sanitized version back as the truth
     setCanvas(out.html);
     renderRail();
