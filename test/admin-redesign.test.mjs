@@ -5072,5 +5072,68 @@ group('the Word of Life school year is on the calendar, and off the news feed');
   } finally { globalThis.fetch = realFetch; }
 }
 
+group('a subscription can leave out what would crowd somebody\'s own calendar');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels, calendar_category) VALUES (?,?,?,?,?,?,?)")
+      .run('Advent service', 'In the sanctuary.', '2026-11-01', '2026-12-02', '2099-01-01', 'web', 'worship');
+
+    const all = await (await call(env, '/api/calendar.ics?month=2026-12', { fresh: true })).text();
+    ok(all.includes('SUMMARY:Advent service'), 'the whole feed carries the service');
+    ok(all.includes('SUMMARY:Christmas break'), 'and the school year, which is exactly the problem');
+    ok(all.includes('X-WR-CALNAME:Timothy Lutheran Church\r\n'), 'and is named plainly');
+
+    // ⚠ THE POINT OF THE WHOLE FEATURE. Somebody already carrying a work
+    // calendar and a school calendar will not add a third that buries their
+    // week — they will not subscribe at all.
+    const worship = await (await call(env, '/api/calendar.ics?month=2026-12&cat=worship', { fresh: true })).text();
+    ok(worship.includes('SUMMARY:Advent service'), 'a filtered feed keeps what was asked for');
+    ok(!worship.includes('SUMMARY:Christmas break'), 'and leaves out the school year');
+    ok(worship.includes('X-WR-CALNAME:Timothy Lutheran Church — Worship'),
+      'and says what is in it, so two subscriptions are told apart in a sidebar');
+
+    // ⚠ THE FILTER IS PART OF THE CACHE KEY, and this drives a REAL cache to
+    // prove it. Without the key, whichever filter was asked for first is
+    // served to every other subscriber for ten minutes — somebody who asked
+    // for worship quietly getting the school year, with nothing at their end
+    // to see. Asserting it against the Node harness's absent `caches` would
+    // have passed either way, which is no assertion at all.
+    const realCaches = globalThis.caches;
+    const store = new Map();
+    globalThis.caches = { default: {
+      async match(req) { const hit = store.get(req.url); return hit ? hit.clone() : null; },
+      async put(req, res) { store.set(req.url, res.clone()); },
+      async delete() { return true; },
+    }};
+    try {
+      // Warm the cache with the worship feed, then ask for the school one.
+      await call(env, '/api/calendar.ics?month=2026-12&cat=worship');
+      const school = await (await call(env, '/api/calendar.ics?month=2026-12&cat=wol')).text();
+      ok(school.includes('SUMMARY:Christmas break'), 'a different filter is not served the previous one');
+      ok(!school.includes('SUMMARY:Advent service'), 'in either direction');
+      // The same filter written the other way round is ONE cache entry, not two.
+      const before = store.size;
+      await call(env, '/api/calendar.ics?month=2026-12&cat=wol,worship');
+      await call(env, '/api/calendar.ics?month=2026-12&cat=worship,wol');
+      eq(store.size, before + 1, 'the order the categories are written in does not make a second entry');
+    } finally {
+      if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+    }
+
+    // ⚠ AND IT APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE. The month on
+    // screen filters in the browser; filtering the JSON here would leave the
+    // pills unable to widen what they were handed, and the print sheet — which
+    // deliberately ignores the pills — printing a month short of everything.
+    const json = await (await call(env, '/api/calendar?month=2026-12&cat=worship', { fresh: true })).json();
+    ok(json.events.some((e) => e.title === 'Christmas break'),
+      'the page still gets the whole month, whatever the subscription asked for');
+  } finally { globalThis.fetch = realFetch; }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -478,6 +478,46 @@ export function buildIcs(events, { name = 'Timothy Lutheran Church', tz = 'Ameri
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }
 
+// ── SUBSCRIBING TO PART OF IT ───────────────────────────────────────────────
+// ⚠ THE WHOLE POINT OF THE FILTER IS THAT A SUBSCRIPTION IS NOT A PAGE. A
+// visitor clicking a pill is looking at one thing for a moment; somebody
+// subscribing is deciding what appears in their own calendar every day for
+// years. A hundred school dates and every building rental crowding out a
+// personal calendar is exactly what stops people subscribing at all — and
+// then they go back to being told things by hand, which is the problem the
+// whole calendar exists to solve.
+//
+// ⚠ AN ABSENT FILTER MEANS EVERYTHING, and an unrecognized one is dropped
+// rather than treated as a category nothing matches. A subscription that
+// silently returns an empty file because a category was renamed is one
+// somebody's calendar quietly stops updating from, with nothing to see.
+export function parseFilterList(raw) {
+  return String(raw || '').split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+export function filterEvents(events, { cats: wantCats, sources: wantSources } = {}) {
+  const c = (wantCats || []).length ? new Set(wantCats) : null;
+  const s = (wantSources || []).length ? new Set(wantSources) : null;
+  return events.filter((ev) => {
+    if (c && !c.has(ev.category)) return false;
+    // `both` is one happening that is in two places, not a third source, so it
+    // answers to either of the sources it came from rather than falling out of
+    // each — the same rule the page's own source pills follow.
+    if (s && !(s.has(ev.source) || (ev.source === 'both' && (s.has('gcal') || s.has('news'))))) return false;
+    return true;
+  });
+}
+
+// What a calendar app will call it in somebody's sidebar. A filtered feed says
+// what is in it, because "Timothy Lutheran Church" appearing twice with
+// different contents is the thing that makes people unsubscribe from both.
+export function feedName(wantCats, cats, base = 'Timothy Lutheran Church') {
+  const list = wantCats || [];
+  if (!list.length || list.length >= activeCategories(cats).length) return base;
+  const names = list.map((k) => categoryRecord(k, cats).name);
+  return `${base} — ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`;
+}
+
 // ── WHICH CALENDARS ─────────────────────────────────────────────────────────
 // The two ids that were hardcoded in the old embed URL. They are a setting now
 // (`calendar_google_ids`) so adding the school's calendar is not a deploy, and

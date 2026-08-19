@@ -870,6 +870,204 @@ works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
 
+### An event is entered once (2026-08-19)
+
+Dinger, once the calendar was rendering, on what the real problem had been all
+along: *"my real pain points are that only i can add google events to the
+calendar. and that if things are added to newsletter events, and then i have to
+add to teh google calendar, and then to go adn print it out, it is wasted time
+and something is always forgotten. or just dont want to do it. Then theer is
+the problem of me having to subscribe to the church google calendar word of
+life calendar etc and my own personal calendar is crowded out."* Then: *"so the
+mroe that we can make this funnel everything and me not to have a church google
+calendar that is poorly maintained"*.
+
+**Three pain points, and two of them were not what they looked like.**
+
+- **"Only I can add Google events"** was already half solved and nobody had been
+  told. A News & Events post with an event date has reached the calendar since
+  v5.29.0 and needs only `news_edit`, which the Office staff preset already
+  holds — no Google account at all. What was missing is that it was presented
+  as *write a news post*, not as *add an event*.
+- **The triple entry was structural, and the newsletter was the cause.** `events`
+  is its own table — rows tied to one `newsletter_id`, typed free-hand, deleted
+  and re-inserted on every save — and they reached the email and **nothing
+  else**. Not the calendar, not the printed month, not Google. That is the
+  loop: written into the letter, written again on the calendar, remembered a
+  third time when the month had to be printed.
+- **The crowded personal calendar had an answer that was one query parameter
+  away.** `/api/calendar.ics` already merged all three sources into one
+  subscription. It was unfiltered, so subscribing meant taking the building
+  rentals and (now) the school year with it.
+
+**⚠ A NEWS POST HAD NO CLOCK, AND THAT IS WHY THE NEWSLETTER KEPT ITS OWN ROWS.**
+`news_items` had `event_date` and nothing else, so a 7:00 pm council meeting
+could be typed into an email and could not be said here at all.
+`event_time` / `event_end_time` / `event_end_date` / `event_location` are that
+gap closed, and everything else in this entry rests on them.
+
+- **⚠ A BLANK TIME IS ALL DAY, NOT MIDNIGHT.** `19:00` and `` are different
+  facts, and reading the second as `00:00` would put every dateless-but-timed
+  announcement at the top of the day looking deliberate.
+- **⚠ `normalizeClock()` IS EXPORTED AND USED BY BOTH THE SAVE PATH AND THE
+  RENDERER.** A value the calendar would ignore must never be stored either, or
+  the form comes back showing a time the month does not show.
+- **⚠ AN UNSTATED END BECOMES ONE HOUR AND IS NEVER SHOWN.** The page prints
+  only the start — `tlcCalTime()` reads `ev.start` and has no end branch — but
+  `.ics` cannot say "starts at 7, we did not say when it stops": DTEND equal to
+  DTSTART is a zero-length event a calendar app draws as a hairline. **Clamped
+  to the same day**, or an 11:30 pm event is drawn on tomorrow's grid as well.
+  ⚠ The first version of that test asserted only the DATE and was **vacuous** —
+  the bug produces `2026-09-01T24:30:00`, the same date, an hour that does not
+  exist, lexically still `>=` the start. The clock itself has to be read.
+- **`event_end_date` is a run of days as ONE entry**, not five identical chips.
+  An end before the start is ignored rather than honored: drawing it would take
+  the event off the month entirely.
+
+**The newsletter picks now, and the `events` table stays.** The Upcoming events
+card is a checkbox list of every dated post; ticking one prints it in the letter
+**and** puts it on the calendar and the printed month.
+
+- **⚠ MATERIALIZED AT SAVE TIME, NOT RESOLVED WHEN THE EMAIL IS BUILT.** A sent
+  issue is locked and its archive has to keep saying what was actually sent, so
+  renaming the post next March must not rewrite an issue six hundred people
+  already have. A test drives exactly that. It also means `buildEmailHtml`, the
+  archive page and the public API are byte-for-byte unchanged.
+- **⚠ `events.news_item_id` IS ONLY WHAT LETS A LATER EDIT TICK THE RIGHT
+  BOXES.** NULL means somebody typed the row by hand before this existed: kept,
+  shown, removable, and there is no longer any way to create another one.
+  Dropping them on the next save would silently delete work out of a draft.
+- **⚠ THE OFFER IS NOT FILTERED TO THE EMAIL CHANNEL**, unlike the news picker
+  above it. That tick means "worth a paragraph"; a date is a fact about the
+  week, and leaving a dated post out of the offer sends somebody back to typing
+  it.
+- **⚠ The preview reads through the SAME collector as the save**, or it would
+  flatter what will actually send.
+- Order is by the date each event falls on, not by tick order — a hand-kept
+  legacy row has no place in the checkbox sequence, and appending it would print
+  February under March.
+- ⚠ The picker's date label is anchored at noon, the way `admin/email.js`
+  already prints a picked date: `new Date('2026-09-01')` is UTC midnight, which
+  renders as August 31 in Central, so the label under a checkbox would name the
+  day *before* the one the event is on.
+
+**A subscription can leave things out, and that is the whole point.**
+`/api/calendar.ics?cat=worship,meetings`, with a Subscribe panel on `/calendar`
+that has a tick box per category.
+
+- **⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION.** Clicking one in a browser
+  downloads a snapshot: the events land once and never update again, which looks
+  like it worked and quietly stops being true the following week. The panel
+  offers a `webcal:` address, which hands it to the calendar app, and a copyable
+  `https` one for anything that ignores the scheme. The bar's old plain `<a>` to
+  the `.ics` had exactly that trap in it.
+- **⚠ THE PANEL KEEPS ITS OWN SELECTION, NOT THE MONTH'S FILTER PILLS.** A pill
+  is what somebody is looking at for a moment; a subscription is what appears in
+  their calendar every day for years. Coupling them would silently change one
+  when they touched the other, and a test drives that.
+- **⚠ THE FILTER APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE.** Filtering the
+  JSON would leave the on-screen pills unable to widen what they were handed,
+  and the print sheet — which deliberately ignores the pills — printing a month
+  quietly short of everything but one category.
+- **⚠ THE FILTER IS PART OF THE CACHE KEY, SORTED.** Without it whichever filter
+  was asked for first is served to every other subscriber for ten minutes —
+  somebody who asked for worship getting the school year, with nothing at their
+  end to see. Sorted, so `?cat=a,b` and `?cat=b,a` are one entry. ⚠ The test
+  installs a **real recording cache**: asserted against the Node harness's
+  absent `caches` it would have passed either way.
+- **⚠ NOTHING TICKED IS REFUSED, not served as an empty file.** From inside a
+  calendar app an empty subscription and a broken one look the same.
+- `X-WR-CALNAME` says what is in a filtered feed, because "Timothy Lutheran
+  Church" appearing twice in a sidebar with different contents is what makes
+  people unsubscribe from both.
+- An unrecognized category is **dropped** rather than treated as one nothing
+  matches — a renamed category must not silently empty somebody's subscription.
+
+**⚠ AND `NEWS_WHERE_SQL` DID NOT EXIST, THOUGH A COMMENT HAS CLAIMED IT DID FOR
+A YEAR.** COR-1 in the 2026-08-19 review, forced by this work rather than picked
+off the list: only `NEWS_ORDER_SQL` was ever extracted, and the two WHERE
+clauses had drifted three ways — `pageData()` compared against UTC `date('now')`
+rather than church time, never checked `publish_date`, and never filtered the
+channel. **A post scheduled for a future date was already live on every
+block-rendered page**, as was one the office had marked email-only. It is one
+clause now, taking the date as a bind so neither caller can go back to asking
+SQLite what day it is in UTC.
+
+**A `calendar` channel the feed reads and `/news` does not.** A school break is
+a date on the month and is not news anybody wants a paragraph about; without it
+the only way to keep twenty-nine of them out of the news feed would be to keep
+them off the calendar too.
+
+**Not done, and deliberately: writing site-entered events BACK to Google.** The
+mechanism is proven — `addGymBookingToGCal()` (`admin/gym.js:291`) already
+pushes with the write-scoped service account — and it would keep the Google
+calendar correct for whoever is still subscribed to it directly. It is a bridge
+for a calendar Dinger has said he wants to stop having, so it waits on that
+being the actual intention rather than being built on the assumption.
+
+Run: `node admin/calendar.test.mjs` (46), `node admin/newsletter.test.mjs`
+(113), `node --experimental-loader ./test/html-loader.mjs
+test/admin-redesign.test.mjs` (1311), and in a browser
+`NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (88). Every new
+assertion was verified by injecting the regression it guards; the one that was
+vacuous on the first attempt is recorded as such in the file.
+
+### The Word of Life school year is in, from a PDF (2026-08-19)
+
+Dinger: *"if i send you a pdf of the school calendar can you create that for
+our claendar"*, then, when asked whether the school kept a Google calendar:
+*"no, they refuse to do a google calendar"* — and *"we also dont need every
+event, probably jsut early dismissal days, grandparents day, graduation."*
+
+**A Google calendar would have been a field, not a feature.** `calendar_google_ids`
+is a setting, so a school that kept one would be added in a click and stay
+correct forever. They publish a PDF once a year instead, so somebody has to read
+the sheet. `admin/school-calendar-seed.js` is that reading — twenty-nine dates,
+in version control where they can be checked against the sheet rather than
+trusted, loaded once behind a marker.
+
+- **⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM.** The schema block
+  re-runs on every `SCHEMA_VERSION` bump, so without it a date the office
+  removed on purpose — the school moved it, or it was never wanted — comes back
+  on the next deploy, silently, for as long as the code exists. It is keyed on
+  the **school year**, so next year's sheet is a new list and a new marker
+  (`school_cal_2027-2028`), never an edit to this one: changing a title here
+  would do nothing to a database that has already run it, which is exactly the
+  trap that would make somebody think the list was wrong.
+- **⚠ THE ROWS ARE ORDINARY News & Events RECORDS.** They are edited and deleted
+  from the News screen like anything else. A separate school-events table would
+  be a second thing to teach every reader of the calendar about, for data that
+  is already exactly the shape the calendar reads.
+- **⚠ EVERY ROW IS CATEGORY `wol` AND CHANNEL `calendar`.** The category is what
+  lets somebody leave the whole school year out of their own subscription in one
+  tick — which was the deciding requirement, since a hundred school dates
+  crowding out a personal calendar is the problem this was meant to solve, not
+  cause. The channel keeps twenty-nine break notices out of the news feed.
+- **⚠ A TIMOTHY EARLY DISMISSAL IS 11:45 am.** The school's own footnote gives
+  two times — Ascension 12:00, Timothy/St. Lucas 11:45 — and this is Timothy's
+  calendar. Do not "correct" these to noon.
+- **⚠ GOOD FRIDAY AND EASTER MONDAY ARE TWO ROWS, NOT A RANGE.** The sheet writes
+  them as "26, 29", with an ordinary weekend between. A 26–29 range would draw a
+  four-day bar and claim the school was shut on days it was never open.
+- **⚠ THE SHEET ITSELF HAS AT LEAST ONE ERROR**: a Teacher Workday on Saturday
+  13 March 2027. It is not in the list, and if it is ever added it wants
+  checking with the school rather than copying. Every other date was verified
+  against its weekday before being written down — a transcription error here is
+  invisible, because a wrong date looks exactly like a right one.
+- **What was deliberately left out** is named in the file so nobody adds it back
+  thinking it was missed: the three NWEA assessment weeks, K-8 picture day, 6th
+  grade camp, end of Quarter 1, the Saturday workday, the two August parent
+  meetings and the March conference evenings.
+- **⚠ NO EXPIRY.** The sweep DELETES a row and its image outright, and the
+  calendar deliberately shows last month as well as this one — a date vanishing
+  from the printed month the morning after it happened is not what anybody
+  means by expired.
+
+⚠ **Two test seeds had to stop hardcoding `news_items` ids and three calendar
+assertions had to name their event rather than count the feed.** The seed runs
+in every fresh database, so "the feed has exactly one event" stopped being a
+fact about those tests.
+
 ### The calendar's categories are the office's now, and rentals are on it (2026-08-19)
 
 Dinger, once the calendar was finally rendering: *"how do i set the color of the

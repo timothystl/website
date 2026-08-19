@@ -45,7 +45,8 @@ import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
-         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY, normalizeClock } from './admin/calendar.js';
+         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY, normalizeClock,
+         parseFilterList, filterEvents, feedName } from './admin/calendar.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
@@ -3354,8 +3355,17 @@ export default {
       let catV = 0;
       for (let i = 0; i < catStamp.length; i++) catV = ((catV * 31) + catStamp.charCodeAt(i)) | 0;
 
+      // ⚠ THE FILTER IS PART OF THE CACHE KEY. Without it whichever filter was
+      // asked for first would be served to every other subscriber for ten
+      // minutes — somebody who asked for worship getting the school year, and
+      // no way to tell from their end that it had happened. Sorted, so
+      // `?cat=worship,music` and `?cat=music,worship` are one entry.
+      const wantCats = parseFilterList(url.searchParams.get('cat')).sort();
+      const wantSources = parseFilterList(url.searchParams.get('src')).sort();
+      const filterKey = `${wantCats.join('.')}|${wantSources.join('.')}`;
+
       const cache = edgeCache();
-      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}&v=${catV >>> 0}`);
+      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}&v=${catV >>> 0}&f=${encodeURIComponent(filterKey)}`);
       if (cache) {
         const hit = await cache.match(cacheKey).catch(() => null);
         if (hit) return hit;
@@ -3376,8 +3386,15 @@ export default {
         feed = { from, to, events: [], categories: activeCategories(cats), sources: { google: false, news: false, building: false, googleReason: 'error' } };
       }
 
+      // ⚠ THE FILTER APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE. The month on
+      // screen has its own pills and applies them in the browser, so filtering
+      // the JSON here would leave those pills unable to widen what they were
+      // handed — and the print sheet, which deliberately ignores the pills,
+      // printing a month quietly short of everything but one category.
+      const icsEvents = filterEvents(feed.events, { cats: wantCats, sources: wantSources });
+
       const out = wantsIcs
-        ? new Response(buildIcs(feed.events, { cats }), {
+        ? new Response(buildIcs(icsEvents, { cats, name: feedName(wantCats, cats) }), {
             headers: { 'Content-Type': 'text/calendar; charset=utf-8',
                        'Content-Disposition': 'inline; filename="timothy-lutheran.ics"',
                        'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' },

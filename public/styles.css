@@ -565,6 +565,37 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-cal-sub:hover{background:var(--mist);color:var(--steel);}
 .tlc-cal-print{color:#fff;background:var(--steel);border:none;padding:8px 15px;}
 .tlc-cal-print:hover{background:var(--steel-dk);}
+.tlc-cal-sub[aria-expanded="true"]{background:var(--steel);color:#fff;}
+
+/* ── Subscribe ───────────────────────────────────────────────────────────── */
+/* A link to an .ics file downloads a snapshot; a subscription needs the webcal
+   scheme or an address pasted into the calendar app. Both are offered here,
+   with a choice of what is in it — see tlcCalSubPanel in public/index.html. */
+.tlc-cal-subpanel{padding:18px 24px;border-bottom:1px solid var(--border);
+  background:var(--linen);}
+.tlc-cal-subintro{margin:0 0 12px;font-family:var(--font-body);
+  font-size:calc(14px * var(--tlc-text-scale, 1));line-height:1.5;color:var(--gray);max-width:60ch;}
+.tlc-cal-subcats{display:flex;flex-wrap:wrap;gap:8px 18px;margin-bottom:14px;}
+.tlc-cal-subcat{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  font-family:var(--font-ui);font-size:calc(13px * var(--tlc-text-scale, 1));
+  font-weight:600;color:var(--steel);}
+.tlc-cal-subcat input{width:16px;height:16px;accent-color:var(--steel);cursor:pointer;}
+.tlc-cal-subgo{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:10px;}
+.tlc-cal-subbtn{display:inline-flex;align-items:center;font-family:var(--font-ui);
+  font-size:calc(13px * var(--tlc-text-scale, 1));font-weight:800;color:#fff;
+  background:var(--steel);border-radius:999px;padding:9px 18px;text-decoration:none;}
+.tlc-cal-subbtn:hover{background:var(--steel-dk);color:#fff;}
+.tlc-cal-subor{font-family:var(--font-body);font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--gray);}
+.tlc-cal-subcopy{display:flex;gap:8px;max-width:520px;}
+.tlc-cal-suburl{flex:1;min-width:0;font-family:var(--font-ui);
+  font-size:calc(12px * var(--tlc-text-scale, 1));color:var(--gray);
+  border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;}
+.tlc-cal-subcopybtn{font-family:var(--font-ui);font-size:calc(12px * var(--tlc-text-scale, 1));
+  font-weight:800;color:var(--steel);background:none;border:1.5px solid var(--steel);
+  border-radius:8px;padding:8px 14px;cursor:pointer;}
+.tlc-cal-subcopybtn:hover{background:var(--mist);}
+.tlc-cal-subwarn{margin:0;font-family:var(--font-body);
+  font-size:calc(13px * var(--tlc-text-scale, 1));color:#8C3A28;}
 
 /* ── Filter bands ────────────────────────────────────────────────────────── */
 .tlc-cal-src{display:flex;align-items:center;gap:12px;padding:12px 24px;
@@ -706,6 +737,9 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
      pass already holds the site to. */
   .tlc-cal-arrow{width:44px;height:44px;}
   .tlc-cal-today,.tlc-cal-sub,.tlc-cal-print,.tlc-cal-pill{min-height:44px;}
+  .tlc-cal-subbtn,.tlc-cal-subcopybtn,.tlc-cal-suburl{min-height:44px;}
+  .tlc-cal-subcat{min-height:44px;}
+  .tlc-cal-subcopy{flex-wrap:wrap;}
 }
 
 /* ═══ THE PRINT SHEET ═══════════════════════════════════════════════════════

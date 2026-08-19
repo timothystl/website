@@ -518,6 +518,76 @@ async function goToFixtureMonth(p) {
   await ctx.close();
 }
 
+// ── subscribing to part of it ───────────────────────────────
+// ⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION. Clicking one downloads a
+// snapshot: the events land once and never update, which looks like it worked
+// and quietly stops being true the following week. What is pinned here is that
+// the panel offers a `webcal:` address and a copyable one, and that the choice
+// of what is in it actually reaches the address.
+{
+  const { p, ctx, errors } = await open();
+  ok(!(await p.$('.tlc-cal-subpanel')), 'the panel is shut to begin with');
+  await p.click('.tlc-cal-sub');
+  ok(await p.$('.tlc-cal-subpanel'), 'Subscribe opens it');
+  eq(await p.getAttribute('.tlc-cal-sub', 'aria-expanded'), 'true', 'and says so to a screen reader');
+
+  // ⚠ webcal:, not https:. This is the whole difference between subscribing
+  // and downloading a file that never changes again.
+  const href = await p.getAttribute('.tlc-cal-subbtn', 'href');
+  ok(/^webcal:\/\//.test(href), 'the button hands the address to a calendar app: ' + href);
+  ok(!/[?&]cat=/.test(href), 'and with everything ticked it asks for everything, not a list of all of them');
+
+  const url = await p.inputValue('.tlc-cal-suburl');
+  ok(/^https:\/\//.test(url), 'and there is an https address to paste into an app that ignores webcal');
+
+  // ⚠ EVERY CLICK REDRAWS THE PANEL, so an element handle taken before one is
+  // detached by the time of the next. Everything below re-queries.
+  const catCount = (await p.$$('.tlc-cal-subcat input')).length;
+  ok(catCount >= 2, 'there is a box per category on the month');
+  // Unticking one leaves the other ten, rather than leaving nothing.
+  await p.click('.tlc-cal-subcat:nth-of-type(2) input');
+  const href2 = await p.getAttribute('.tlc-cal-subbtn', 'href');
+  ok(/[?&]cat=/.test(href2), 'unticking one narrows the address: ' + href2);
+  const asked = decodeURIComponent((href2.match(/[?&]cat=([^&]*)/) || [])[1] || '').split(',');
+  eq(asked.length, catCount - 1, 'to everything except the one that was unticked');
+
+  // ⚠ THE PANEL IS ITS OWN CHOICE, NOT THE MONTH'S FILTER PILLS. A pill is
+  // what somebody is looking at for a moment; a subscription is what appears
+  // in their calendar every day for years, and coupling them would silently
+  // change one when they touched the other.
+  const pill = await p.$('.tlc-cal-cats [data-cal="cat"][data-val="worship"]');
+  if (pill) {
+    await pill.click();
+    await p.waitForTimeout(150);
+    const href3 = await p.getAttribute('.tlc-cal-subbtn', 'href');
+    eq(href3, href2, 'clicking a month filter does not rewrite the subscription');
+  }
+
+  // ⚠ Nothing ticked is refused rather than served as an empty file: from
+  // inside a calendar app, an empty subscription and a broken one look the same.
+  for (let i = 0; i < catCount + 2; i++) {
+    const next = await p.$('.tlc-cal-subcat input[type=checkbox]:checked');
+    if (!next) break;
+    await next.click();
+  }
+  ok(!(await p.$('.tlc-cal-subbtn')), 'with nothing ticked there is no address to add');
+  ok(await p.$('.tlc-cal-subwarn'), 'and it says to choose something');
+
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// The panel must never reach the printed month — it is a control, and the
+// sheet is a handout.
+{
+  const { p, ctx } = await open();
+  await p.click('.tlc-cal-sub');
+  await p.emulateMedia({ media: 'print' });
+  const shown = await p.$eval('.tlc-cal-subpanel', (el) => getComputedStyle(el).display);
+  eq(shown, 'none', 'the Subscribe panel is not on the printed sheet');
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 console.log(`public-calendar.test.mjs: ${pass} passed, ${fail} failed`);

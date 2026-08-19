@@ -20,7 +20,7 @@ import {
   normalizeGoogleEvent, normalizeNewsItem, dedupeEvents, sortEvents,
   buildIcs, foldIcsLine, parseCalendarIds, DEFAULT_CALENDAR_IDS,
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
-  normalizeClock, clockOnDay, newsEnd,
+  normalizeClock, clockOnDay, newsEnd, parseFilterList, filterEvents, feedName,
 } from './calendar.js';
 
 let pass = 0;
@@ -521,6 +521,55 @@ test('a multi-day all-day entry writes an exclusive DTEND, as the format means',
   const ics = buildIcs([normalizeNewsItem({ id: 1, title: 'Spring break', event_date: '2027-03-15', event_end_date: '2027-03-19' }, cats)], { cats });
   assert.ok(ics.includes('DTSTART;VALUE=DATE:20270315'), ics);
   assert.ok(ics.includes('DTEND;VALUE=DATE:20270320'), 'DTEND is the day AFTER the last day');
+});
+
+
+// ── SUBSCRIBING TO PART OF IT ───────────────────────────────────────────────
+// A subscription is not a page: somebody is deciding what appears in their own
+// calendar every day for years, and a hundred school dates crowding it out is
+// what stops people subscribing at all.
+
+test('an absent filter means everything, and an empty one does too', () => {
+  const evs = [{ category: 'worship', source: 'gcal' }, { category: 'wol', source: 'news' }];
+  assert.equal(filterEvents(evs, {}).length, 2);
+  assert.equal(filterEvents(evs, { cats: [], sources: [] }).length, 2);
+  assert.equal(filterEvents(evs).length, 2);
+});
+
+test('a category filter keeps only that category', () => {
+  const evs = [{ category: 'worship', source: 'gcal' }, { category: 'wol', source: 'news' }, { category: 'facility', source: 'building' }];
+  assert.deepEqual(filterEvents(evs, { cats: ['worship', 'facility'] }).map((e) => e.category), ['worship', 'facility']);
+});
+
+test('`both` answers to either source it came from, never falling out of each', () => {
+  // The same rule the page's own source pills follow. An event in Google AND
+  // in News & Events is one happening, not a third source.
+  const evs = [{ category: 'x', source: 'both' }];
+  assert.equal(filterEvents(evs, { sources: ['news'] }).length, 1);
+  assert.equal(filterEvents(evs, { sources: ['gcal'] }).length, 1);
+  assert.equal(filterEvents(evs, { sources: ['building'] }).length, 0);
+});
+
+test('an unrecognized category is dropped, not treated as one nothing matches', () => {
+  // ⚠ Otherwise a renamed category silently empties somebody's subscription,
+  // with nothing to see from inside a calendar app.
+  const evs = [{ category: 'worship', source: 'gcal' }];
+  assert.equal(filterEvents(evs, { cats: ['worship', 'a-category-that-went-away'] }).length, 1);
+});
+
+test('the filter list reads a comma or a space, and ignores the rest', () => {
+  assert.deepEqual(parseFilterList('worship,music'), ['worship', 'music']);
+  assert.deepEqual(parseFilterList(' Worship , MUSIC '), ['worship', 'music']);
+  assert.deepEqual(parseFilterList(''), []);
+  assert.deepEqual(parseFilterList(null), []);
+});
+
+test('a filtered feed says what is in it, so two of them are told apart', () => {
+  const cats = mergedCategories([]);
+  assert.equal(feedName([], cats), 'Timothy Lutheran Church');
+  assert.equal(feedName(['worship'], cats), 'Timothy Lutheran Church — Worship');
+  assert.ok(feedName(['worship', 'music', 'meetings', 'youth'], cats).endsWith('+1'),
+    'a long list is trimmed rather than filling the sidebar');
 });
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
