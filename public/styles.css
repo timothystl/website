@@ -761,18 +761,35 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 @media print{
   @page{size:letter landscape;margin:0.35in;}
   body{background:#fff;}
-  /* ⚠ EVERYTHING THAT IS NOT THE SHEET GOES, not just the calendar's own
-     chrome. The page around it — the navy hero, the nav, the newsletter band,
-     the footer, any notice banner — would otherwise take the first page and
-     push the month onto a second, which is the one thing a one-page sheet
-     must not do. An inactive .page is already display:none, so only the
-     calendar's own sheet is ever in the printed document. */
-  [data-noprint],.nav,footer,#newsletter-band,.page-hero,[id^="notices-"]{display:none !important;}
-  body::before{display:none !important;}
+  /* The interactive calendar itself, wherever it is mounted. This much is
+     unscoped on purpose: printing the /news page should not print a month
+     widget somebody cannot click. */
+  [data-noprint]{display:none !important;}
+
+  /* ⚠ EVERYTHING ELSE HERE IS SCOPED TO THE CALENDAR PAGE, and that scoping is
+     deliberate rather than tidiness. The page around the sheet — the navy
+     hero, the nav, the newsletter band, the footer, a notice banner — would
+     otherwise take the first sheet and push the month onto a second, which is
+     the one thing a one-page sheet must not do. But hiding all of that for
+     EVERY page would quietly change how the whole site prints, which nobody
+     asked for: somebody printing a ministry page today gets its hero and its
+     footer, and should go on getting them.
+     ⚠ An inactive .page is already display:none, so only the page actually
+     showing is ever in the printed document — which is also why :has() is the
+     right test here and there is no class to set and unset as the SPA
+     navigates. A browser without :has() prints the calendar page with its
+     chrome above the sheet: degraded, not broken, and every current browser
+     has it. */
+  body:has(#page-calendar.active) .nav,
+  body:has(#page-calendar.active) footer,
+  body:has(#page-calendar.active) #newsletter-band,
+  body:has(#page-calendar.active) .page-hero,
+  body:has(#page-calendar.active) [id^="notices-"]{display:none !important;}
+  body:has(#page-calendar.active)::before{display:none !important;}
   /* The sheet takes the paper, so the section padding and the content-column
-     cap around it are given up for the print. */
-  .page.active .section{padding:0 !important;background:#fff !important;}
-  .page.active .wrap{max-width:none !important;padding:0 !important;}
+     cap around it are given up — again only on this one page. */
+  body:has(#page-calendar.active) .section{padding:0 !important;background:#fff !important;}
+  body:has(#page-calendar.active) .wrap{max-width:none !important;padding:0 !important;}
   .tlc-print-sheet{display:flex !important;flex-direction:column;gap:14px;
     background:#fff;padding:0;box-shadow:none;border:none;
     /* The page box, so the grid below has a fixed height to divide. */

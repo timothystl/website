@@ -416,6 +416,21 @@ async function goToFixtureMonth(p) {
   // second would be a month nobody asked for.
   eq(await p.$$eval('.tlc-print-sheet', (s) => s.length), 0, '/news does not carry its own print sheet');
   ok(calls() >= 1, 'and it does fetch when the page is opened');
+  // ⚠ AND PRINTING /news IS NOT PRINTING THE CALENDAR PAGE. The rules that
+  // strip the hero, the nav and the footer are scoped to #page-calendar on
+  // purpose — unscoped they would quietly change how every page on the site
+  // prints, which nobody asked for. What /news does lose is the interactive
+  // calendar widget, which is `data-noprint` wherever it is mounted.
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+  const news = await p.evaluate(() => {
+    const shown = (sel) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== 'none'; };
+    return { cal: shown('#tlc-cal-news .tlc-cal'), nav: shown('.nav'), foot: shown('footer'),
+             hero: shown('#page-news .page-hero') };
+  });
+  eq(news.cal, false, 'the calendar widget does not print from /news either');
+  ok(news.nav && news.foot && news.hero, 'but the rest of the page prints exactly as it did before this feature');
+  await p.emulateMedia({ media: 'screen' });
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
   await ctx.close();
 }
