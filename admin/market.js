@@ -884,18 +884,25 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           // ⚠ A TIMEOUT, because this is another application on another host
           // and an admin screen must not sit waiting on one. Four seconds and
           // the tab renders its own honest empty state instead.
-          // cache: 'no-store' is load-bearing, not defensive boilerplate. An external
+          // ⚠ Bypassing Cloudflare's edge cache for this subrequest is load-bearing,
+          // not defensive boilerplate — see the class comment above. An external
           // curl to this exact URL with this exact key returned 200 with real data
-          // while this live subrequest kept getting Serve's own generic 404 fallback —
-          // the two requests land at different Cloudflare colos, and Serve's route for
-          // this endpoint had no explicit Cache-Control on any of its responses (fixed
-          // on that side too), so a colo that saw a 404 before the route existed could
-          // keep serving that cached 404 indefinitely for callers routed through it.
-          // no-store tells the runtime to skip Cloudflare's edge cache for this
-          // subrequest entirely rather than trusting whatever is already cached there.
+          // while this live subrequest kept getting Serve's own generic 404 fallback,
+          // because the two requests land at different Cloudflare colos and a colo
+          // that saw a 404 before the route existed could keep serving it forever.
+          // Serve's own responses now carry Cache-Control: no-store too, which is
+          // the real, permanent fix — this is belt-and-braces on our side.
+          // ⚠ The FETCH STANDARD's `cache` field (`cache: 'no-store'`) is NOT
+          // implemented by Cloudflare Workers' fetch() and throws a TypeError the
+          // instant it's present in the RequestInit — confirmed live ("The 'cache'
+          // field on 'RequestInitializerDict' is not implemented"), which is worse
+          // than the caching bug it was meant to fix. The Workers-native mechanism
+          // is the `cf` object: `cacheTtl: 0` tells Cloudflare's edge not to cache
+          // this particular subrequest's response at all. Do not reintroduce the
+          // standard `cache` field here.
           const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
             { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
-              cache: 'no-store',
+              cf: { cacheTtl: 0, cacheEverything: false },
               signal: AbortSignal.timeout(4000) });
           if (res.ok) vol = await res.json();
           else {
