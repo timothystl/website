@@ -898,9 +898,22 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           // field on 'RequestInitializerDict' is not implemented"), which is worse
           // than the caching bug it was meant to fix. The Workers-native mechanism
           // is the `cf` object: `cacheTtl: 0` tells Cloudflare's edge not to cache
-          // this particular subrequest's response at all. Do not reintroduce the
+          // *this* subrequest's response going forward — but it does not prove it
+          // also bypasses a READ of whatever a given colo already has cached from
+          // before either server-side fix existed. `cacheTtl` and `Cache-Control:
+          // no-store` are both about future caching; neither is documented to
+          // force a cache MISS against an entry that predates them.
+          // ⚠ THE ONLY UNAMBIGUOUS FIX IS A CACHE KEY NO COLO HAS EVER SEEN. A
+          // Cloudflare cache entry is keyed on the full URL including the query
+          // string, so a fresh timestamp on every call guarantees this exact URL
+          // has never been requested before and therefore cannot possibly have a
+          // stale cached response sitting behind it at any colo. Do not remove
+          // this even once `cacheTtl`/`no-store` are confirmed sufficient on
+          // their own — it costs nothing and closes the one gap neither of those
+          // two mechanisms is documented to close. Do not reintroduce the
           // standard `cache` field here.
-          const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
+          const res = await fetch(
+            `https://serve.timothystl.org/api/signups/christmasmarket/summary?_cb=${Date.now()}`,
             { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
               cf: { cacheTtl: 0, cacheEverything: false },
               signal: AbortSignal.timeout(4000) });
