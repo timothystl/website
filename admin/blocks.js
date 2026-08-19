@@ -1475,6 +1475,7 @@ export function newBlock(type, over = {}) {
     video: '',
     stamp: '',
     stampSize: 'm',
+    stampPulse: false,
     tone: 0,
     corner: 'tr',
     hidden: false,
@@ -1554,8 +1555,13 @@ export function sanitizeBlock(b) {
     video: safeUrl(b.video).slice(0, 600),
     stamp: cleanText(b.stamp, 40),
     stampSize: STAMP_SIZES.some((s) => s.key === b.stampSize) ? b.stampSize : 'm',
+    stampPulse: !!b.stampPulse,
     tone: clampIndex(b.tone, TONES.length),
-    corner: b.corner === 'tl' ? 'tl' : 'tr',
+    // ⚠ A third position, beyond the two corners. 'bc' sits centered along
+    // the block's lower edge — still tilted, just not squeezed into a corner,
+    // which is what makes a bigger stamp actually readable rather than
+    // hanging off the edge of the block.
+    corner: b.corner === 'tl' || b.corner === 'bc' ? b.corner : 'tr',
     hidden: !!b.hidden,
     // On every block, like width/spaceAbove above — not gated on the type,
     // because any block can be a jump target and the sanitizer is the one
@@ -2779,7 +2785,11 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
 .tlcb-stamp--tl{left:10px;right:auto;transform:rotate(-8deg);}
 .tlcb-stamp--tr{right:10px;left:auto;transform:rotate(8deg);}
-.tlcb-stamp--lg{font-size:19px;padding:12px 24px;border-radius:9px;}
+.tlcb-stamp--bc{left:50%;right:auto;transform:translateX(-50%) rotate(-6deg);}
+.tlcb-stamp--lg{font-size:26px;padding:16px 32px;border-radius:11px;}
+.tlcb-stamp--pulse{animation:tlcb-stamp-pulse 1.5s ease-in-out infinite;}
+@keyframes tlcb-stamp-pulse{0%,100%{opacity:1;box-shadow:0 5px 16px rgba(30,45,74,.3);}
+  50%{opacity:.82;box-shadow:0 7px 26px 5px rgba(30,45,74,.55);}}
 .tlcb-empty{margin:40px;padding:52px 28px;border:2px dashed #C4CEDF;border-radius:12px;text-align:center;
   display:flex;flex-direction:column;gap:8px;}
 .tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
@@ -2981,6 +2991,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 @keyframes tlcb-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){
   .tlcb-pulse{animation:none;}
+  .tlcb-stamp--pulse{animation:none;}
   .tlcb-media img,.tlcb-cg-card{transition:none;}
   .tlcb-media:hover img{transform:none;}
   .tlcb-cg-card--link:hover{transform:none;}
@@ -3309,7 +3320,12 @@ function renderStamp(opts, b) {
   // stay exactly what `.tlcb-stamp` alone produces, not a class that
   // happens to agree with it.
   const sizeClass = b.stampSize === 'l' ? ' tlcb-stamp--lg' : '';
-  return `<span class="tlcb-stamp tlcb-stamp--${b.corner === 'tl' ? 'tl' : 'tr'}${sizeClass}" style="${style}"${editable}>${esc(b.stamp)}</span>`;
+  const posClass = b.corner === 'tl' ? ' tlcb-stamp--tl' : b.corner === 'bc' ? ' tlcb-stamp--bc' : ' tlcb-stamp--tr';
+  // ⚠ Live page only, like the three APPEARS movements above — the editor
+  // draws the stamp in place so it is not pulsing while somebody is trying
+  // to read it and work on the block underneath it.
+  const pulseClass = (b.stampPulse && !opts.editing) ? ' tlcb-stamp--pulse' : '';
+  return `<span class="tlcb-stamp${posClass}${sizeClass}${pulseClass}" style="${style}"${editable}>${esc(b.stamp)}</span>`;
 }
 
 // A banner carrying a card lays out as two columns rather than one. The side
