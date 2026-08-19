@@ -72,14 +72,41 @@ export function pageStatus(p) {
 // Children sit directly under their parent whatever the sort columns say, so
 // the list reads as the menu it describes. Anything orphaned still appears —
 // a page you cannot see is a page you cannot fix.
+//
+// This walks the whole tree, not just one level: most of the site is two
+// levels deep (a menu can only be built that shallow), but a handful of pages
+// — the Christmas Market vendor application, filed under the Christmas
+// Market page, itself filed under Ministries — are a genuine third level,
+// created directly by their seed rather than through the Settings screen
+// (which refuses to let anyone file a page under another page that already
+// has a parent). A single-level walk left a page like that unplaced by
+// everything above, so it fell into the "anything orphaned still appears"
+// catch-all and rendered as if it had no parent at all — nowhere close to
+// where it actually lives in the tree. Recursing here means a page's real
+// depth, however deep, is what the list — and the editor rail, which reads
+// this same order — actually shows.
 export function orderPages(rows) {
   const list = rows.map(decoratePage);
+  const byParent = new Map();
+  for (const p of list) {
+    const key = p.parent_id || '';
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(p);
+  }
   const out = [];
   const placed = new Set();
-  for (const p of list.filter((x) => !x.parent_id)) {
-    out.push(p); placed.add(p.id);
-    for (const c of list.filter((x) => x.parent_id === p.id)) { out.push(c); placed.add(c.id); }
-  }
+  // Depth-first: a page is followed immediately by its own children before
+  // its next sibling, so nesting reads correctly at any depth. `placed`
+  // doubles as the cycle guard — a page whose parent chain loops back on
+  // itself is only ever visited once.
+  const walk = (parentKey) => {
+    for (const p of byParent.get(parentKey) || []) {
+      if (placed.has(p.id)) continue;
+      out.push(p); placed.add(p.id);
+      walk(p.id);
+    }
+  };
+  walk('');
   for (const p of list) if (!placed.has(p.id)) out.push(p);
   return out;
 }

@@ -315,6 +315,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-page:hover{background:#EDF2F7;}
 .ed-page.is-here{background:#EDF2F7;border-color:#C4CEDF;color:#1E2D4A;font-weight:600;}
 .ed-page--child{padding-left:24px;font-size:13px;}
+.ed-page--grandchild{padding-left:38px;font-size:12.5px;}
 .ed-page-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ed-page-dot{width:7px;height:7px;border-radius:50%;background:#C9973A;flex:none;}
 .ed-page-tag{font-size:10px;color:#8A8898;flex:none;}
@@ -1024,14 +1025,55 @@ function applySelection() {
 // A gold dot marks a page with unpublished changes and "hidden" marks one that
 // is not in the menu — the same two facts the All pages list shows, so the two
 // screens cannot tell staff different things.
+//
+// `S.siblings` arrives already walked depth-first by the server's own
+// orderPages() — a page sits immediately after its real parent, at whatever
+// depth that parent is, before its next sibling. Most of the site is two
+// levels deep, but a few pages (the Christmas Market vendor application,
+// filed under Christmas Market, itself filed under Ministries) are a real
+// third level. This renders straight from that order rather than re-grouping
+// by parent_id itself — a re-group here only ever matched a page against a
+// TOP-level parent, so a genuine grandchild matched no parent at all and
+// landed in the wrong place in the list rather than under its real one.
 function renderPagesRail() {
   if (!el.edPagesList) return;
   var q = (el.edPagesSearch && el.edPagesSearch.value || '').trim().toLowerCase();
   var all = S.siblings || [];
+  var byId = {};
+  all.forEach(function (p) { byId[p.id] = p; });
+  var childrenOf = {};
+  all.forEach(function (p) {
+    var key = p.parent_id || '';
+    (childrenOf[key] = childrenOf[key] || []).push(p);
+  });
   var hit = function (p) { return !q || (p.title + ' ' + p.slug).toLowerCase().indexOf(q) > -1; };
-  var row = function (p, child) {
+  // A page stays visible when it matches, or any page under it does — at any
+  // depth — or searching would strand a matching grandchild with nothing to
+  // sit under. `seen` guards a parent chain that loops back on itself.
+  var matchCache = {};
+  var subtreeHits = function (p, seen) {
+    if (matchCache[p.id] !== undefined) return matchCache[p.id];
+    seen = seen || {};
+    if (seen[p.id]) return false;
+    seen[p.id] = true;
+    var result = hit(p) || (childrenOf[p.id] || []).some(function (c) { return subtreeHits(c, seen); });
+    matchCache[p.id] = result;
+    return result;
+  };
+  // A page's own depth, walked up its real parent chain rather than assumed
+  // from where it sits in the array — `seen` is the same loop guard.
+  var depthOf = function (p, seen) {
+    seen = seen || {};
+    if (!p.parent_id || seen[p.id]) return 0;
+    seen[p.id] = true;
+    var parent = byId[p.parent_id];
+    return parent ? 1 + depthOf(parent, seen) : 0;
+  };
+  var row = function (p) {
     var here = p.id === S.slug;
-    return '<button type="button" class="ed-page' + (child ? ' ed-page--child' : '') + (here ? ' is-here' : '') +
+    var depth = Math.min(depthOf(p), 2);
+    var cls = depth === 1 ? ' ed-page--child' : (depth >= 2 ? ' ed-page--grandchild' : '');
+    return '<button type="button" class="ed-page' + cls + (here ? ' is-here' : '') +
       '" data-page="' + esc(p.id) + '"' + (here ? ' aria-current="page"' : '') + '>' +
       (p.slug === '/' ? '<span class="ed-page-tag" title="Homepage">\u2302</span>' : '') +
       '<span class="ed-page-t">' + esc(p.title) + '</span>' +
@@ -1040,14 +1082,7 @@ function renderPagesRail() {
       '</button>';
   };
   var html = '';
-  all.filter(function (p) { return !p.parent_id; }).forEach(function (p) {
-    var kids = all.filter(function (c) { return c.parent_id === p.id; });
-    // A parent stays visible when one of its children matches, or searching
-    // would strand the child with nothing to sit under.
-    if (!hit(p) && !kids.some(hit)) return;
-    html += row(p, false);
-    kids.filter(hit).forEach(function (c) { html += row(c, true); });
-  });
+  all.forEach(function (p) { if (subtreeHits(p)) html += row(p); });
   el.edPagesList.innerHTML = html || '<div class="ed-pages-none">No pages match that.</div>';
 }
 
