@@ -94,8 +94,8 @@ const FEED = { from: day(1), to: day(28), events: BUSY_SUNDAY.concat(OTHER_DAYS)
   categories: CATEGORIES, sources: { google: true, news: true, googleReason: '' } };
 
 async function open(opts = {}) {
-  const { feed = FEED, width = 1280, status = 200, page: which = 'calendar' } = opts;
-  const ctx = await browser.newContext({ viewport: { width, height: 950 } });
+  const { feed = FEED, width = 1280, height = 950, status = 200, page: which = 'calendar' } = opts;
+  const ctx = await browser.newContext({ viewport: { width, height } });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(String(e)));
@@ -301,7 +301,14 @@ async function goToFixtureMonth(p) {
 
 // ── the print sheet ─────────────────────────────────────────
 {
-  const { p, ctx } = await open();
+  // ⚠ THE VIEWPORT HERE IS THE PAPER, and that is load-bearing rather than
+  // incidental. The sheet is `height:100vh`, so under `emulateMedia('print')`
+  // the vh unit is still the BROWSER window — measure at the default 950px and
+  // a grid that would overflow a real page fits comfortably, and every
+  // assertion below passes on a sheet that prints with its last week cut off.
+  // 989 x 749 is letter landscape at the 0.35in margins the @page rule asks
+  // for, at 96dpi.
+  const { p, ctx } = await open({ width: 989, height: 749 });
   await goToFixtureMonth(p);
   await p.click('.tlc-cal-pill[data-cal="cat"][data-val="worship"]');
   await p.waitForTimeout(120);
@@ -316,9 +323,28 @@ async function goToFixtureMonth(p) {
   // see by looking at it.
   const printed = await p.$$eval('.tlc-print-ev', (e) => e.length);
   ok(printed === CHIPS_ALL, 'and prints every event regardless (' + printed + ')');
-  // The one place a cap is right: the sheet has to stay one page.
-  const capped = await p.$$eval('.tlc-print-cell', (c) => c.map((x) => Math.round(x.getBoundingClientRect().height)));
-  ok(capped.every((h) => h <= 113), 'print cells are a fixed height so the sheet stays one page');
+  // ⚠ The one place a cap IS right — but the cap is the page, not a number.
+  // The six week rows divide whatever height the page box offers, and each
+  // cell clips rather than growing, so a busy day can never push the sheet
+  // onto a second page. (That it really is one page is proven by generating a
+  // PDF and counting, below; this is the mechanism that makes it true.)
+  const cells = await p.$$eval('.tlc-print-cell', (c) => c.map((x) => Math.round(x.getBoundingClientRect().height)));
+  eq(cells.length, 42, 'six weeks are on the sheet');
+  ok(Math.max(...cells) - Math.min(...cells) <= 1, 'every week row is the same height: ' + Math.max(...cells) + ' vs ' + Math.min(...cells));
+  const clips = await p.$eval('.tlc-print-cell', (c) => getComputedStyle(c).overflow);
+  eq(clips, 'hidden', 'and a day with too much on it clips rather than growing the row');
+  // ⚠ AND THE LAST WEEK IS STILL ON THE SHEET. Counting PDF pages alone is not
+  // enough to prove this: the sheet is height:100vh with overflow hidden, so a
+  // grid too tall for it prints as one page by CUTTING the last row off —
+  // which is a worse failure than two pages, because the sheet looks complete.
+  // The fixed-112px version this replaced does exactly that, and passes the
+  // page count.
+  const fits = await p.evaluate(() => {
+    const sheet = document.querySelector('.tlc-print-sheet');
+    const last = document.querySelectorAll('.tlc-print-cell')[41];
+    return Math.round(last.getBoundingClientRect().bottom - sheet.getBoundingClientRect().bottom);
+  });
+  ok(fits <= 1, 'the last week of the month is inside the sheet, not clipped off it (' + fits + 'px past)');
   const hidden = await p.evaluate(() => {
     const gone = (sel) => { const e = document.querySelector(sel); return !e || getComputedStyle(e).display === 'none'; };
     return { cal: gone('.tlc-cal'), nav: gone('.nav'), foot: gone('footer'), hero: gone('#page-calendar .page-hero') };
@@ -326,6 +352,36 @@ async function goToFixtureMonth(p) {
   ok(hidden.cal, 'the interactive calendar does not print');
   ok(hidden.nav && hidden.foot && hidden.hero, 'and neither does the page around it, which would take the first sheet');
   await p.emulateMedia({ media: 'screen' });
+  await ctx.close();
+}
+
+// ── the sheet is ONE page, and that is measurable ───────────
+{
+  // ⚠ THE ASSERTION THAT CAUGHT THE REAL BUG. Everything else about this sheet
+  // can look right on screen and still be wrong on paper: at the design's
+  // stated 112px cell, six week rows plus the header, the weekday strip and
+  // the footer come to about 800px, and a letter page in landscape at 0.35in
+  // margins gives 748px. It printed as TWO pages — the second one mostly
+  // blank, carrying the last week of the month. Nothing short of generating a
+  // real PDF and counting the pages would have said so.
+  //
+  // The month here is deliberately the worst case the sheet will ever meet:
+  // every category in use, and one Sunday carrying seven separate items.
+  const busy = [];
+  CATEGORIES.forEach((c, i) => busy.push(ev({ id: 'c' + i, title: c.name + ' gathering',
+    start: day(2 + (i % 20)) + 'T09:00:00', end: day(2 + (i % 20)) + 'T10:00:00', category: c.key })));
+  ['08:00', '09:30', '10:45', '13:00', '15:00', '17:00', '19:00'].forEach((t, i) =>
+    busy.push(ev({ id: 's' + i, title: 'Sunday item ' + (i + 1),
+      start: SUNDAY + 'T' + t + ':00', end: SUNDAY + 'T' + t + ':00', category: 'worship' })));
+  busy.push(ev({ id: 'v', title: 'Vacation Bible School', start: day(VBS_FROM), end: day(VBS_TO),
+    allDay: true, source: 'news', category: 'youth' }));
+
+  const { p, ctx } = await open({ feed: { ...FEED, events: busy } });
+  await goToFixtureMonth(p);
+  const pdf = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  eq(pages, 1, 'the busiest possible month still prints as one landscape sheet');
+  ok(pdf.length > 5000, 'and the sheet has real content on it (' + pdf.length + ' bytes)');
   await ctx.close();
 }
 

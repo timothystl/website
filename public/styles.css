@@ -735,13 +735,22 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--gray);background:var(--cal-print-head);}
 .tlc-print-cell{min-width:0;height:112px;overflow:hidden;
   border-right:1px solid var(--cal-print-line);border-bottom:1px solid var(--cal-print-line);
-  padding:4px 5px 5px;display:flex;flex-direction:column;gap:2px;background:#fff;}
+  padding:3px 5px 4px;display:flex;flex-direction:column;gap:1px;background:#fff;}
+/* ⚠ THE 112px ABOVE IS THE DESIGN'S NUMBER AND IT IS NOT WHAT PRINTS. Six rows
+   of it, plus the header, the weekday strip and the footer, comes to about
+   800px — and a letter page in landscape at 0.35in margins gives 748px of
+   height. Verified by generating a real PDF, which came out TWO PAGES: exactly
+   the one thing this sheet must never do. In print the rows divide whatever
+   the page box actually offers instead, so the sheet cannot overflow whatever
+   the paper size or the margins are, and there is no magic number to re-derive
+   if either changes. The screen value is kept as the design's stated intent
+   and because the sheet is display:none anywhere but print. */
 .tlc-print-cell--out{background:var(--cal-print-head);}
-.tlc-print-cell .n{font-family:var(--font-ui);font-size:11px;font-weight:700;color:var(--steel);}
+.tlc-print-cell .n{font-family:var(--font-ui);font-size:11px;font-weight:700;line-height:1.15;color:var(--steel);}
 .tlc-print-cell--out .n{color:#B8B4AC;}
 .tlc-print-ev{display:grid;grid-template-columns:3px 1fr;gap:4px;min-width:0;}
 .tlc-print-ev .bar{border-radius:2px;}
-.tlc-print-ev .tx{font-family:var(--font-body);font-size:9.5px;line-height:1.25;
+.tlc-print-ev .tx{font-family:var(--font-body);font-size:9.5px;line-height:1.22;
   color:var(--charcoal);min-width:0;overflow-wrap:anywhere;}
 .tlc-print-ev .tx b{font-family:var(--font-ui);font-size:8.5px;font-weight:800;letter-spacing:.01em;}
 .tlc-print-foot{display:flex;justify-content:space-between;font-family:var(--font-ui);
@@ -765,5 +774,12 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   .page.active .section{padding:0 !important;background:#fff !important;}
   .page.active .wrap{max-width:none !important;padding:0 !important;}
   .tlc-print-sheet{display:flex !important;flex-direction:column;gap:14px;
-    background:#fff;padding:0;box-shadow:none;border:none;}
+    background:#fff;padding:0;box-shadow:none;border:none;
+    /* The page box, so the grid below has a fixed height to divide. */
+    height:100vh;overflow:hidden;}
+  /* One auto row for the weekday strip, then six equal rows for the weeks. The
+     grid takes the space the header and footer do not. */
+  .tlc-print-grid{flex:1 1 auto;min-height:0;
+    grid-template-rows:auto repeat(6, minmax(0, 1fr));}
+  .tlc-print-cell{height:auto;min-height:0;}
 }
