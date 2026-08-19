@@ -4876,5 +4876,71 @@ group('a news post says what it is on the calendar, rather than having it guesse
   } finally { globalThis.fetch = realFetch; }
 }
 
+group('a news post carries a time, so it is a whole event and nothing is retyped');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+    const form = await (await call(env, '/newsitems/new', { cookie: admin.cookie })).text();
+    ok(form.includes('Starts at') && form.includes('type="time"'), 'the post form asks what time it starts');
+    ok(form.includes('Where'), 'and where it is');
+
+    // ⚠ THE CASE THE NEWSLETTER'S OWN EVENT ROWS EXISTED FOR. Before this a
+    // 7:00 pm meeting could be typed into an email and could not be said here,
+    // so it was entered again by hand — and again into Google.
+    eq((await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Council meeting', summary: 'In the fellowship hall.',
+      publish_date: '2026-08-01', event_date: '2026-08-11', expire_date: '2026-12-31',
+      event_time: '19:00', event_end_time: '20:30', event_location: 'Fellowship Hall',
+      calendar_category: 'meetings', ch_web: '1',
+    } })).status, 302, 'the post saves');
+
+    let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    let ev = feed.events.find((e) => e.title === 'Council meeting');
+    ok(ev, 'and reaches the calendar');
+    eq(ev.allDay, false, 'as a timed event rather than an all-day chip');
+    eq(ev.start, '2026-08-11T19:00:00');
+    eq(ev.end, '2026-08-11T20:30:00');
+    eq(ev.location, 'Fellowship Hall');
+    // The rule the whole feed is built on, restated at the one new door into it.
+    ok(!/[Zz]|[+-]\d{2}:\d{2}$/.test(ev.start), 'carrying no timezone, like every other time in the feed');
+
+    // A post with no time is still an all-day event, so nothing already
+    // written moved when the column arrived.
+    await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Rummage sale', publish_date: '2026-08-01', event_date: '2026-08-12',
+      expire_date: '2026-12-31', ch_web: '1',
+    } });
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    eq(feed.events.find((e) => e.title === 'Rummage sale').allDay, true,
+      'a post with no time is all day, not midnight');
+
+    // ⚠ A TIME THE CALENDAR WOULD IGNORE MUST NOT BE STORED EITHER, or the
+    // edit form comes back showing a time the month does not show.
+    await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Bad clock', publish_date: '2026-08-01', event_date: '2026-08-13',
+      expire_date: '2026-12-31', event_time: '25:00', ch_web: '1',
+    } });
+    eq(db.prepare("SELECT event_time FROM news_items WHERE title='Bad clock'").get().event_time, null,
+      'an impossible time is stored as nothing at all');
+
+    // The edit form shows back what was saved, so a time survives a second save.
+    const id = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+    const edit = await (await call(env, `/newsitems/edit/${id}`, { cookie: admin.cookie })).text();
+    ok(edit.includes('value="19:00"'), 'the edit form shows the stored start time');
+    ok(edit.includes('Fellowship Hall'), 'and the stored location');
+
+    // It rides into a subscription as a real instant, not an all-day block.
+    const ics = await (await call(env, '/api/calendar.ics?month=2026-08', { fresh: true })).text();
+    ok(ics.includes('DTSTART;TZID=America/Chicago:20260811T190000'), 'the .ics carries the clock');
+    ok(ics.includes('LOCATION:Fellowship Hall'), 'and the location');
+  } finally { globalThis.fetch = realFetch; }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

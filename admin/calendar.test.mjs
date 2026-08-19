@@ -20,6 +20,7 @@ import {
   normalizeGoogleEvent, normalizeNewsItem, dedupeEvents, sortEvents,
   buildIcs, foldIcsLine, parseCalendarIds, DEFAULT_CALENDAR_IDS,
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
+  normalizeClock, clockOnDay, newsEnd,
 } from './calendar.js';
 
 let pass = 0;
@@ -379,6 +380,112 @@ atest('a database that will not answer costs the News half, not the whole feed',
     const feed = await buildCalendarFeed({ DB: brokenDb }, { from: '2026-08-01', to: '2026-08-31', calendarIds: ['a@b'], getToken: async () => 'T' });
     assert.equal(feed.events.length, 1, 'the Google half still renders');
   } finally { globalThis.fetch = realFetch; }
+});
+
+
+// ── A NEWS POST WITH A TIME ─────────────────────────────────────────────────
+// The column that ended the retyping. Before it, a News & Events record could
+// say WHICH DAY and nothing more — so a 7:00 pm meeting had to be typed into
+// the newsletter by hand and into Google by hand.
+//
+// Everything here is a case that is silently wrong rather than visibly broken:
+// a blank time read as midnight, a derived end pushing an event onto tomorrow,
+// or a stored time the month refuses to show.
+
+test('a time makes a news post a timed event, as a bare wall clock', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 7, title: 'Council', event_date: '2026-09-01', event_time: '19:00' }, cats);
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start, '2026-09-01T19:00:00');
+  // The property the whole file is built around: no Z, no offset, ever.
+  assert.ok(!/[Zz]|[+-]\d{2}:\d{2}$/.test(ev.start), 'a start must carry no timezone');
+});
+
+test('a BLANK time is all day, not midnight', () => {
+  const cats = mergedCategories([]);
+  for (const t of [undefined, null, '', '   ']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'Fair', event_date: '2026-09-01', event_time: t }, cats);
+    assert.equal(ev.allDay, true, `blank time ${JSON.stringify(t)} must stay all day`);
+    assert.equal(ev.start, '2026-09-01');
+  }
+});
+
+test('a time that is not a time is no time, never a guess', () => {
+  const cats = mergedCategories([]);
+  for (const t of ['25:00', '7pm', '19:60', 'noon', '1900']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_time: t }, cats);
+    assert.equal(ev.allDay, true, `${t} must not become a start time`);
+  }
+});
+
+test('a stated end is kept; an unstated one is an hour and is never shown', () => {
+  const cats = mergedCategories([]);
+  const stated = normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_time: '09:00', event_end_time: '11:30' }, cats);
+  assert.equal(stated.end, '2026-09-01T11:30:00');
+  const derived = normalizeNewsItem({ id: 2, title: 'Y', event_date: '2026-09-01', event_time: '09:00' }, cats);
+  assert.equal(derived.end, '2026-09-01T10:00:00');
+  // An end BEFORE the start is a typo, not an overnight event.
+  const backwards = normalizeNewsItem({ id: 3, title: 'Z', event_date: '2026-09-01', event_time: '09:00', event_end_time: '08:00' }, cats);
+  assert.equal(backwards.end, '2026-09-01T10:00:00');
+});
+
+test('a derived end never spills onto the next day', () => {
+  const cats = mergedCategories([]);
+  // ⚠ The one that would be invisible: tlcCalDates() walks start date → end
+  // date inclusive, so a naive +1 hour here draws an 11:30 pm event on
+  // tomorrow's grid as well, finished before anybody woke up.
+  //
+  // ⚠ ASSERTING THE DATE ALONE IS VACUOUS AND THE FIRST VERSION OF THIS DID
+  // EXACTLY THAT. Removing the clamp produces `2026-09-01T24:30:00` — the same
+  // DATE, an hour that does not exist, and lexically still >= the start. So
+  // the clock itself is what has to be read: 24:30 reaches the .ics as
+  // `20260901T243000`, which is a malformed instant a calendar app either
+  // drops or silently shifts.
+  for (const t of ['23:00', '23:30', '23:59']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'Late', event_date: '2026-09-01', event_time: t }, cats);
+    assert.equal(ev.end.slice(0, 10), '2026-09-01', `${t} must end on its own day`);
+    assert.match(ev.end, /T([01]\d|2[0-3]):[0-5]\d:00$/, `${t} produced an impossible end: ${ev.end}`);
+    assert.ok(ev.end >= ev.start, `${t} must not end before it starts`);
+  }
+});
+
+test('a location rides through, and a missing one is empty rather than absent', () => {
+  const cats = mergedCategories([]);
+  assert.equal(normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_location: ' Fellowship Hall ' }, cats).location, 'Fellowship Hall');
+  assert.equal(normalizeNewsItem({ id: 2, title: 'Y', event_date: '2026-09-01' }, cats).location, '');
+});
+
+test('normalizeClock is the one answer the save path and the renderer share', () => {
+  assert.equal(normalizeClock('19:00'), '19:00');
+  assert.equal(normalizeClock('09:05'), '09:05');
+  assert.equal(normalizeClock('19:00:00'), '19:00');  // a seconds-carrying value still reads
+  assert.equal(normalizeClock('24:00'), null);
+  assert.equal(normalizeClock(''), null);
+  assert.equal(normalizeClock(null), null);
+  // If these two disagreed, a time could be STORED that the month then refuses
+  // to show — the form would come back looking saved and the calendar would
+  // say all day.
+  assert.equal(clockOnDay('2026-09-01', '19:00'), '2026-09-01T19:00:00');
+  assert.equal(clockOnDay('2026-09-01', '24:00'), null);
+});
+
+test('a timed news record now wins the clock in the de-dupe, not just the words', () => {
+  const cats = mergedCategories([]);
+  const news = normalizeNewsItem({ id: 5, title: 'Rally Day', event_date: '2026-09-13', event_time: '08:00', summary: 'Bring a dish' }, cats);
+  const g = normalizeGoogleEvent({ id: 'g1', summary: 'Rally Day', start: { dateTime: '2026-09-13T08:00:00-05:00' }, end: { dateTime: '2026-09-13T09:00:00-05:00' } }, cats);
+  const [ev] = dedupeEvents([g, news]);
+  assert.equal(ev.description, 'Bring a dish', 'the News record still wins the words');
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start.slice(11, 16), '08:00');
+  assert.equal(ev.source, 'both');
+});
+
+test('a timed news event writes a real DTSTART, not a DATE', () => {
+  const cats = mergedCategories([]);
+  const ics = buildIcs([normalizeNewsItem({ id: 1, title: 'Council', event_date: '2026-09-01', event_time: '19:00' }, cats)], { cats });
+  assert.ok(ics.includes('DTSTART;TZID=America/Chicago:20260901T190000'), ics);
+  assert.ok(ics.includes('DTEND;TZID=America/Chicago:20260901T200000'), ics);
+  assert.ok(!ics.includes('DTSTART;VALUE=DATE'), 'a timed event must not be written as an all-day one');
 });
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
