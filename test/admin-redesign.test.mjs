@@ -24,6 +24,7 @@ import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
 import { priceBreakdown, money as marketMoney, MARKET_DEFAULTS as MARKET_PRICE_DEFAULTS } from '../market-price.js';
 import crypto from 'node:crypto';
+import { SCHOOL_EVENTS } from '../admin/school-calendar-seed.js';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -2836,8 +2837,8 @@ group('per-screen, part two');
   ok(!/warn[^>]*>\s*Text only/.test(serm), 'and Text only is not amber');
 
   // 05-news: pinned rows carry a marker BEFORE the title, and sort to the top.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (1,'Pinned post','s',?,?,1)").run(today, '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (2,'Ordinary post','s',?,?,0)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,expire_date,pinned) VALUES ('Pinned post','s',?,?,1)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,expire_date,pinned) VALUES ('Ordinary post','s',?,?,0)").run(today, '2099-01-01');
   const news = await (await call(env, '/newsitems', { cookie })).text();
   has(news, 'tlc-pin', 'a pinned post carries a pin marker');
   ok(news.indexOf('tlc-pin') < news.indexOf('Pinned post'), 'the marker sits before the title');
@@ -2851,12 +2852,12 @@ group('per-screen, part two');
   // before. Events lead announcements as a group, regardless of how far out
   // the soonest one is — a member deciding "what's next" should not have to
   // skim past a stale announcement to find it.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (3,'Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (4,'New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (5,'Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (6,'VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
   // A past event, still inside its (generous) expire_date — must not appear.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (7,'Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
   const apiNews = await (await call(env, '/api/news')).json();
   const titles = apiNews.map((r) => r.title);
   ok(!titles.includes("Last month's rummage sale"), 'a past event drops off entirely, even with time left on its expire_date');
@@ -4529,8 +4530,11 @@ group('with Google unreachable the feed still answers, and says which half is mi
     eq(res.status, 200, 'an unreachable Google is not a 500 — to the browser that is indistinguishable from a dead network');
     const feed = await res.json();
     eq(feed.sources.google, false, 'the page is told the Google half is missing, so it can say so');
-    eq(feed.events.length, 1, 'and still gets everything that did answer');
-    eq(feed.events[0].title, 'Trunk or Treat');
+    // ⚠ Named, not counted. The Worker seeds the school year into every fresh
+    // database, so "the feed has exactly one event" stopped being a fact about
+    // this test and became a fact about the seed.
+    ok(feed.events.some((e) => e.title === 'Trunk or Treat'), 'and still gets everything that did answer');
+    ok(feed.events.every((e) => e.source !== 'gcal'), 'with nothing from the half that could not be reached');
   } finally { globalThis.fetch = realFetch; }
 }
 
@@ -4774,7 +4778,10 @@ group('the calendar categories are editable, and the feed follows them');
 
     // Blueberry feeds Worship to start with.
     let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
-    eq(feed.events[0].category, 'worship', 'a Blueberry event is Worship');
+    // Found by title rather than by position — the seeded school year shares
+    // this month, and its rows sort before a mid-August Google event.
+    const gcalEv = (f) => f.events.find((e) => e.source === 'gcal');
+    eq(gcalEv(feed).category, 'worship', 'a Blueberry event is Worship');
 
     // Rename it and re-point it at Basil.
     const saved = await call(env, '/calendar-categories/save/worship', { cookie: admin.cookie, method: 'POST',
@@ -4786,8 +4793,8 @@ group('the calendar categories are editable, and the feed follows them');
     eq(cat.color, '#4A5E3A', 'and so does the palette swatch it now wears');
     // ⚠ Blueberry no longer feeds anything — Worship was re-pointed at Flamingo
     // — so the event falls to the neutral category rather than disappearing.
-    eq(feed.events[0].category, 'other', 'an event whose color no category claims is Other, never dropped');
-    eq(feed.events.length, 1, 'and it is still on the calendar');
+    eq(gcalEv(feed).category, 'other', 'an event whose color no category claims is Other, never dropped');
+    ok(gcalEv(feed), 'and it is still on the calendar');
 
     // ⚠ Two categories cannot share one Google color — the question has no answer.
     const clash = await call(env, '/calendar-categories/save/learn', { cookie: admin.cookie, method: 'POST',
@@ -5015,6 +5022,54 @@ group('the newsletter picks its events from the posts, instead of retyping them'
     event_news_ids: String(postId),
   } })).text();
   ok(preview.includes('Council meeting (moved)'), 'the preview shows the post as it reads right now');
+}
+
+group('the Word of Life school year is on the calendar, and off the news feed');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+    const seeded = db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar'").get().c;
+    eq(seeded, SCHOOL_EVENTS.length, 'every picked date from the school PDF is in');
+
+    // ⚠ THE WHOLE REASON FOR THE CALENDAR-ONLY CHANNEL. Twenty-nine school
+    // dates in the news feed would bury everything the church actually wrote.
+    const news = await (await call(env, '/api/news?limit=100')).json();
+    ok(!news.some((n) => n.title === 'Spring break'), 'a school date is not news anybody wants a paragraph about');
+
+    // ⚠ AND IT IS STILL ON THE MONTH, which is the half that would be easy to
+    // break by filtering the channel in one place and not the other.
+    const march = await (await call(env, '/api/calendar?month=2027-03', { fresh: true })).json();
+    const brk = march.events.find((e) => e.title === 'Spring break');
+    ok(brk, 'but it is on the calendar');
+    eq(brk.category, 'wol', 'filed under Word of Life, so the whole school year filters off in one click');
+    eq(brk.start, '2027-03-15');
+    eq(brk.end, '2027-03-19', 'a week off school is one entry spanning its days, not five identical ones');
+    eq(brk.allDay, true);
+
+    // A Timothy early dismissal is 11:45, not noon — the school's own footnote
+    // gives Ascension a different time and this is Timothy's calendar.
+    const may = await (await call(env, '/api/calendar?month=2027-05', { fresh: true })).json();
+    const last = may.events.find((e) => e.title.startsWith('Last day of school'));
+    eq(last.start, '2027-05-28T11:45:00', 'an early dismissal carries the time it actually happens');
+
+    // ⚠ Good Friday and Easter Monday are TWO rows, not a range. A 26–29 span
+    // would draw a four-day bar and claim the school was shut on days it was
+    // never open.
+    eq(march.events.filter((e) => e.title.startsWith('No school —')).length, 2, 'two closures in March, not one bar across the weekend');
+
+    // ⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM. Without it a date
+    // the office removed on purpose comes back on the next deploy, silently.
+    db.prepare("DELETE FROM news_items WHERE title = 'Spring break'").run();
+    await call(env, '/api/news', { fresh: true });            // any request re-runs the schema block
+    eq(db.prepare("SELECT COUNT(*) c FROM news_items WHERE title = 'Spring break'").get().c, 0,
+      'a deleted school date stays deleted');
+  } finally { globalThis.fetch = realFetch; }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -41,6 +41,7 @@ import { hashPassword, verifyPassword, createSession, getSession, deleteSession,
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
+import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
@@ -510,6 +511,25 @@ const NEWS_ORDER_SQL = `ORDER BY pinned DESC,
   CASE WHEN event_date IS NOT NULL THEN 0 ELSE 1 END ASC,
   event_date ASC, publish_date DESC, id DESC`;
 
+// ⚠ AND ONE `WHERE`, WHICH THE COMMENT ABOVE HAS CLAIMED FOR A YEAR AND WHICH
+// DID NOT EXIST (COR-1). Only the ORDER BY was ever extracted; the two WHERE
+// clauses were written separately and had drifted three ways — pageData()
+// compared against UTC `date('now')` rather than church time, never checked
+// `publish_date`, and never filtered the channel at all. So a post scheduled
+// for a future date was ALREADY LIVE on every block-rendered page, as was one
+// the office had marked email-only.
+//
+// It takes the date as a bind so both callers pass churchDate() and neither
+// can quietly go back to asking SQLite what day it is in UTC.
+//
+// ⚠ `calendar` is a channel the CALENDAR reads and this does not. A school
+// break or a week of testing belongs on the month and is not something anybody
+// wants a paragraph about on /news.
+const NEWS_WHERE_SQL = `WHERE publish_date <= ?
+  AND (expire_date IS NULL OR expire_date >= ?)
+  AND (event_date IS NULL OR event_date >= ?)
+  AND (channels IS NULL OR channels LIKE '%web%')`;
+
 // An uploaded image is stored as a root-relative /images/… path, which only
 // resolves on this Worker's own origin. Every rendered page is consumed
 // somewhere else — timothystl.org for /api/pages, give.timothystl.org for the
@@ -575,9 +595,7 @@ async function pageData(env, reqKey) {
       // date) shows the same expandable image/summary/body cards the /news
       // page used to hand-roll. Both blocks read this one list.
       q(`SELECT id, title, summary, body, image_url, publish_date, event_date, pinned FROM news_items
-         WHERE (expire_date IS NULL OR expire_date >= date('now'))
-           AND (event_date IS NULL OR event_date >= date('now'))
-         ${NEWS_ORDER_SQL} LIMIT 30`),
+         ${NEWS_WHERE_SQL} ${NEWS_ORDER_SQL} LIMIT 30`, churchDate(), churchDate(), churchDate()),
       // ⚠ The Staff grid block shows EVERY row this returns, so this limit is
       // the only thing that can cut somebody off the About page. It was 12,
       // which a church that hires two more people would quietly cross with
@@ -1863,7 +1881,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-7'; // bumped: news_items event clock, and events.news_item_id so the newsletter picks rather than retypes
+    const SCHEMA_VERSION = '2026-08-19-8'; // bumped: news_items event clock and run of days, events.news_item_id, and the calendar-only channel
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2474,6 +2492,9 @@ export default {
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_time TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_time TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_location TEXT').run(); } catch (_) {}
+    // A run of days — a break, a camp, an assessment week. One row rather than
+    // five, so a week off school is one chip a reader takes in at a glance.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_date TEXT').run(); } catch (_) {}
     // ⚠ WHICH POST AN ISSUE'S EVENT ROW CAME FROM. The rows themselves stay
     // materialized — a sent issue's archive has to keep saying what was
     // actually sent — and this is only what lets the composer tick the right
@@ -2695,6 +2716,44 @@ export default {
           .bind(s.title, s.description, s.icon_emoji, s.icon_color, s.sort_order).run();
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SIGNUP_CARD_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: THE WORD OF LIFE SCHOOL YEAR (2026-08-19) ──
+    // Word of Life publishes a PDF once a year and keeps no Google calendar,
+    // so there is nothing to subscribe to and nothing to merge — somebody has
+    // to read the sheet. admin/school-calendar-seed.js is that reading; this
+    // puts it in once.
+    //
+    // ⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM. The schema block
+    // re-runs on every SCHEMA_VERSION bump, so without it a date the office
+    // deleted on purpose — the school moved it, or it was never wanted — would
+    // come back on the next deploy, silently, for as long as this code exists.
+    //
+    // ⚠ AND IT IS KEYED ON THE SCHOOL YEAR. Next year's sheet is a new list
+    // and a new marker (`school_cal_2027-2028`), not an edit to this one:
+    // changing a title here would do nothing to a database that has already
+    // run it, which is exactly the trap that would make somebody think the
+    // list was wrong.
+    const SCHOOL_CAL_MARKER = `school_cal_${SCHOOL_YEAR}`;
+    const schoolCalSeeded = markersOk || markers.get(SCHOOL_CAL_MARKER) === 'done';
+    if (!schoolCalSeeded) {
+      try {
+        // ⚠ Guarded on the TITLE AND THE DATE together, not on the title alone.
+        // "No school — Good Friday" is a title the school will use again next
+        // year on a different day, and matching the title alone would silently
+        // skip it.
+        for (const r of schoolEventRows(churchDate())) {
+          const dup = await env.DB.prepare(
+            'SELECT id FROM news_items WHERE title = ? AND event_date = ?'
+          ).bind(r.title, r.event_date).first();
+          if (dup) continue;
+          await env.DB.prepare(
+            'INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SCHOOL_CAL_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -3337,9 +3396,7 @@ export default {
       const rows = await env.DB.prepare(
         `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
-         WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
-           AND (event_date IS NULL OR event_date >= ?)
-           AND (channels IS NULL OR channels LIKE '%web%')
+         ${NEWS_WHERE_SQL}
          ${NEWS_ORDER_SQL}
          LIMIT ?`
       ).bind(today, today, today, limit).all();
@@ -8339,8 +8396,8 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
           { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
             options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
           { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
-            <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
-            <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them.</p></div>` },
+            <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
+            <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them. A dated post is on the calendar either way \u2014 tick <strong>Church calendar only</strong> for a date that belongs on the month but is not news anybody wants to read a paragraph about.</p></div>` },
           { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
           { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
             hint: 'Optional. A post with one sorts by the event rather than by when it was written \u2014 and appears on the church calendar, the printed month and the weekly email, without being entered anywhere else.' },
@@ -8349,6 +8406,8 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
           // into the newsletter by hand and into Google by hand. Leaving it
           // blank is still a real answer — an all-day event — which is why
           // there is no default and no placeholder time.
+          { kind: 'date', name: 'event_end_date', label: 'Through', value: item ? (item.event_end_date || '') : '',
+            hint: 'Optional. For something that runs several days \u2014 a break, a camp, a week of testing. One entry rather than five.' },
           { kind: 'text', type: 'time', name: 'event_time', label: 'Starts at', value: item ? (item.event_time || '') : '',
             hint: 'Leave blank for something that runs all day. Church time, always.' },
           { kind: 'text', type: 'time', name: 'event_end_time', label: 'Ends at', value: item ? (item.event_end_time || '') : '',
@@ -8383,6 +8442,7 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || churchDate();
       const event_date = form.get('event_date') || '';
+      const event_end_date = form.get('event_end_date') || '';
       const event_time = normalizeClock(form.get('event_time'));
       const event_end_time = normalizeClock(form.get('event_end_time'));
       const event_location = String(form.get('event_location') || '').trim();
@@ -8395,12 +8455,17 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const channels = [
         form.get('ch_web') === '1' && 'web',
         form.get('ch_email') === '1' && 'email',
+        // ⚠ A CHANNEL THE CALENDAR READS AND /news DOES NOT. A school break or
+        // a testing week belongs on the month and is not something anybody
+        // wants a paragraph about; without this the only way to keep it off
+        // the news feed was to keep it off the calendar too.
+        form.get('ch_calendar') === '1' && 'calendar',
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const newItemResult = await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_end_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
       await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -8429,6 +8494,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || '';
       const event_date = form.get('event_date') || '';
+      const event_end_date = form.get('event_end_date') || '';
       const event_time = normalizeClock(form.get('event_time'));
       const event_end_time = normalizeClock(form.get('event_end_time'));
       const event_location = String(form.get('event_location') || '').trim();
@@ -8441,13 +8507,18 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const channels = [
         form.get('ch_web') === '1' && 'web',
         form.get('ch_email') === '1' && 'email',
+        // ⚠ A CHANNEL THE CALENDAR READS AND /news DOES NOT. A school break or
+        // a testing week belongs on the month and is not something anybody
+        // wants a paragraph about; without this the only way to keep it off
+        // the news feed was to keep it off the calendar too.
+        form.get('ch_calendar') === '1' && 'calendar',
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, event_time=?, event_end_time=?, event_location=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, event_end_date=?, event_time=?, event_end_time=?, event_location=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
       await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }

@@ -488,5 +488,40 @@ test('a timed news event writes a real DTSTART, not a DATE', () => {
   assert.ok(!ics.includes('DTSTART;VALUE=DATE'), 'a timed event must not be written as an all-day one');
 });
 
+
+test('a run of days is one entry spanning them, not one per day', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 1, title: 'Spring break', event_date: '2027-03-15', event_end_date: '2027-03-19' }, cats);
+  assert.equal(ev.allDay, true);
+  assert.equal(ev.start, '2027-03-15');
+  assert.equal(ev.end, '2027-03-19');
+});
+
+test('an end date before the start is ignored, never honored', () => {
+  const cats = mergedCategories([]);
+  // ⚠ Drawing it would take the event off the month entirely — a church event
+  // silently missing from the church calendar is the worst failure this has.
+  for (const bad of ['2027-03-01', 'soon', '', null]) {
+    const ev = normalizeNewsItem({ id: 1, title: 'X', event_date: '2027-03-15', event_end_date: bad }, cats);
+    assert.equal(ev.end, '2027-03-15', `${JSON.stringify(bad)} must not move the end`);
+  }
+});
+
+test('a run of days with a start time finishes at the end of its LAST day', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 1, title: 'Camp', event_date: '2026-10-07', event_end_date: '2026-10-09', event_time: '09:00' }, cats);
+  assert.equal(ev.start, '2026-10-07T09:00:00');
+  // Not an hour after it began on the first day, which is what the same-day
+  // rule would have produced.
+  assert.equal(ev.end, '2026-10-09T23:59:00');
+});
+
+test('a multi-day all-day entry writes an exclusive DTEND, as the format means', () => {
+  const cats = mergedCategories([]);
+  const ics = buildIcs([normalizeNewsItem({ id: 1, title: 'Spring break', event_date: '2027-03-15', event_end_date: '2027-03-19' }, cats)], { cats });
+  assert.ok(ics.includes('DTSTART;VALUE=DATE:20270315'), ics);
+  assert.ok(ics.includes('DTEND;VALUE=DATE:20270320'), 'DTEND is the day AFTER the last day');
+});
+
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
 console.log(`calendar.test.mjs: ${pass} passed`);

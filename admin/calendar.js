@@ -285,6 +285,12 @@ export function normalizeNewsItem(row, cats) {
   const title = String(row.title || '').trim();
   if (!title) return null;
   const start = clockOnDay(row.event_date, row.event_time);
+  // A run of days — a break, a camp, an assessment week. Anything earlier than
+  // the start, or not a date at all, is ignored rather than honored: an end
+  // BEFORE a beginning is a typo, and drawing it would take the event off the
+  // month entirely, which is the one failure this feed must not have.
+  const lastDay = isYmd(row.event_end_date) && row.event_end_date > row.event_date
+    ? row.event_end_date : row.event_date;
   const base = {
     id: `n:${row.id}`,
     title, location: String(row.event_location || '').trim(),
@@ -292,8 +298,8 @@ export function normalizeNewsItem(row, cats) {
     category: categoryForNews(row, cats), source: 'news',
     url: '/news',
   };
-  if (!start) return { ...base, start: row.event_date, end: row.event_date, allDay: true };
-  return { ...base, start, end: newsEnd(row.event_date, start, row.event_end_time), allDay: false };
+  if (!start) return { ...base, start: row.event_date, end: lastDay, allDay: true };
+  return { ...base, start, end: newsEnd(row.event_date, lastDay, start, row.event_end_time), allDay: false };
 }
 
 // `HH:MM` on a date, as a wall clock. Anything that is not a real time of day
@@ -326,9 +332,12 @@ export function normalizeClock(hm) {
 // date to the END date inclusive, so a 11:30 pm event given a naive +1 hour
 // would be drawn on two days — tomorrow's grid growing an event that finished
 // before anybody woke up.
-export function newsEnd(ymd, start, endTime) {
-  const stated = clockOnDay(ymd, endTime);
+export function newsEnd(ymd, lastDay, start, endTime) {
+  const stated = clockOnDay(lastDay, endTime);
   if (stated && stated > start) return stated;
+  // A run of days with a start time but no end time finishes at the end of its
+  // last day, rather than an hour after it began on the first one.
+  if (lastDay !== ymd) return `${lastDay}T23:59:00`;
   const m = /T(\d{2}):(\d{2})/.exec(start);
   const h = Number(m[1]);
   if (h >= 23) return `${ymd}T23:59:00`;
@@ -573,11 +582,11 @@ export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, 
 export async function readNewsEvents(env, from, to, cats) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, title, summary, body, event_date, event_time, event_end_time, event_location,
-              publish_date, theme, value, calendar_category
+      `SELECT id, title, summary, body, event_date, event_end_date, event_time, event_end_time,
+              event_location, publish_date, theme, value, calendar_category
          FROM news_items
         WHERE event_date IS NOT NULL AND event_date >= ? AND event_date <= ?
-          AND (channels IS NULL OR channels LIKE '%web%')
+          AND (channels IS NULL OR channels LIKE '%web%' OR channels LIKE '%calendar%')
         ORDER BY event_date ASC
         LIMIT 300`
     ).bind(addDays(from, -1), addDays(to, 1)).all();
