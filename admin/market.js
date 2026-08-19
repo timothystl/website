@@ -884,39 +884,32 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           // ⚠ A TIMEOUT, because this is another application on another host
           // and an admin screen must not sit waiting on one. Four seconds and
           // the tab renders its own honest empty state instead.
-          // ⚠ Bypassing Cloudflare's edge cache for this subrequest is load-bearing,
-          // not defensive boilerplate — see the class comment above. An external
-          // curl to this exact URL with this exact key returned 200 with real data
-          // while this live subrequest kept getting Serve's own generic 404 fallback,
-          // because the two requests land at different Cloudflare colos and a colo
-          // that saw a 404 before the route existed could keep serving it forever.
-          // Serve's own responses now carry Cache-Control: no-store too, which is
-          // the real, permanent fix — this is belt-and-braces on our side.
-          // ⚠ The FETCH STANDARD's `cache` field (`cache: 'no-store'`) is NOT
-          // implemented by Cloudflare Workers' fetch() and throws a TypeError the
-          // instant it's present in the RequestInit — confirmed live ("The 'cache'
-          // field on 'RequestInitializerDict' is not implemented"), which is worse
-          // than the caching bug it was meant to fix. The Workers-native mechanism
-          // is the `cf` object: `cacheTtl: 0` tells Cloudflare's edge not to cache
-          // *this* subrequest's response going forward — but it does not prove it
-          // also bypasses a READ of whatever a given colo already has cached from
-          // before either server-side fix existed. `cacheTtl` and `Cache-Control:
-          // no-store` are both about future caching; neither is documented to
-          // force a cache MISS against an entry that predates them.
-          // ⚠ THE ONLY UNAMBIGUOUS FIX IS A CACHE KEY NO COLO HAS EVER SEEN. A
-          // Cloudflare cache entry is keyed on the full URL including the query
-          // string, so a fresh timestamp on every call guarantees this exact URL
-          // has never been requested before and therefore cannot possibly have a
-          // stale cached response sitting behind it at any colo. Do not remove
-          // this even once `cacheTtl`/`no-store` are confirmed sufficient on
-          // their own — it costs nothing and closes the one gap neither of those
-          // two mechanisms is documented to close. Do not reintroduce the
-          // standard `cache` field here.
-          const res = await fetch(
-            `https://serve.timothystl.org/api/signups/christmasmarket/summary?_cb=${Date.now()}`,
-            { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
-              cf: { cacheTtl: 0, cacheEverything: false },
-              signal: AbortSignal.timeout(4000) });
+          // ⚠ THIS GOES THROUGH THE SERVICE BINDING, NOT A PLAIN fetch() TO THE
+          // HOSTNAME — and that switch is what actually fixed this, after two
+          // rounds of cache-layer fixes (Cache-Control: no-store on Serve's own
+          // responses, cf:{cacheTtl:0} here, then a cache-busting query string)
+          // all failed to stop a live 404 that an external curl to the exact
+          // same URL with the exact same key never reproduced. The cache-busted
+          // URL — one no colo could possibly have cached before — STILL 404'd,
+          // which rules out edge caching as the cause entirely: something about
+          // a plain fetch() from inside this Worker to an external hostname on
+          // the SAME Cloudflare account was resolving differently than a real
+          // request from off-network, consistently, at whichever colo this
+          // Worker's own execution landed on. `env.VOLUNTEER_WORKER` (bound to
+          // the chms repo's Worker in wrangler.toml, the same binding
+          // `forwardToChms()` in `admin/forms.js` already uses) sidesteps all
+          // of that: it is an in-process call directly into the currently
+          // deployed chms Worker code, with no DNS, no edge routing and no
+          // cache layer of any kind in between — there is nothing left for a
+          // colo to get wrong. `env.VOLUNTEER_WORKER` is undefined only in a
+          // harness with no service bindings configured, where falling back to
+          // a plain fetch is fine since nothing there could be stale.
+          const req = new Request(
+            'https://serve.timothystl.org/api/signups/christmasmarket/summary',
+            { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
+          const res = env.VOLUNTEER_WORKER
+            ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+            : await fetch(req, { signal: AbortSignal.timeout(4000) });
           if (res.ok) vol = await res.json();
           else {
             // Live diagnostic: the status alone hasn't been enough to explain
