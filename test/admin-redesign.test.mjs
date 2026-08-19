@@ -1720,28 +1720,27 @@ group('payroll emails its report to the bookkeeper');
   eq(sent[0].to[0].email, 'books@example.com', 'to the bookkeeper');
   eq(sent[0].to[1].email, 'dinger@timothystl.org', 'and a copy to Andrew');
   ok(sent[0].subject.includes('Jul 16'), 'with the period in the subject: ' + sent[0].subject);
-  ok(sent[0].htmlContent.includes('$7,630.00'), 'and the combined total in the body');
+
+  // The figures live in the attachments now, not a table in the body — the
+  // body is one line saying the period and that it's attached, plus whether
+  // the run was signed off.
+  ok(sent[0].htmlContent.includes('Jul 16'), 'the body names the period');
+  ok(sent[0].htmlContent.includes('is attached'), 'and says the figures are attached');
   ok(sent[0].htmlContent.includes('Approved by dinger'), 'saying it was signed off, and by whom');
+  ok(!sent[0].htmlContent.includes('MDO Staff') && !sent[0].htmlContent.includes('Base / Earnings'),
+    'no per-person table is in the body any more — that is what the attachments are for');
 
-  // The two groups have different columns and always have — an MDO person is
-  // a rate and hours, a church person is a base plus four allowances. Rolling
-  // both into one Person/Gross table loses every figure that gets keyed in.
-  ok(sent[0].htmlContent.includes('MDO Staff'), 'MDO staff have their own section');
-  ok(sent[0].htmlContent.includes('MDO Subtotal'), 'with their own subtotal');
-  ok(sent[0].htmlContent.includes('Church Subtotal'), 'and church staff theirs');
-  ok(sent[0].htmlContent.indexOf('MDO Staff') < sent[0].htmlContent.indexOf('Church Staff'),
-    'MDO comes first, as it does on the printed report and in the CSV');
-  for (const col of ['Base / Earnings', 'Housing', 'Ins Opt-Out', 'HSA', 'Mileage', '403(b)']) {
-    ok(sent[0].htmlContent.includes(col), 'the church table keeps its ' + col + ' column');
-  }
-  ok(sent[0].htmlContent.includes('$16.00/hr'), 'an hourly MDO rate is shown');
-  ok(sent[0].htmlContent.includes('27.57'), 'with the hours behind it');
-  ok(sent[0].htmlContent.includes('$150.00'), 'and a mileage figure reaches the bookkeeper');
-
-  // The page posts figures, not markup. A name is escaped on the way in, so it
-  // cannot become HTML in something that lands in an outside inbox.
-  ok(!sent[0].htmlContent.includes('<img src=x'), 'a name cannot smuggle markup into the email');
-  ok(sent[0].htmlContent.includes('&lt;img'), 'it is escaped instead');
+  // The page posts figures, not markup — a name never reaches the body at
+  // all now, so it cannot become HTML in something that lands in an outside
+  // inbox. It still reaches the CSV/PDF attachments; those escape their own
+  // way (admin/payroll-report.test.mjs covers the CSV formula-injection
+  // guard and the PDF's own ASCII-safety directly).
+  ok(!sent[0].htmlContent.includes('<img src=x') && !sent[0].htmlContent.includes('&lt;img'),
+    'a staff name never reaches the body at all');
+  ok(Array.isArray(sent[0].attachment) && sent[0].attachment.length === 2,
+    'the CSV and PDF still ride along as real attachments');
+  ok(sent[0].attachment.some((a) => a.name.endsWith('.csv')) && sent[0].attachment.some((a) => a.name.endsWith('.pdf')),
+    'one of each');
 
   // An unapproved run says so, rather than looking final.
   const sent2 = [];

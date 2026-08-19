@@ -6333,10 +6333,11 @@ is what a bookkeeper's reconciliation copy actually needs, not typography.
   file. The route base64-encodes through `TextEncoder`, not a bare `btoa()`
   on the raw string, so a CSV with a real accented name in it round-trips
   correctly — `btoa()` alone throws on anything outside Latin-1.
-- **A failed attachment build never blocks the email.** The HTML table in
-  the body is still the report of record if `buildPayrollCsv`/
-  `buildMonospacePdf` throws for any reason — logged, not swallowed
-  silently, but the bookkeeper still gets the figures either way.
+- **A failed attachment build never blocks the email.** The body still goes
+  out — see below, it no longer carries the figures itself, but a build
+  failure is logged rather than swallowed, and the send still completes
+  (the bookkeeper gets a report with nothing attached rather than nothing
+  at all).
 - **Verified structurally, not just "the file exists".** A hand-rolled PDF
   needs its own xref table pointing at exact byte offsets for every
   object, and `admin/payroll-report.test.mjs` walks that table by hand and
@@ -6353,6 +6354,33 @@ is what a bookkeeper's reconciliation copy actually needs, not typography.
 Run: `node admin/payroll-report.test.mjs` (27), plus the existing
 `node test/payroll.test.mjs` (93, unchanged — the client screen itself was
 not touched, only the Worker route it already posts to).
+
+#### The email body is one line now; the tables live only in the attachments (2026-08-19)
+
+Dinger, once the CSV/PDF attachments above were confirmed working live:
+just make the body say a line about the payroll for the period being
+attached, rather than repeating the figures in an inline table too.
+
+**The MDO/church tables in `emailHtml` are deleted, not hidden.** They were
+the third copy of the same figures the CSV and PDF already carry — the
+body now says the period and that the CSV/PDF are attached, plus whether
+the run was signed off (kept, since that's still worth knowing before
+opening either file) and the incomplete-MDO warning when it applies.
+
+- **⚠ A staff name never reaches the email body at all now.** It used to
+  be there, escaped, inside the deleted table; the body has nowhere left
+  for one to land. It still reaches the CSV and PDF attachments, which
+  have their own established escaping (`admin/payroll-report.test.mjs`'s
+  CSV formula-injection guard, the PDF's own ASCII-safety in `admin/pdf.js`)
+  — nothing new needed here, the concern just moved with the data.
+- The total gross figure is also gone from the body, for the same
+  reason — it's the first line of both attachments, and repeating it a
+  third place is exactly the "second copy that can quietly disagree"
+  pattern this file warns about elsewhere.
+
+Run: the rewritten `payroll emails its report to the bookkeeper` group in
+`test/admin-redesign.test.mjs`, verified non-vacuous — corrupting the
+one-line "is attached" wording fails it.
 
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
