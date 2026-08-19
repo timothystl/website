@@ -3725,7 +3725,23 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
     // reverting the header on the request side fails this assertion.
     let sentKey = null;
     globalThis.fetch = async (u, init) => {
-      sentKey = init && init.headers && init.headers['X-Intake-Key'];
+      // ⚠ READ THE HEADER OFF WHICHEVER ARGUMENT CARRIES IT. The call under
+      // test builds a real `Request` and hands it to the VOLUNTEER_WORKER
+      // service binding, falling back to `fetch(req, { signal })` when no
+      // binding is configured — which is this harness. So `init` holds only
+      // the abort signal and the header lives on `u`. Reading `init.headers`
+      // alone reported `undefined` and failed this assertion for a key that
+      // was being sent perfectly well.
+      //
+      // Both forms are still checked rather than just the Request one: the
+      // property this assertion exists to hold is "the secret went with the
+      // request", and it has to keep holding if the call ever goes back to a
+      // plain fetch(url, init). Verified against the bug in both directions —
+      // dropping 'X-Intake-Key' from the Request in admin/market.js still
+      // fails this.
+      sentKey = (typeof Request !== 'undefined' && u instanceof Request)
+        ? u.headers.get('X-Intake-Key')
+        : (init && init.headers && init.headers['X-Intake-Key']);
       return new Response(JSON.stringify({
         open: true, signedUp: 7, openShifts: 4,
         roles: [

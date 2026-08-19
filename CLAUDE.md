@@ -4712,11 +4712,14 @@ and sits under Email, which is where somebody would look for held mail.
 Gym Rentals and Payroll were left bespoke in this pass and rebuilt in the next
 one — see "Gym and Payroll, to the mockups" below.
 
-**One question is still open**, and it is the only place the handoff
-contradicts itself: the mockups render a row's warning row **above** the row it
-refers to (visible in `pages.png` and `media.png`), while README §3 says it
-"grows a warning row beneath it". Warnings currently render beneath. Settle it
-before changing them.
+~~**One question is still open**~~ — **SETTLED v4.8.0.** The handoff
+contradicted itself: the mockups render a row's warning row **above** the row
+it refers to (visible in `pages.png` and `media.png`), while README §3 said it
+"grows a warning row beneath it". The screenshot won. `renderListSection` emits
+the warning band **before** `<div class="tlc-row">` (`admin/ui.js:233`), the
+seam moved from `border-top` to `border-bottom`, and a test pins the band as
+the FIRST child of the row wrapper. Nothing here is outstanding; the paragraph
+is kept because it is where somebody would look for the answer.
 
 #### Gym and Payroll, to the mockups (v3.2.0, 2026-08-01)
 
@@ -5442,8 +5445,9 @@ enough that nothing had caught up with it):
    in the render path; `/newsitems` runs its expiry sweep inline (R2 delete +
    DELETE per expired row); `/api/search` fires up to 10 LIKE scans per
    keystroke with no debounce; `/audit-log` renders one anchor per 50-row
-   page with no retention.~~ **Four of five done 2026-08-03**, per Andrew's
-   "go with making it faster":
+   page with no retention.~~ **All five are done** — four on 2026-08-03 per
+   Andrew's "go with making it faster", and `/media` earlier still (see the
+   corrected sub-item below, which was already stale when it was written):
    - **`/newsitems`** no longer `await`s the sweep before rendering —
      `ctx.waitUntil(sweepExpiredItems(...))` now, so an R2 delete plus a D1
      DELETE per expired row (almost always zero rows) no longer blocks every
@@ -5461,6 +5465,11 @@ enough that nothing had caught up with it):
      `await` at a time in a `for` loop; they don't depend on each other, so
      they now run together via `Promise.all`, with `active`'s array order
      (not resolution order) still deciding section order in the results.
+     ⚠ **The "no debounce" half of this item is closed too** — the palette
+     waits 160ms after the last keystroke before asking (`admin/ui.js:1421`),
+     so a typed word is one request rather than one per letter. All that is
+     left in that path is that a slow earlier response can still overwrite a
+     newer one — FX-34.
    - **`/audit-log`**'s pager rendered one `<a>` per page — harmless at 3
      pages, hundreds of links at 300, which is exactly the shape a table
      with **no retention** (a deliberate choice — it is the accountability
@@ -5469,13 +5478,18 @@ enough that nothing had caught up with it):
      first, last, and a couple either side of where you are, with a gap
      collapsed to `…` — capping the pager at a constant handful of links
      regardless of total pages. `admin/ui.test.mjs` covers it directly.
-   - **`/media`'s per-media-row scan of every page's block JSON is still
-     open.** It is real substring search (a stored URL and the one written
-     into a block can differ by origin, so it has to match on the filename
-     tail, not an exact key) across text that can genuinely contain the tail
-     anywhere — that is not a job a normal B-tree index can do, and doing it
-     properly means a real inverted index or SQLite FTS5, which is its own
-     schema change and its own `SCHEMA_VERSION` bump, not a quick parallelise.
+   - ~~**`/media`'s per-media-row scan of every page's block JSON is still
+     open.**~~ **ALREADY DONE — this line was stale the day it was written.**
+     The scan was inverted in the v4.24.0 backlog pass (see "The Media
+     screen's usage scan is inverted" above) and the code says so at
+     `tlc-admin-worker.js:4580`: each page is read ONCE into a filename map
+     and a media row is then one lookup — O(pages + media), not
+     O(media × pages). No inverted index or FTS5 was needed, because matching
+     whole filenames instead of substrings removed the reason for one, and it
+     is more accurate besides (`logo.png` no longer reads as "in use" because
+     a page mentions `church-logo.png`). ⚠ What IS still open is a different
+     thing: the screen fetches `SELECT * FROM ministry_media` with no `LIMIT`,
+     plus every page's draft AND published blocks, on every load — FX-32.
 4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere**~~ —
    **done 2026-08-03**, with Andrew's sign-off. All ten (~1.6MB) confirmed
    unreferenced anywhere in the repo — `public/index.html`, every admin
@@ -6873,14 +6887,14 @@ core modules · `GY-` gym module · `PY-` payroll.
 |-------|----------|------|-------|
 | VS-1 | Critical | Scheduler | Special-service rows crash Export CSV, Stats, Auto-Fill & Remove-Person (missing `type` guard) |
 | VS-2 | ~~Critical~~ **FIXED v3.8.0** | Scheduler | `scheduler.html` was served unauthenticated at `timothystl.org/scheduler.html` — now `admin.timothystl.org/scheduler`, behind the session |
-| GY-1 | Critical | Gym | [B1] Booking double-book race: SELECT-then-INSERT, no unique constraint/transaction |
+| GY-1 | ~~Critical~~ **PARTLY FIXED v4.24.0** | Gym | [B1] Booking double-book race. A partial UNIQUE index over the active statuses now closes the exact-duplicate slot at the database. ⚠ A partial OVERLAP (1–3pm against 2–4pm) is a range comparison, which an index cannot express, and still races — see FX-24. |
 | GY-2 | ~~Critical~~ **FIXED v3.8.0** | Gym | Stored XSS via renter-controlled `notes` — escaped in the review page and both emails |
 | AW-1 | ~~High~~ **FIXED v3.8.0** | Admin worker | Unhandled exceptions leaked full stack traces to unauthenticated clients — now a reference, with the detail in the log |
 | AW-2 | High | Admin worker | Stored XSS in admin UI via unescaped DB content → cross-privilege escalation (low-perm editor → admin) |
 | AC-1 | ~~High~~ **FIXED v3.8.0** | Core | Session cookie missing `Secure` flag — added, on both the set and clear headers |
 | AC-2 | High | Core | Email templates interpolate titles/subjects/URLs into broadcast HTML with **no** escaping (`email.js`) |
 | AC-3 | ~~High~~ **FIXED v3.6.0** | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) — one builder now; v4.29.0 removed the inline script entirely, so there is nothing to break out of |
-| AC-4 | High | Core | No UNIQUE constraint on `gym_bookings(booking_date,start_time,end_time)` — schema half of GY-1 |
+| AC-4 | ~~High~~ **FIXED v4.24.0** | Core | `DB_INIT_GYM_BOOKING_SLOT_INDEX` (`admin/db.js:536`) is a partial UNIQUE over `('confirmed','hold')`. Schema half of GY-1, closed. |
 | VS-3 | High | Scheduler | Breeze/Resend/Worker **secrets stored plaintext** in localStorage AND synced to D1 in plaintext |
 | VS-4 | High | Scheduler | RSVP tokens generated with `Math.random()` — guessable; sole authenticator for `/rsvp` |
 | VS-5 | High | Scheduler | localStorage is the working store; D1 sync is last-write-wins → multi-device data loss |
@@ -6957,10 +6971,10 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 - **AC-1** ~~(High, security)~~ **FIXED v3.8.0** — session cookie (`auth.js` 109/113) set `HttpOnly; SameSite=Strict` but not `Secure`. Appended on both the set and clear headers, so sign-out can't leave a non-Secure cookie a browser refuses to overwrite.
 - **AC-2** (High, security) — `email.js` drops subjects/titles/event names/CTA URLs into broadcast HTML with no escaping; `escapeHtml` exists in `helpers.js` but isn't imported here. Wrap all short plain-text fields.
 - **AC-3** ~~(High, security)~~ **FIXED v3.6.0** — `helpers.js`'s six near-identical TinyMCE section builders escaped backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context — a saved post could break out of the inline init block and run script in an admin's session. One builder now (`tinymceField()`), and `jsString()` split the closing tag so the parser never saw it; see "AC-3 is fixed" above. ⚠ v4.29.0 went further and removed the inline script — saved content never reaches a `<script>` at all now.
-- **AC-4** (High, correctness) — `db.js` `DB_INIT_GYM_BOOKINGS` (133) has no unique index → root of GY-1. Add a partial unique index over active statuses; bump `SCHEMA_VERSION`.
+- **AC-4** ~~(High, correctness)~~ **FIXED v4.24.0** — `DB_INIT_GYM_BOOKING_SLOT_INDEX` (`admin/db.js:536`) is a partial UNIQUE index over `('confirmed','hold')`, created in the schema block. Two people clicking the same slot can no longer both win it. ⚠ It catches an exact duplicate, not a partial overlap — see FX-24.
 - **AC-5** (Medium, correctness) — `gym_invoices` money columns are `REAL` (db.js 175). Store integer cents. (Schema change → version bump.)
-- **AC-6** (Medium, correctness) — `audit_log.user_id` is `NOT NULL` (db.js 231) but `logAudit` binds null for system actions (auth.js 134); the INSERT throws and is silently swallowed → those actions vanish from the audit trail. Make nullable or use a sentinel.
-- **AC-7** (Medium, perf) — Missing indexes on hot columns: `news_items(publish_date,expire_date,pinned)`, `gym_bookings(group_id,booking_date,status)`, `audit_log(created_at,entity_type)`, `sessions(user_id)`.
+- **AC-6** ~~(Medium, correctness)~~ **FIXED (Phase 9, v3.x)** — `DB_INIT_AUDIT_LOG` (`admin/db.js:627`) declares `user_id INTEGER` with no NOT NULL, and the table was rebuilt with the history copied across. A scheduled page going live and a hold lapsing are recorded again.
+- **AC-7** ~~(Medium, perf)~~ **FIXED v4.24.0** — all seven named indexes exist (`tlc-admin-worker.js:2326-2332`), plus five more elsewhere in the block. ⚠ Two of them duplicate earlier ones and are pure write cost — see FX-33.
 - **AC-8** (Medium, security) — CSP (helpers.js 181) allows `'unsafe-inline'` + `'unsafe-eval'`, defeating it as an XSS backstop. Move to nonce-based inline scripts.
 - **AC-9** (Medium, correctness) — Email footers (email.js 124/307) hardcode the stale Breeze give URL; a managed `give_url` setting exists. Thread it in.
 - **AC-10** (Medium, maint) — ~~~500 lines of 6 near-identical TinyMCE builders — any escaping fix (AC-3) must be applied 6×.~~ **FIXED v3.6.0**: one `tinymceField()` builder; the seven call sites are one line each.
@@ -6977,7 +6991,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 
 ### Gym Module — `admin/gym.js`
 
-- **GY-1** (Critical, correctness) — [B1] double-book race (1220/1258/1484/3437). Add partial unique index (see AC-4) + handle constraint error as "slot taken."
+- **GY-1** ~~(Critical, correctness)~~ **PARTLY FIXED v4.24.0** — the partial unique index landed (see AC-4) and a constraint violation is caught as a skipped slot. ⚠ Still open for a partial overlap, which no index can express: see FX-24.
 - **GY-2** ~~(Critical, security)~~ **FIXED v3.8.0** — renter `notes` rendered unescaped in the recurring-review page (4453) and admin emails (1532/1542/1705) — stored XSS running in the office's authenticated session. Escaped in all three now; `group.name`/`contact`/`email` are left unescaped deliberately since that field is office-entered behind `gym_manage`, not renter-supplied — see "Four security fixes from the July review" above.
 - **GY-3** (High, correctness) — Recurring monthly invoice dedup (4572) queries `booking_id` but recurrence invoices are inserted without it → re-bills every run. Store `booking_ids` and filter against it.
 - **GY-4** (High, security/DoS) — Batch `/request-slots` (1459) enforces neither rate-limit nor `max_active_holds` (unlike single `/hold`). Enforce both + a per-request slot ceiling.
@@ -7004,14 +7018,1031 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 - **PY-4** (Medium, security) — Supabase anon JWT hardcoded in page source (779). `/sb` gate is the real control (defense-in-depth), but inject the key server-side / document rotation. Still open.
 - **PY-5** ~~(Medium, security)~~ **FIXED v3.2.0** — CSV `q()` (1229) quote-doubled but didn't neutralize `= + - @` (the 403(b) column even emitted a leading `-`). Risky cells are prefixed now.
 - **PY-6** ~~(Medium, correctness)~~ **FIXED v3.2.0** — float money; rows rounded for display while subtotals summed unrounded values (1304) → a printed subtotal could be a cent off. Every gross rounds to cents before it is summed now.
-- **PY-7** (Medium, a11y) — `#staffModal` (691) has no `role="dialog"`/`aria-modal`, no focus move/trap/restore, no Escape. Still open.
-- **PY-8** (Medium, a11y) — Modal `<label>`s lack `for`; hours-grid captions are `<div>` not labels → three identical unlabeled spinboxes per row. Pair `for`/`id`; add `aria-label`. Still open.
+- **PY-7** ~~(Medium, a11y)~~ **FIXED** — it is a real dialog now: `admin/payroll.html:253` is `role="dialog" aria-modal="true" aria-labelledby=…`, and `:1359` closes it on Escape with focus moved in and restored.
+- **PY-8** ~~(Medium, a11y)~~ **FIXED** — the drawer's fields are labeled and the hours inputs carry their own `aria-label`, in the same pass as PY-7 (see the comment at `admin/payroll.html:1340`). ⚠ PY-14 (`aria-live` on the saved/error flash) and PY-15 (`scope="col"`, muted contrast) are NOT covered by that pass and are still open — see FX-36.
 - **PY-9** ~~(Medium, UX/correctness)~~ **FIXED v3.2.0** — `onPeriodChange` (1059) awaited several fetches with no feedback; `loadMdoData` (1093) used `|| []` and never checked the Supabase `error` field → a failed MDO query could silently under-report staff on a payroll run. It now says the report is incomplete, in the entry view, the report, and the CSV.
 - **PY-10** (Medium, responsive) — `.form-row`/`.form-row-3` (539) don't collapse on mobile; the 640px block only touches the hours row/table. Collapse to one column under ~560px.
-- **PY-11** (Medium, correctness) — Period dates parsed as local midnight but formatted via `toISOString()` (UTC) (824) — latent off-by-one. Format from local components consistently.
-- **PY-12** (Low, UX) — Save/remove errors use `alert()` (1039) inconsistent with admin `.alert` banners; `confirm()` gets HTML-entity-escaped name (`Smith &amp; Jones`).
+- **PY-11** ~~(Medium, correctness)~~ **FIXED** — period dates are formatted from local components, and the reason is written into the code at `admin/payroll.html:454`. The one remaining `toISOString()` (`:805`) stamps an approval instant, which belongs in UTC.
+- **PY-12** ~~(Low, UX)~~ **FIXED** — there are zero `alert(` calls left in `admin/payroll.html`; errors render through the shared banner.
 - **PY-13** (Low, UX) — Dead `#loginScreen` CSS (44) with no matching DOM; on 401 `showDashboard()` still runs and shows a raw "Network error." Remove dead CSS; redirect to `/login` on 401.
 - **PY-14** (Low, a11y) — "✓ Saved" flash (663) and error rows carry no `aria-live`. Add `role="status"` / `role="alert"`.
 - **PY-15** (Low, a11y) — Data-table `<th>` lack `scope="col"`; muted `#7A6E5A` at ~11px approaches/fails 4.5:1 contrast.
 - **PY-16** (Low, correctness) — Clock shifts <10 min silently dropped (1121); hours inputs wire both `oninput`+`onchange` → redundant save on blur.
 
+
+---
+
+## Code Review — 2026-08-19 (v5.28.4)
+
+A full read of the request path, the public API surface, the two public
+Workers, the shared UI layer and the design tokens, asked for as *"security or
+loading speed issues, design consistency, and areas where we have flagged
+issues but those issues are resolved."* **Nothing here was changed** — this is
+a catalog, in the same shape as the July 2026 review above.
+
+Labels are stable so they can be referenced directly (*"fix SEC-3, PERF-2"*).
+New prefixes rather than more `AW-`/`AC-` numbers, because several findings
+cross files that did not exist when those were written:
+
+`SEC-` security · `PERF-` loading speed · `DSN-` design consistency ·
+`DOC-` this file disagreeing with the code.
+
+**How it was checked.** Every item below was read in the source or measured,
+not pattern-matched. Byte sizes come from running the modules; the test
+results are from actually running the suites (see "What the suites say" at the
+end). Where something could not be verified from this sandbox it says so.
+
+---
+
+### First: what this file listed as open, and is not
+
+The ask was explicitly for this. Each of these is fixed in the code and read as
+outstanding somewhere above. **All of them have now been struck through and
+marked closed in place** — this table is the index of what moved, so a reader
+who remembers one of these as open can see when and why it changed.
+
+⚠ Closed **in the documentation only**. Not one line of behavior was changed by
+this pass; each was verified against the code as it already stands, at the line
+reference given.
+
+| Label / note | Where it says otherwise | What the code actually does now |
+|---|---|---|
+| **AC-6** — `audit_log.user_id NOT NULL` swallowed system entries | Marked fixed in the Phase 9 section, still listed unqualified in the July table | `DB_INIT_AUDIT_LOG` (`admin/db.js:627`) has `user_id INTEGER` with no NOT NULL. Genuinely closed. |
+| **AC-7** — missing indexes | Listed as a cross-cutting theme to fix | All seven exist (`tlc-admin-worker.js:2326-2332`), plus five more. Closed — see DSN-6 for the duplicates it left behind. |
+| **AC-4 / GY-1** — no unique constraint on a gym slot | The July table, and "[B1] … not yet fixed" under Pinned / Low Priority | `DB_INIT_GYM_BOOKING_SLOT_INDEX` (`admin/db.js:536`) is a partial UNIQUE over `('confirmed','hold')`. Exact-duplicate slots are closed at the database; partial overlaps are not, and the v4.24.0 note says so. The **Pinned / Low Priority** entry still reads as if nothing was done. |
+| **PY-7 / PY-8** — payroll modal has no dialog role, no Escape, no focus move | Both marked "Still open" in the July table | `admin/payroll.html:253` is `role="dialog" aria-modal="true" aria-labelledby=…`, and `:1359` closes it on Escape with focus moved in and restored. Closed. |
+| **PY-11 / PY-12** — UTC off-by-one on period dates; `alert()` for errors | Listed open | The date formatting is corrected and commented at `admin/payroll.html:454`; there are **zero** `alert(` calls left in the file. Closed. |
+| **`/media`'s usage scan** | *"still open … not a job a normal B-tree index can do"* under item 3 of Andrew's Call | It was inverted in the v4.24.0 backlog pass and the code says so at `tlc-admin-worker.js:4580`. One pass over the pages builds a filename map; a media row is one lookup. **This file states both — done in one section, open in another.** |
+| **⌘K fires a query per keystroke with no debounce** | Same item 3 | `admin/ui.js:1421` debounces at 160ms, and the server side runs its ten scans through `Promise.all`. Closed (see SEC-14 for the one thing left). |
+| **"Warning row above or below?" — the one question still open** | End of the mockup-match pass (v3.1.0) | Settled in v4.8.0 and shipped: `renderListSection` emits `${warnHtml}` **before** `<div class="tlc-row"` (`admin/ui.js:233`). The v3.1.0 paragraph is stale. |
+| **AC-3** — `</script>` breakout in the rich field | Marked fixed, then superseded | Correct twice over: `jsString()` is gone and no stored content reaches a `<script>` at all. Worth keeping the superseded note; it is the only one in this file that reads clearly. |
+| **B4** — KV-gate the startup migrations | Closed by measurement | Still true: `MARKERS_SEEN` means a warm request reads `_schema_version` zero times. See PERF-7 for what the *cold* path now costs, which has roughly doubled since that measurement. |
+
+---
+
+### Security
+
+#### SEC-1 (High) — the classic rich-text fields are stored raw and rendered raw on the public site
+
+`sanitizeRich()` exists, is a real allowlist, and is applied to **every** block
+in the page editor. It is applied to **none** of the classic TinyMCE fields.
+
+- The newsletter save path (`tlc-admin-worker.js:6742-6748`) runs exactly one
+  transform over `pastor_note`, `secondary_note`, `wol_content`, `lasm_content`:
+  `stripBlobImgs`, a regex that removes `<img src="blob:…">` and nothing else.
+- News `body` (`:7920`, `:7963`), sermon notes, youth pages and ministry posts
+  are stored with no transform at all — `form.get('body') || ''`.
+- `grep sanitizeRich tlc-admin-worker.js` returns **nothing**.
+
+Downstream, `public/index.html` renders those fields into `innerHTML`
+deliberately, because they are meant to carry markup: `loadNewsletters()` at
+`:2180` (`n.pastor_note`), `loadNewsletterDetail()` at `:2214`/`:2229`
+(`secondary_note`, `wol_content`, `tertiary_note`), and the news renderers at
+`:2060`/`:2140` (`item.body`).
+
+So an account holding only `newsletter_edit` or `news_edit` — the narrowest
+content permissions there are — can put script into a field that then executes
+**on timothystl.org**, and in any admin session that opens the newsletter's
+live preview. That is AW-2's cross-privilege escalation, with a concrete path,
+and it is the single largest item in this review.
+
+⚠ **The admin's own closed-state preview is safe** (`tinymceField()`,
+`admin/helpers.js:1155`, runs `sanitizeRich`) — which is exactly what makes
+this easy to miss: the place a developer looks is the one place that is
+guarded. What is *stored* is unguarded, and storage is what the public site
+reads.
+
+⚠ The fix is not "escape it" — these fields legitimately hold markup. It is to
+put the same `sanitizeRich()` on the write path that the block editor already
+uses, and to accept that a body already in the database was never filtered.
+
+#### SEC-2 (High) — `admin/email.js` escapes one field out of about a dozen
+
+The July review raised this as AC-2 and the v3.11.0 pass added a local `esc()`
+"as a step toward AC-2, not the whole sweep." The step is still one step:
+`grep -c 'esc(' admin/email.js` finds it used **once**, on `n.title`.
+
+Unescaped in `buildEmailHtml`, all staff-typed, all into ~600 inboxes and into
+the archive the website reads:
+
+| Field | Line | Context |
+|---|---|---|
+| `subject` | 218, 378 | element text |
+| `e.event_name` / `e.event_time` / `e.event_desc` | 255-256 | element text |
+| `mainNews.title` / `secondaryNews.title` / `item.title` | 278, 287, 337 | element text |
+| `ctaUrl` / `tertiaryCtaUrl` | 193, 309 | **inside `href="…"`** |
+| `ctaLabel` / `tertiaryCtaLabel` | 193, 309 | element text |
+
+The two `href` cases are the ones that matter beyond mail clients: a typed URL
+containing a double quote closes the attribute. The same values are served by
+`/api/newsletter/:id` and interpolated into `innerHTML` by
+`loadNewsletterDetail()` — `n.tertiary_cta_url` lands in an `href` at
+`public/index.html:2231` with no escaping either.
+
+⚠ The public renderer is **inconsistent with itself**, which is the useful
+signal: `escText()` is applied to `mainNews.title` and `item.summary` in the
+same function that interpolates `n.subject`, `e.event_name`, `c.topic`,
+`c.leader` and `c.location` raw. Somebody escaped the fields they were looking
+at.
+
+⚠ `escText()` (`public/index.html:1979`) escapes `& < >` and **not quotes**, so
+it is not safe for attribute context even where it is used. Fine for the text
+nodes it currently guards; not a general-purpose helper.
+
+#### SEC-3 (High) — the renter portal has no security headers at all
+
+`portalHtml()` (`admin/gym.js:305-433`) returns `{ 'Content-Type': 'text/html;
+charset=utf-8' }` and nothing else. No CSP, no `X-Frame-Options` /
+`frame-ancestors`, no `X-Robots-Tag`, no `Cache-Control`, no `Referrer-Policy`.
+
+This is the one page in this Worker that renders renter-supplied content and is
+handed to people outside the church, and it is authenticated by a **bearer
+token in the URL** (`/gym/book/:token`). Three consequences:
+
+- **The token leaks by Referer.** The invoice view renders a Tithe.ly pay
+  button as `<a href="${_payLink}" target="_blank">` with **no `rel="noopener
+  noreferrer"`** (`admin/gym.js:577`). Clicking it hands
+  `https://timothystl.org/gym/book/<token>` to Tithe.ly in the `Referer`
+  header, and gives the opened page a live `window.opener`.
+- **The token can be indexed.** `public/robots.txt` disallows `/manual`,
+  `/voters` and `/how-to-give`; `/gym/` is not listed, and the page carries no
+  `X-Robots-Tag`. A token URL pasted into anything crawlable becomes a search
+  result.
+- **The page is cacheable and framable.** No `Cache-Control` on a page showing
+  one renter's booking history; no frame guard on a page with real POST
+  actions.
+
+The v4.6.0 move to the public origin was the right call and it closed the
+same-origin-with-the-admin problem. It did not give the page headers of its
+own.
+
+#### SEC-4 (High) — the renter can still confirm their own bookings (GY-5, unchanged)
+
+Three portal routes reachable with only the group token:
+`sub === 'confirm'` (`admin/gym.js:1483`), `sub === 'confirm-hold'` (`:1533`),
+`sub === 'confirm-slots'` (`:1801`). Each writes `status='confirmed'`,
+generates an invoice, emails it and pushes the booking to Google Calendar —
+bypassing the "holds only, the office reviews" policy the whole queue screen is
+built around. The UI does not offer them; the routes answer.
+
+#### SEC-5 (High) — `/request-slots` has neither a rate limit nor a hold cap (GY-4, unchanged)
+
+`admin/gym.js:1702`. The single-slot `/hold` and `/confirm` paths both check
+`max_active_holds` and a 5-per-24-hours limit. The batch path — the one the
+portal calendar actually posts to — checks neither, and puts no ceiling on
+`slots.length`.
+
+⚠ **It is also a latency bug, not only an abuse one.** The validation loop runs
+**two sequential D1 queries per submitted slot** (`:1725` blocked-date, `:1726`
+conflict), awaited one at a time. A renter selecting a month of hourly slots
+costs several hundred serial round-trips inside one request.
+
+#### SEC-6 (Medium-High) — every push notification goes to every subscriber, whatever their permissions
+
+`pushToAllSubscribers()` (`admin/webpush.js:167`) reads the whole
+`push_subscriptions` table and sends to all of it. There is no permission
+filter anywhere in the path.
+
+`/api/push/subscribe` is gated on *having a session* and nothing more, so any
+account can subscribe a device. What then arrives on that device:
+
+- `New prayer request from <name>` with **the first 150 characters of the
+  prayer request** (`tlc-admin-worker.js:3407`).
+- `New message from <name>` with the first 150 characters of the contact
+  message (`:3348`).
+- `Christmas Market vendor application` — business name and amount.
+- Gym holds, held mail, payroll readiness.
+
+So the Market coordinator preset, which exists precisely so a volunteer sees
+*only* the vendor list, receives prayer-request content on her phone the moment
+she taps Notifications. So does the Bookkeeper. The push channel is the one
+surface in this admin that does not participate in the permission model at all,
+and the permission model is otherwise the most carefully argued thing in the
+codebase.
+
+`/api/push/unsubscribe` also deletes by `endpoint` with no ownership check —
+any signed-in account can silence anybody's device given its endpoint.
+
+#### SEC-7 (Medium) — `/api/newsletter/:id` serves unpublished drafts, and every column (AW-3, unchanged)
+
+`tlc-admin-worker.js:3191`: `SELECT * FROM newsletters WHERE id = ?`, no status
+filter, response is `{...row}`. The list endpoint two routes above it filters
+`status='published'` correctly, so the leak is only reachable by guessing a
+sequential id — which is the whole surface, since ids are sequential. A draft
+under approval, and every internal column on it (`brevo_campaign_id`,
+`approval_status`, `sent_count`), is public.
+
+#### SEC-8 (Medium) — uploads need a session and no permission (AW-8, unchanged)
+
+`/api/upload-image` (`:5895`) and `/api/upload-doc` (`:5936`) check nothing but
+`currentUser`. Any account — Market coordinator, Bookkeeper, a ministry leader
+scoped to one page — can host arbitrary images and PDFs on
+`admin.timothystl.org` permanently. Nothing ever deletes an R2 object either;
+the Media screen's own delete message says so in as many words.
+
+#### SEC-9 (Medium) — login still enumerates usernames by timing, and rate-limits only by IP (AW-9 / AW-10, unchanged)
+
+`tlc-admin-worker.js:4085`: when the username does not exist, `user` is null and
+`verifyPassword` is never called, so the request skips 100,000 PBKDF2
+iterations. That is tens of milliseconds — trivially measurable, and the
+difference between "this account exists" and "it does not."
+
+The rate limit (`:4073`) counts `audit_log` rows by IP only. Two side effects
+worth knowing:
+
+- Every failed login writes a permanent row into the accountability table,
+  which has **no retention by design**. A distributed attempt grows it without
+  bound and buries real entries.
+- Per-username lockout does not exist, so credential-stuffing across rotating
+  IPs is unthrottled.
+
+#### SEC-10 (Medium) — password reset: plaintext tokens, no invalidation, no rate limit (AW-14, unchanged)
+
+`tlc-admin-worker.js:3986-4040`. The token is 32 random bytes (good) stored as
+plaintext in `password_resets` (bad — a read of that table is a working reset
+for every pending request). Requesting a second reset does not invalidate the
+first. `/forgot-password` has no rate limit, so it is an unmetered way to send
+mail from the church's Brevo account to a known staff address and to write a
+row per request.
+
+Correct and worth keeping: the response is identical whether or not the address
+exists, and every session is dropped on a successful reset.
+
+#### SEC-11 (Medium) — the public forms are a metered email and push amplifier (AW-5, partly open)
+
+The reflector half is fixed — a `suspect` submission gets no auto-reply, on
+contact, prayer, market and event registration alike. What is not fixed:
+
+- There is **no hard rate limit**. `recentFromIp` is a *scoring signal*
+  (`admin/spam.js:227-230`): 8 submissions in an hour adds 6 points, which is
+  exactly `HOLD_SCORE`. So the first eight from one address are delivered —
+  each sending an office email, a confirmation email, a push to every staff
+  phone and a ChMS forward — and everything after is *held*.
+- **A held row is never pruned.** `delivered` is pruned at 30 days and
+  `released` at 90; `held` waits for a human, by design. A bot that keeps going
+  writes rows into D1 forever and rings every phone with "Filtered Mail" each
+  time.
+- From rotating addresses none of it applies at all.
+
+Turnstile would answer this, and it is built, optional and **inert** —
+`TURNSTILE_SECRET_KEY` has never been set (see the Form Spam Screening section
+above). That is the highest-value unfinished configuration step on the site.
+
+#### SEC-12 (Medium) — the event capacity check is the gym double-book race, in new code
+
+`/api/events/register` reads
+`SELECT COALESCE(SUM(qty),0) … WHERE event_id = ? AND payment_status != 'dropped' AND waitlisted = 0`,
+calls `capacityDecision()`, then INSERTs — with nothing between the read and
+the write. Two concurrent sign-ups for the last place both pass. It is
+GY-1/AC-4 exactly, in a table that has no unique constraint that could express
+the rule anyway (a cap is a sum, not a duplicate).
+
+Low consequence today — no capped event is live — and worth writing down before
+one is, because the shape is already known here and the fix is not a partial
+index this time.
+
+#### SEC-13 (Medium) — the admin shell can be framed (AW-18, unchanged)
+
+`html()` (`admin/helpers.js:668`) sets a CSP with no `frame-ancestors`, and no
+`X-Frame-Options` header. `frame-ancestors` does **not** inherit from
+`default-src`, so every admin screen except the block editor (which sets its
+own, correctly, at `tlc-admin-worker.js:235`) is frameable. With
+`script-src 'unsafe-inline' 'unsafe-eval'` also still in place (AC-8), the CSP
+is currently doing very little work on those pages.
+
+#### SEC-14 (Low) — the payroll secret fingerprint is still in the response
+
+`tlc-admin-worker.js:1386-1399` widens a Supabase 403 with
+`` `${sv.length} chars, starts "${sv.slice(0,6)}", ends "${sv.slice(-6)}"` ``.
+The reasoning at the time is sound and written down: a Worker secret is
+write-only and the mismatch was otherwise undiagnosable. The mismatch is
+resolved — `PAYROLL_PROXY_SECRET` is set and verified against the live project.
+Twelve of sixty-four hex characters is not a practical break, but it is a
+deliberate secret disclosure whose reason has expired.
+
+#### SEC-15 (Low) — assorted, each a line
+
+- **`/sb/*` is still an authenticated open relay** (AW-7). Any path under `/sb/`
+  reaches Supabase with the caller's key. Much reduced now that `anon` holds no
+  table grants, but the path allowlist the July review asked for was never
+  added.
+- **`/api/voters` and `/docs/*` are public** (AW-4). `robots.txt` disallows
+  `/voters` on the *site*, which is not an access control, and the API and the
+  PDFs themselves are on the admin origin and unlisted.
+- **The Supabase anon JWT is committed** (`admin/payroll.html:313`, PY-4) with
+  an `exp` in 2087. Public by design, but it is a credential in the repository
+  with no rotation path written down.
+- **The Square webhook and `/api/push/notify` read their whole body before the
+  25MB size gate.** Both routes sit above the `content-length` check at
+  `:1526` by necessity, so `request.text()` / `request.json()` runs first. The
+  check itself is also a no-op for a chunked request, where the header is
+  absent and `parseInt('' || '0')` is 0.
+- **`safeUrl()` accepts `//evil.com`** (`admin/blocks.js:1301` treats any
+  leading `/` as site-relative). A protocol-relative URL in a button block
+  looks internal and is not.
+- **`escText()` and the four hand-rolled partial escapes in `admin/gym.js`**
+  (`:2889` escapes `& <`, `:4165` escapes `<`, `:4171` escapes `"`) each do
+  enough for their own context and none is `escapeHtml`. `escapeHtml` exists,
+  is imported there already, and is used 31 times in the same file.
+- **The iCal feed is one global token over every group's bookings and notes**
+  (GY-8, `admin/gym.js:1975`), compared with `!==` rather than in constant
+  time, and its events carry no `TZID`/`VTIMEZONE` (GY-14).
+- **`/api/market/apply`'s comment claims photos are read only after screening
+  so "a bot cannot make this Worker buffer 40MB."** `await request.formData()`
+  on the line above has already buffered every file. The claim is false; the
+  25MB gate is what actually bounds it.
+
+---
+
+### Loading speed
+
+#### PERF-1 (High) — 85KB of unminified CSS ships on every page load, twice
+
+`BLOCK_CSS` is **85,033 bytes**, comment blocks and all. On a published page it
+travels two ways on the same load:
+
+1. The edge injects it inline into the HTML (`site-worker.js:600`, `blockCss =
+   pageData.css`), and that HTML is served `no-cache`.
+2. The client then calls `loadSitePages()` anyway — `tlcMaybeTakeOverSitePage`
+   awaits it unconditionally at `public/index.html:3019`, even when
+   `data-tlcb-edge` says the edge already rendered — and that JSON carries the
+   same 85KB string again, because `buildNav`/`fillFooter`/`applyAppearance`
+   need the rest of the payload.
+
+The admin's own ~89KB of CSS/JS was moved to `/assets/admin.css` and
+`/assets/admin.js`, `immutable`, cache-busted by `?v=VERSION` — the right fix,
+already built, already understood in this repo. The public site's block
+stylesheet never got it. It is a fixed string that changes only on deploy.
+
+#### PERF-2 (High) — `/api/pages` sends every published page's HTML to render one
+
+The response is `{ details, pages, menu, rendered, css, redirects }`, where
+`rendered` is the full block markup of **every** published page
+(`tlc-admin-worker.js:2866-2879`). A visitor who opens `/give` downloads
+`/worship`, `/ministries`, `/news` and the rest.
+
+Today that is cheap because most of the 28 pages are still unpublished drafts.
+The whole plan recorded in `admin/BLOCK-EDITOR-ROLLOUT.md` is to publish them
+all, and the payload grows monotonically as that happens. It is worth deciding
+the shape now — per-page endpoints, or `rendered` keyed and fetched on demand —
+rather than after the last Publish makes it a regression nobody can attribute.
+
+#### PERF-3 (High) — the cache chokepoint misses most of what changes `/api/pages`
+
+`tlc-admin-worker.js:1570` busts the edge copy on a POST under `/pages`,
+`/menu`, `/partners` or `/values`, and its comment says it covers "any POST
+that could change what /api/pages says."
+
+It does not. `pageData()` — which every self-filling block reads — is also fed
+by rows written from screens under **none** of those prefixes:
+
+| Screen | Blocks it changes |
+|---|---|
+| `/staff/*` | Staff grid |
+| `/giving*`, `/giving-tiers/*`, `/giving-funds/*` | Giving widget, Amount ladder |
+| `/christian-education/*` | Bible classes |
+| `/sermons*` | Sermon library, the homepage sermon card |
+| `/newsitems*` | News feed, News highlights |
+| `/market/settings`, `/market/fund` | Market facts, Market application |
+| `/events/*` | Registration |
+
+Each of those edits sits behind the edge copy for up to 120s, **plus** up to
+300s in `site-worker.js`'s own per-isolate `pagesCache` — so up to about seven
+minutes before a staff change is visible. That is precisely the shape of
+complaint this repo keeps receiving ("I published it and still see the old
+one"), and the invariant the comment claims is what would prevent it.
+
+#### PERF-4 (Medium) — a publish can be invisible to a returning visitor
+
+`site-worker.js` composes the HTML from `env.ASSETS.fetch(request)` and copies
+its headers through `withAssetCaching()`. That includes the **ETag of the
+static `index.html`**, which does not change when a page is published. HTML is
+served `no-cache`, which means *revalidate*, not *do not store* — so a
+returning browser sends `If-None-Match`, the asset is unchanged, and a 304 is
+returned with the visitor's cached copy of the *previously composed* page,
+carrying the old injected blocks.
+
+⚠ **Not verified end to end from here** — it depends on exactly what
+`env.ASSETS` returns for a conditional request and whether `isHtmlResponse()`
+(`site-worker.js:390`, which tests only `content-type`) is even reached. It is
+worth an actual check with `curl -H 'If-None-Match: …'` against production
+before anything is changed. If it holds, the fix is to drop or weaken the ETag
+on any response the rewriter has touched.
+
+#### PERF-5 (Medium) — two newsletter archives, one of them an unbounded N+1
+
+`/news` on the admin origin (`tlc-admin-worker.js:3216`) selects every published
+newsletter with no `LIMIT`, then runs **one events query per row** in a `for`
+loop. `/api/newsletters` twenty lines above solves the identical problem with
+one query plus a group-by in JS — the fix exists in the file, and was not
+applied to its neighbor. At a weekly letter this grows by 52 queries a year, on
+a page with no cache header.
+
+`/api/newsletters` itself also has no `LIMIT` and returns each letter's full
+`pastor_note`. The v4.35.0 month-folding that makes this bearable lives in the
+`newsletterarchive` *block*, so it does not apply to either of these.
+
+#### PERF-6 (Medium) — the gym dashboard scans all history to count hours
+
+`admin/gym.js:2043-2044` select `start_time, end_time` for **every** hold and
+**every** confirmed booking ever taken, with no date bound, to compute two
+totals. `:2041` joins all future confirmed bookings across three tables. They
+run inside a `Promise.all` so the latency is not serial, but the rows are
+unbounded and the table only grows.
+
+#### PERF-7 (Medium) — the migration block is now ~400 serial statements in the request path
+
+The schema block holds **192** direct `env.DB.prepare(...).run()` calls plus
+several seed loops (`PARTNER_SEED`, `SITE_PAGES`, `MENU_SEED`,
+`FOOTER_COLUMN_SEED`, the market pages), each awaited one at a time. The 411
+figure recorded in the v4.24.0 note has grown.
+
+Warm requests pay nothing — `MARKERS_SEEN` works, and that is genuinely solved.
+But after a `SCHEMA_VERSION` bump **every isolate in every colo** that starts
+before the marker is written runs the whole block before serving anything,
+including a public `/api/pages` or an `/images/*` request. That is the "5–10s
+slow but works" window, and it is longer than it was.
+
+⚠ **AW-12 is the sharper version of this and is unchanged.** Every statement is
+wrapped in `try { } catch (_) {}`, and the version marker is then written
+unconditionally at `:2412`. A statement that fails is marked current and never
+retried. This repo has already lost a column to exactly that
+(`pages.owner_username`, v4.33.0, which showed up months later as one screen
+mysteriously empty). The lesson was recorded; the mechanism that produced it
+was not changed.
+
+#### PERF-8 (Low) — the SPA is 267KB of HTML with 139KB of inline JS
+
+`public/index.html` is 267,154 bytes, 64,213 gzipped, of which 139,530 bytes are
+inline `<script>` across five blocks. Because it is inline it cannot be cached
+separately from the HTML, and the HTML is `no-cache` and rewritten per request.
+
+The "no build step" decision recorded under Pending / Deferred Items is sound
+and this is not an argument to reverse it. But *extracting* the five script
+blocks to `/app.js` is a file move, not a minifier — the same change the admin
+already made — and it would move 139KB from the per-navigation path to a
+cacheable one.
+
+#### PERF-9 (Low) — assorted
+
+- **The `/media` screen** reads `SELECT * FROM ministry_media` with no `LIMIT`
+  and every page's draft **and** published blocks on each load. The scan is
+  O(n) now (fixed — see the table above); the fetch is not bounded.
+- **`/pages` is still O(n²)** — `parentName()` (`:8085`) does
+  `ordered.find(...)` per row. ~900 comparisons at current size; a `Map` is one
+  line.
+- **The ⌘K search has no stale-response guard.** A slow earlier request can
+  overwrite the results of a newer one (`admin/ui.js:1400-1406`).
+- **`compatibility_date = "2024-01-01"`** on both `wrangler.toml` and
+  `wrangler-site.toml`, eighteen months stale, pinning old runtime behavior for
+  no stated reason.
+
+---
+
+### Correctness found while reading (not asked for, worth having)
+
+#### COR-1 — the two "one shared rule" news queries do not agree
+
+The comment above `NEWS_ORDER_SQL` (`tlc-admin-worker.js:2944`) says
+"`NEWS_ORDER_SQL`/`NEWS_WHERE_SQL` below encode once so every consumer (this
+route, `pageData()`'s self-filling blocks) agrees."
+
+**`NEWS_WHERE_SQL` does not exist.** Only the ORDER BY was ever extracted. The
+two WHERE clauses were written separately and have diverged:
+
+| | `/api/news` (`:3016`) | `pageData()` (`:547`) |
+|---|---|---|
+| Date basis | `churchDate()` — church time | `date('now')` — **UTC** |
+| `publish_date <= today` | yes | **absent** |
+| `channels LIKE '%web%'` | yes | **absent** |
+| Limit | 20 | 30 |
+
+So a **post scheduled for a future date is already live on any block-rendered
+page**, as is one the office marked email-only. And the v4.31.0 church-time pass
+fixed `/api/news` and missed this one, so the two disagree for five to six hours
+every evening about what has expired.
+
+Five more UTC `date('now')` comparisons survive the same pass:
+`tlc-admin-worker.js:4279`, `:4411`, `:4414`, and
+`admin/gym.js:2045` — the last being
+`strftime('%Y-%m', booking_date) = strftime('%Y-%m','now')`, which rolls the
+"bookings this month" counter over at 7pm on the last evening of the month.
+
+#### COR-2 — a British spelling has crept back in, and the documented grep over-matches
+
+The rule and its grep are in **Design System → ⚠ American spellings
+everywhere**. Running it as written today returns two lines:
+
+- `test/admin-redesign.test.mjs:3493` — `behaviour`, a real regression, in a
+  comment, which the rule explicitly covers.
+- `admin/ministry-editor.html:1323` — `Optimistic`, a **false positive**: the
+  pattern `optimis` matches the correctly-spelled American word. Worth
+  tightening to `optimis[ae]` so the check keeps being run rather than being
+  learned as noisy.
+
+---
+
+### Design consistency
+
+#### DSN-1 — the design tokens are mostly decorative
+
+`admin/ui.js` defines `PALETTE` (23 named colors) and `TONES` (five status
+tones) and is described throughout this file as the place a color is decided.
+In that same file:
+
+- `PALETTE.` is referenced **8** times.
+- `TONES.` is referenced **3** times.
+- There are **60 distinct hardcoded six-digit hex values.**
+
+The tokens are real and correct; the CSS beside them does not read from them,
+so changing a token moves almost nothing. The drift is already visible:
+`.tlc-warn` is `#FBF1DC` (`:903`) while `TONES.warn.bg` is `#FAF0DC` (`:65`) —
+two ambers for one meaning, one of which was typed.
+
+#### DSN-2 — emoji are still in the admin chrome
+
+v3.7.0 recorded the rule as settled: *"The newspaper emoji is gone. 'No emoji
+anywhere in the admin chrome' — the fallback icon is a typographic glyph like
+every other one."* Still present in rendered admin UI:
+
+| Where | Line |
+|---|---|
+| Dashboard task-card glyphs 🏀 📄 🛡️ 📰 | `tlc-admin-worker.js:4231, 4245, 4269, 4283` |
+| "Nothing is waiting on you. 🎉" | `:4306` |
+| ⌘K's search icon 🔍 | `:984` |
+| The voters file list 📄 | `:5968` |
+| The Brevo note 📊, twice | `:6597, :7376` |
+| The share-text helper 📖 / 📣 | `:11847, :11863` |
+| The gym portal's 🔒 and 📅 | `admin/gym.js:552, 567` |
+
+📰 is the exact glyph the note says was removed. (The link-card `icon_emoji`
+column is *content*, not chrome, and is correctly out of scope.)
+
+#### DSN-3 — the sitemap is hand-maintained against a database-driven site
+
+`public/sitemap.xml` is a static file listing 28 URLs. Pages have been rows in
+the `pages` table since the site editor shipped, with `slug`, `status`,
+`in_menu`, derived short links and rename 301s all managed in the admin. A page
+created in the admin never enters the sitemap; a renamed one leaves a stale
+entry that the merged redirect map will bounce. `/api/pages` already computes
+everything a generated sitemap needs.
+
+It also currently advertises `/youth`, `/sundayschool`, `/confirmation`,
+`/vbs`, `/egghunt` and `/family` — the six pages this file records as still
+awaiting content from the youth director.
+
+#### DSN-4 — the rich-text story is two stories
+
+There are two rich-text pipelines with different guarantees, different
+allowlists and different failure modes: the block editor's (`sanitizeRich`,
+`sanitizeCardRich`, `sanitizeLineRich`, enforced server-side on write) and the
+classic forms' (nothing — SEC-1). They look identical on screen, because
+`tinymceField()` builds both. That is the deepest consistency problem in the
+admin, and it is a security finding as well as a design one.
+
+#### DSN-5 — money is integer cents in the new code and floats in the old
+
+`site_event_registrations` uses `amount_due_cents` / `amount_paid_cents`
+(`admin/db.js:429-430`) and the market's pricing is integer throughout —
+correct, and argued for explicitly in the v5.8.0 notes. `gym_invoices` still
+declares `total_hours REAL, rate REAL, total_amount REAL` (`:568-570`). That is
+AC-5/GY-7, and the v5.8.0 note already says "a defect being carried is not a
+convention to copy." The two halves of the same admin now bill in two number
+systems.
+
+#### DSN-6 — small things
+
+- **Duplicate indexes.** `idx_audit_created` and `idx_audit_log_created` both
+  cover `audit_log(created_at…)`; `idx_news_items_publish_date` is a prefix of
+  `idx_news_items_dates`. Two of the four are pure write cost.
+- **`sections.js` ships a hardcoded weekday.** `dashboard.title` is
+  `'Thursday morning'` (`admin/sections.js:19`). The screen builds its own
+  greeting from `churchFormat()`/`partOfDay()` (`tlc-admin-worker.js:4471`) so
+  nothing renders it — but it is a config value that would be wrong six days
+  in seven if anything ever read it.
+- **`/events/new` types its own title and purpose** (`admin/events.js:503-504`)
+  where the list beside it reads `sectionCfg('events')`. Small, and exactly the
+  drift `admin/sections.js` was created to stop.
+- **Dead OPTIONS branches.** `/api/contact`, `/api/prayer`, `/api/market/apply`
+  and `/api/events/register` each begin with
+  `if (request.method === 'OPTIONS')` *inside* a block already guarded by
+  `method === 'POST'`. Harmless — these are multipart posts and need no
+  preflight — but it reads as CORS handling that is not there.
+
+---
+
+### What the suites say
+
+Run on 2026-08-19 at `59bb645`:
+
+- **All 23 `admin/*.test.mjs` suites pass.**
+- `test/site-taps`, `test/site-edge-render`, `test/links-page`,
+  `test/give-page`, `test/events-admin` — all pass.
+- **`test/admin-redesign.test.mjs` fails: 1078 passed, 1 failed.**
+
+The failure is `the request to Serve carries the shared X-Intake-Key —
+expected "test-intake-key", got undefined`, in the Christmas Market five-tab
+group. It is fallout from `e71a0af`, whose commit message begins **`wip:`** —
+the volunteers fetch was changed to build a `Request` object and hand it to
+`env.VOLUNTEER_WORKER.fetch(req)` (`admin/market.js:907-912`), so the suite's
+stub, which reads headers off the `init` argument, sees none.
+
+⚠ **This suite runs in CI on every pull request and every push to main**
+(`.github/workflows/test.yml`), so the tree is red as it stands. The fix is
+almost certainly the test rather than the code — the header is on the `Request`
+— but it should be settled rather than left, because a suite that is known to
+have one failure stops being read for the second one.
+
+⚠ Also worth noting: `e71a0af` is a `wip:` commit merged into the trunk, and
+the long comment it added at `admin/market.js:886` is a live debugging
+narrative rather than a settled explanation. The `volError` branch below it
+(`:919-928`) still captures and displays Serve's raw response body and
+`cf-ray` — a diagnostic added for a specific investigation, on a screen the
+market coordinator uses.
+
+---
+
+### If only three things are done
+
+1. **SEC-1** — put `sanitizeRich()` on the classic rich-text write paths. It is
+   one call in half a dozen route handlers, the function already exists and is
+   already tested, and it closes the only path in this codebase from a
+   low-privilege admin account to script running on the public website.
+2. **Set `TURNSTILE_SECRET_KEY`** (SEC-11). No code to write. The screening,
+   the site-key field and the widget are all built and have been inert since
+   2026-07-31; it is the difference between a scoring heuristic and an actual
+   gate on the forms that reach six hundred inboxes and every staff phone.
+3. **PERF-1 + PERF-3** — serve `BLOCK_CSS` from a cacheable
+   `/assets/blocks.css` the way the admin's own CSS already is, and widen the
+   cache chokepoint to the seven prefixes that actually change `/api/pages`.
+   One is 85KB off every page load; the other is the "I published it and still
+   see the old one" complaint, which this file records three separate times
+   under three different causes.
+
+---
+
+## Remediation plan — the fixes proposed by the 2026-08-19 review
+
+Every finding above, turned into a piece of work with a **stable code** and a
+**phase**. The code (`FX-nn`) never changes; the phase can be re-cut without
+renumbering anything, which is the whole reason they are two different things.
+
+**Phases are ordered by "what has to be true before the next one is worth
+doing," not by severity.** Phase 1 is the set that needs no design decision and
+no conversation — patches and one piece of configuration. Phase 5 and 6 need
+Dinger's or Andrew's call on a policy, or a design of their own.
+
+⚠ **Nothing in this plan has been done.** It is a plan. The one exception is
+FX-01, which was applied in the same pull request that recorded this review,
+because CI cannot report on any of the others until it is green.
+
+| Phase | What it is | Codes |
+|---|---|---|
+| **0** | Green CI and honest docs — the floor everything else stands on | FX-01 … FX-03 |
+| **1** | Close the exposures. Small, self-contained, no decisions | FX-04 … FX-12 |
+| **2** | The escaping sweep — one theme, done once, properly | FX-13 … FX-16 |
+| **3** | Loading speed — the wins that need no new design | FX-17 … FX-23 |
+| **4** | Correctness the office would feel | FX-24 … FX-28 |
+| **5** | Policy calls — needs a decision before code | FX-29 … FX-31 |
+| **6** | Consistency and hygiene | FX-32 … FX-38 |
+| **7** | Structural — each one its own project | FX-39 … FX-43 |
+
+---
+
+### Phase 0 — green CI and honest docs
+
+**FX-01 · Fix the `X-Intake-Key` test stub** — *done in the review PR.*
+`test/admin-redesign.test.mjs:3728` read the header off `init.headers`, but
+`e71a0af` moved the Serve call onto a real `Request` handed to the
+`VOLUNTEER_WORKER` binding, so `init` carries only the abort signal. The header
+was always being sent. The stub now reads whichever argument carries it, and
+still fails if the header is dropped from `admin/market.js` — verified in both
+directions. Nothing else in CI can be trusted until this is green, because a
+suite with one known failure stops being read for the second one.
+
+**FX-02 · Retire the `wip:` volunteers diagnostic.** `e71a0af` is a `wip:`
+commit on the trunk. The `volError` branch it left (`admin/market.js:919-928`)
+still renders Serve's raw response body and `cf-ray` onto the coordinator's
+screen — a live debugging aid for an investigation that is over. Decide whether
+the service binding actually fixed the 404, then cut the diagnostic back to the
+honest empty state the tab was designed around, and rewrite the comment above
+it as a conclusion rather than a running narrative.
+
+**FX-03 · Tighten the American-spelling grep, and fix the one real hit.**
+`behaviour` is back at `test/admin-redesign.test.mjs:3493`. Separately, the
+grep documented under **Design System** matches `optimis`, which flags the
+correctly-spelled *optimistic* — a check that cries wolf is a check nobody
+runs. Narrow it to `optimis[ae]` and re-run.
+
+---
+
+### Phase 1 — close the exposures
+
+These are the ones where the shape of the fix is not in question.
+
+**FX-04 · Sanitize the classic rich-text fields on write.** (`SEC-1`, the
+largest item in the review.) `sanitizeRich()` already exists, is a real
+allowlist and is already tested. Put it on the write path for `pastor_note`,
+`secondary_note`, `wol_content`, `lasm_content`, `tertiary_note`, the extra
+notes, news `body`, sermon notes, youth page content and ministry posts. Today
+they get `stripBlobImgs` (`tlc-admin-worker.js:6742`) or nothing at all, and
+`public/index.html` renders them into `innerHTML` by design.
+⚠ Two things to hold in mind: the *stored* value is what the public site reads,
+so the admin's already-sanitized closed-state preview is not the control; and
+rows written before this exists were never filtered, so a one-time pass over
+the existing bodies belongs in the same change.
+
+**FX-05 · Set `TURNSTILE_SECRET_KEY`.** No code. The screening, the site-key
+field and the widget have been built and inert since 2026-07-31. It is the
+difference between a scoring heuristic and an actual gate on the forms that
+reach six hundred inboxes and every staff phone. Highest value per unit of
+effort on the whole list.
+
+**FX-06 · Give the renter portal security headers.** `portalHtml()`
+(`admin/gym.js:305`) returns a content type and nothing else. It needs a CSP,
+`frame-ancestors 'none'`, `X-Robots-Tag: noindex`, `Cache-Control: no-store`
+and `Referrer-Policy: no-referrer` — the last because the page is authenticated
+by a **token in the URL** and the Tithe.ly pay button is `target="_blank"` with
+no `rel="noopener noreferrer"` (`:577`), which hands that token to Tithe.ly in
+the `Referer`. Add `Disallow: /gym/` to `public/robots.txt` in the same change.
+
+**FX-07 · Filter `/api/newsletter/:id`.** (`AW-3`.) `tlc-admin-worker.js:3191`
+is `SELECT *` with no status filter and returns `{...row}`. Add
+`AND (status IS NULL OR status = 'published')` — the list endpoint twenty lines
+above already does — and return a named column list rather than the whole row.
+
+**FX-08 · Gate the uploads.** (`AW-8`.) `/api/upload-image` (`:5895`) and
+`/api/upload-doc` (`:5936`) check only that a session exists. Require a
+content-editing permission. While in there: nothing ever deletes an R2 object,
+which the Media screen's own delete message admits.
+
+**FX-09 · Remove the payroll secret fingerprint.** (`SEC-14`.)
+`tlc-admin-worker.js:1386-1399` returns the length and the first and last six
+characters of `PAYROLL_PROXY_SECRET` on a Supabase 403. The reasoning was good
+and is recorded; the mismatch it existed to diagnose is resolved.
+
+**FX-10 · `frame-ancestors` on the admin shell.** (`AW-18`.)
+`admin/helpers.js:668` has no frame guard and no `X-Frame-Options`, and
+`frame-ancestors` does **not** inherit from `default-src`. The block editor
+already sets its own correctly (`tlc-admin-worker.js:235`) — copy that.
+Consider dropping `'unsafe-eval'` at the same time and seeing what breaks.
+
+**FX-11 · Allowlist the `/sb/*` paths.** (`AW-7`.) The proxy forwards any path
+under `/sb/` to Supabase with the caller's key. Much reduced now that `anon`
+holds no table grants, but the allowlist the July review asked for was never
+added, and it is a short list: thirteen RPC names.
+
+**FX-12 · Decide whether `/api/voters` and `/docs/*` are public.** (`AW-4`.)
+`robots.txt` disallows `/voters` on the site, which is not an access control.
+The API and the PDFs are unlisted addresses on the admin origin. Either gate
+them or write down that they are deliberately public.
+
+---
+
+### Phase 2 — the escaping sweep
+
+One theme. Doing it in pieces is how it stayed open for a year.
+
+**FX-13 · Escape `admin/email.js`.** (`SEC-2`/`AC-2`.) `esc()` is used **once**,
+on `n.title`. Unescaped: `subject` (218, 378), `e.event_name` / `e.event_time` /
+`e.event_desc` (255-256), `mainNews.title` / `secondaryNews.title` /
+`item.title` (278, 287, 337), and `ctaUrl` / `ctaLabel` /
+`tertiaryCtaUrl` / `tertiaryCtaLabel` (193, 309). The two URL cases sit **inside
+`href="…"`**, so a typed double quote closes the attribute.
+
+**FX-14 · Escape the public newsletter renderer.** `public/index.html`'s
+`loadNewsletters()` and `loadNewsletterDetail()` apply `escText()` to some
+fields and not their neighbors — `n.subject`, `e.event_name`, `e.event_time`,
+`e.event_desc`, `c.topic`, `c.leader`, `c.location` and `n.tertiary_cta_url`
+(into an `href`, `:2231`) all go in raw. ⚠ Note the rich bodies are *meant* to
+carry markup; those are FX-04's problem, not this one.
+
+**FX-15 · Make `escText()` attribute-safe, or stop using it near attributes.**
+`public/index.html:1979` escapes `& < >` and not quotes.
+
+**FX-16 · Replace the hand-rolled partial escapes in `admin/gym.js`.** `:2889`
+escapes `& <`, `:4165` escapes `<`, `:4171` escapes `"`. Each does enough for
+its own context and none is `escapeHtml` — which is imported into that file and
+used 31 times already. Include the one genuine miss: `:1775`, where the
+renter's own `notes` reach the office's HTML email unescaped while the renter's
+copy of the same string two lines below is escaped. That is the fourth site of
+`GY-2`, missed when the other three were fixed.
+
+---
+
+### Phase 3 — loading speed
+
+**FX-17 · Serve the block stylesheet as a cacheable asset.** (`PERF-1`.)
+`BLOCK_CSS` is **85,033 bytes** of unminified, comment-carrying CSS. On a
+published page it ships **twice**: inline at the edge (`site-worker.js:600`,
+into HTML served `no-cache`) and again inside the `/api/pages` JSON. The admin's
+own ~89KB went to `/assets/admin.css`, `immutable`, cache-busted by
+`?v=VERSION`. Do the same, and stop sending `css` in the JSON.
+
+**FX-18 · Stop the client re-fetching what the edge already delivered.**
+`tlcMaybeTakeOverSitePage()` awaits `loadSitePages()` unconditionally
+(`public/index.html:3019`) even when `data-tlcb-edge` says the markup is
+already there — because `buildNav`/`fillFooter`/`applyAppearance` need the rest
+of the payload. Split the chrome from the rendered pages so the second fetch is
+small, or have the edge inline the chrome record it already reads.
+
+**FX-19 · Widen the `/api/pages` cache chokepoint.** (`PERF-3`.)
+`tlc-admin-worker.js:1570` busts on `/pages`, `/menu`, `/partners`, `/values`
+and its comment claims it covers "any POST that could change what /api/pages
+says." It misses `/staff/*`, `/giving*`, `/christian-education/*`, `/sermons*`,
+`/newsitems*`, `/market/settings`, `/market/fund` and `/events/*` — all of
+which feed `pageData()`. Up to 120s of edge cache plus up to 300s of
+`site-worker.js`'s own isolate cache is about seven minutes before a staff edit
+shows. **This is the "I published it and still see the old one" complaint,
+which this file records three times under three different causes.**
+
+**FX-20 · Check the ETag on rewritten HTML.** (`PERF-4`.) `site-worker.js`
+copies `env.ASSETS`'s headers — including the ETag of the *unrewritten*
+`index.html` — onto a body it has composed per page. If a conditional request
+can win against that, a publish is invisible to a returning visitor until
+`index.html` itself changes. ⚠ **Not verified from this sandbox.** Confirm with
+`curl -H 'If-None-Match: …'` against production first; if it holds, drop or
+weaken the ETag on anything the rewriter touched.
+
+**FX-21 · Fix the `/news` archive N+1 and bound the newsletter endpoints.**
+(`PERF-5`.) `tlc-admin-worker.js:3216` selects every published newsletter with
+no `LIMIT`, then runs one events query per row in a `for` loop. The fix is
+twenty lines above it: `/api/newsletters` does the same job with one query and
+a group-by. Add a `LIMIT` to both, and note that neither carries the v4.35.0
+month-folding, which lives in the `newsletterarchive` *block*.
+
+**FX-22 · Bound the gym dashboard scans.** (`PERF-6`.) `admin/gym.js:2043-2044`
+read `start_time, end_time` for **every** hold and **every** confirmed booking
+ever taken, with no date bound, to produce two totals.
+
+**FX-23 · Batch `/request-slots`' validation.** (`SEC-5`, speed half.) The loop
+at `admin/gym.js:1725-1726` runs two sequential D1 queries **per submitted
+slot**. A month of hourly selections is several hundred serial round-trips
+inside one request. One query for the blocked dates in range and one for the
+conflicting bookings in range would replace all of it.
+
+---
+
+### Phase 4 — correctness the office would feel
+
+**FX-24 · Write `NEWS_WHERE_SQL` and actually share it.** (`COR-1`, the sharpest
+correctness bug found.) The comment at `tlc-admin-worker.js:2944` says
+`NEWS_ORDER_SQL`/`NEWS_WHERE_SQL` "encode once so every consumer agrees."
+**`NEWS_WHERE_SQL` does not exist.** The two queries diverged:
+
+| | `/api/news` (`:3016`) | `pageData()` (`:547`) |
+|---|---|---|
+| Date basis | `churchDate()` | `date('now')` — **UTC** |
+| `publish_date <= today` | yes | **absent** |
+| `channels LIKE '%web%'` | yes | **absent** |
+
+So **a post scheduled for a future date is already live on any block-rendered
+page**, as is one the office marked email-only.
+
+**FX-25 · Finish the church-time pass.** Five UTC `date('now')` comparisons
+survived v4.31.0: `tlc-admin-worker.js:547`, `:548`, `:4279`, `:4411`, `:4414`,
+plus `admin/gym.js:2045` —
+`strftime('%Y-%m', booking_date) = strftime('%Y-%m','now')`, which rolls the
+"bookings this month" counter over at 7pm on the last evening of the month.
+⚠ The rule from `admin/when.js` still holds: church time for a date somebody
+reads or picks, UTC for an instant.
+
+**FX-26 · Close the event capacity race.** (`SEC-12`.) `/api/events/register`
+reads `SUM(qty)`, decides, then INSERTs, with nothing in between — GY-1's shape
+in new code. No capped event is live yet, which is exactly why now is the
+cheapest time. ⚠ A partial unique index cannot express this one: a cap is a
+sum, not a duplicate.
+
+**FX-27 · Close the remaining gym slot overlap.** (`GY-1` residue.) The partial
+unique index catches an exact duplicate slot; 1–3pm against 2–4pm is a range
+comparison and still races through the SELECT-then-INSERT.
+
+**FX-28 · Make AW-12 impossible.** (`PERF-7`.) Every statement in the ~400-call
+migration block is wrapped in `try { } catch (_) {}` and the version marker is
+then written **unconditionally** (`tlc-admin-worker.js:2412`). A statement that
+fails is marked current and never retried. This repo has already lost a column
+to exactly that — `pages.owner_username`, v4.33.0, which surfaced months later
+as one screen mysteriously empty. Track failures and refuse to stamp the marker
+when any occurred.
+
+---
+
+### Phase 5 — policy calls, decide before coding
+
+**FX-29 · Scope push notifications by permission.** (`SEC-6`.)
+`pushToAllSubscribers()` (`admin/webpush.js:167`) reads the whole table and
+sends to all of it. Any account with a session can subscribe. So the Market
+coordinator preset — which exists precisely so a volunteer sees only the vendor
+list — receives **prayer-request content** (150 characters, per
+`tlc-admin-worker.js:3407`) and contact-message bodies on her phone. The push
+channel is the one surface here that does not participate in the permission
+model, and that model is the most carefully argued thing in the codebase.
+⚠ Also add an ownership check to `/api/push/unsubscribe`, which today deletes
+any endpoint given to it.
+**The decision:** which permission gates which trigger, and whether a push
+should carry message content at all or only "something arrived."
+
+**FX-30 · Decide the fate of the renter self-confirm routes.** (`SEC-4`/`GY-5`.)
+`admin/gym.js:1483`, `:1533` and `:1801` let a renter holding only the group
+token confirm their own booking, generate an invoice, email it and push to
+Google Calendar — around the office review the whole queue screen exists for.
+The UI does not offer them; the routes answer. **The decision is Dinger's:**
+is self-confirm a feature that lost its buttons, or a policy that lost its
+enforcement?
+
+**FX-31 · Rate-limit the public forms, and cap held-row growth.** (`SEC-11`.)
+`recentFromIp` is a scoring signal, not a limit: the first eight submissions an
+hour from one address are delivered — each an office email, a confirmation
+email, a push to every phone and a ChMS forward — and everything after is
+*held* and **never pruned**. From rotating addresses none of it applies. FX-05
+answers most of this; what needs deciding is the hard ceiling and what happens
+to a held row that is a year old, given that "held mail waits for a human" is
+a deliberate rule.
+
+---
+
+### Phase 6 — consistency and hygiene
+
+**FX-32 · Bound the Media screen's reads.** `SELECT * FROM ministry_media` with
+no `LIMIT`, plus every page's draft and published blocks, on every load. ⚠ The
+*scan* is already O(n) and correct — do not "fix" that again.
+
+**FX-33 · Drop the duplicate indexes.** `idx_audit_created` and
+`idx_audit_log_created` both cover `audit_log(created_at…)`;
+`idx_news_items_publish_date` is a prefix of `idx_news_items_dates`. Two of the
+four are pure write cost.
+
+**FX-34 · Guard the ⌘K search against out-of-order responses.**
+`admin/ui.js:1400-1406` — a slow earlier request can overwrite a newer one. The
+debounce is already there.
+
+**FX-35 · `parentName()` is O(n²).** `tlc-admin-worker.js:8085` does
+`ordered.find(...)` per row. A `Map` is one line. Trivial today; free to fix.
+
+**FX-36 · Finish the payroll accessibility pass.** PY-7 and PY-8 are closed;
+**PY-14** (no `aria-live` on the saved/error flash) and **PY-15** (`<th>`
+without `scope="col"`, muted `#7A6E5A` at ~11px near the contrast floor) were
+not part of it.
+
+**FX-37 · Take the emoji back out of the admin chrome.** (`DSN-2`.) v3.7.0
+recorded the rule as settled and 📰 is still at `tlc-admin-worker.js:4283`,
+along with 🏀 📄 🛡️ (`:4231`, `:4245`, `:4269`), 🎉 (`:4306`), 🔍 (`:984`),
+📄 (`:5968`), 📊 (`:6597`, `:7376`), 📖 📣 (`:11847`, `:11863`) and 🔒 📅
+(`admin/gym.js:552`, `:567`). ⚠ The link-card `icon_emoji` column is *content*
+on the links page, not chrome — leave it.
+
+**FX-38 · Small consistency debts.** `sections.js:19` ships
+`title: 'Thursday morning'`, a hardcoded weekday nothing currently renders;
+`/events/new` types its own title and purpose (`admin/events.js:503-504`) where
+the list beside it reads `sectionCfg`; four public POST routes begin with a
+dead `if (request.method === 'OPTIONS')` inside a block already guarded on
+`POST`; `compatibility_date` is `2024-01-01` on both Workers.
+
+---
+
+### Phase 7 — structural, each its own project
+
+**FX-39 · Reshape the `/api/pages` payload.** (`PERF-2`.) `rendered` carries the
+full block markup of **every** published page, so a visitor opening `/give`
+downloads `/worship`, `/ministries` and the rest. It is cheap today only
+because most of the 28 pages are still unpublished drafts — and the whole plan
+in `admin/BLOCK-EDITOR-ROLLOUT.md` is to publish them. Decide the shape *before*
+the last Publish turns it into a regression nobody can attribute.
+
+**FX-40 · Move the migrations out of the request path.** (`PERF-7`.) 192 direct
+statements plus several seed loops, all awaited serially. Warm requests pay
+nothing — `MARKERS_SEEN` genuinely works — but after a `SCHEMA_VERSION` bump
+every fresh isolate in every colo runs the whole block before serving anything,
+including a public `/api/pages` or an `/images/*`.
+
+**FX-41 · Extract the SPA's inline JavaScript.** (`PERF-8`.)
+`public/index.html` is 267,154 bytes (64,213 gzipped), of which **139,530** are
+inline `<script>` across five blocks — uncacheable separately from HTML that is
+`no-cache` and rewritten per request. ⚠ This is a **file move, not a
+minifier**: the "no build step" decision under *Pending / Deferred Items* is
+sound and this does not reverse it. It is the same change the admin already
+made.
+
+**FX-42 · Make the design tokens load-bearing.** (`DSN-1`.) `admin/ui.js`
+references `PALETTE.` **8** times and `TONES.` **3**, against **60 distinct
+hardcoded hex values** in the same file. The drift is already visible:
+`.tlc-warn` is `#FBF1DC` (`:903`) while `TONES.warn.bg` is `#FAF0DC` (`:65`) —
+two ambers for one meaning, one of them typed.
+
+**FX-43 · Generate the sitemap.** (`DSN-3`.) `public/sitemap.xml` is a static
+28-URL file, while pages have been rows in the `pages` table since the site
+editor shipped, with slugs, statuses, derived short links and rename 301s all
+managed in the admin. A page created in the admin never enters it; a renamed
+one leaves a stale entry. `/api/pages` already computes everything a generated
+sitemap needs. ⚠ It currently advertises the six youth pages this file records
+as still awaiting content.
+
+---
+
+### If only three things happen
+
+**FX-04**, **FX-05**, and **FX-17 + FX-19** — in that order. The first closes
+the only path from a low-privilege admin account to script running on the
+church's public website. The second is a Worker secret and no code at all. The
+third takes 85KB off every page load and ends the complaint this file has now
+explained three separate times.
