@@ -691,17 +691,27 @@ li{margin-bottom:6px;}
     <p>The whole event in one place, in five tabs across the top. <strong>You see the tabs your own account can use and no others</strong> &mdash; the market coordinator sees Vendors and Volunteers, the office sees Page &amp; copy and Photos, whoever handles money sees Money &amp; dates. Nothing is grayed out; a tab you cannot use simply is not there.</p>
 
     <ul>
-      <li><strong>Vendors</strong> <span class="badge badge--sky">Christmas Market permission</span> &mdash; the list that replaced the Google Form and the spreadsheet. Every application from <a href="https://timothystl.org/christmasmarket/vendors" target="_blank">timothystl.org/christmasmarket/vendors</a> lands here, with four numbers across the top: how many have applied, how many tables they have asked for between them, how many have not paid, and how much you have recorded as paid.</li>
+      <li><strong>Vendors</strong> <span class="badge badge--sky">Christmas Market permission</span> &mdash; the list that replaced the Google Form and the spreadsheet. Every application from <a href="https://timothystl.org/christmasmarket/vendors" target="_blank">timothystl.org/christmasmarket/vendors</a> lands here, with four numbers across the top: how many tables have been asked for, how much you have recorded as paid, how many people are still to finish paying by card, and how many checks have not arrived yet. <strong>You edit straight in the row</strong> &mdash; see below.</li>
       <li><strong>Page &amp; copy</strong> <span class="badge badge--sky">Pages permission</span> &mdash; the market's own pages, with a way straight into the editor for each and a plain statement of whether what a visitor sees is what is in the editor. Every word on those pages is a field in the editor; nothing about the market is written into code.</li>
       <li><strong>Money &amp; dates</strong> <span class="badge badge--sky">Settings or Giving permission</span> &mdash; the day, hours, table fee, table limit, coordinator email, the Tithe.ly fund and the Square-versus-Tithe.ly choice. The first five need Settings permission and the last two need Giving, the same as before they moved here.</li>
-      <li><strong>Volunteers</strong> <span class="badge badge--sky">Christmas Market permission</span> &mdash; who is covering the market, read live from Serve, with the most short-handed job first. It is a window on Serve, not a second copy: shifts are set up and changed there, and the button at the top takes you straight to them. If Serve cannot be reached the tab says so rather than showing you numbers it could not read.</li>
+      <li><strong>Volunteers</strong> <span class="badge badge--sky">Christmas Market permission</span> &mdash; who is covering the market, read live from Serve, in <strong>four views of the same roster</strong>, all of them printable. It is a window on Serve, not a second copy: shifts are set up and changed there, and the button at the top takes you straight to them. If Serve cannot be reached the tab says so rather than showing you numbers it could not read.</li>
       <li><strong>Photos</strong> <span class="badge badge--sky">Pages or Ministries permission</span> &mdash; the market's photographs and the description each one gives to somebody who cannot see it. Photographs are added in the page editor, by dropping one onto a gallery or a banner; they land in the library and appear here.</li>
     </ul>
 
-    <p><strong>Opening a row</strong> shows everything the vendor typed — what they sell, whether they are selling food, what they plugged in last year, who they would like to be near, and any photos they sent — and lets you fill in the three things only you know:</p>
+    <h4>The row is the form</h4>
+    <p>There is no panel to open and save any more. <strong>Everything you change most often is changed in the row itself, and each change saves on its own</strong> — the word <em>Saved</em> appears over the box for a moment, and it is written to the audit log exactly as before. Nothing sends you back to the top of the list.</p>
     <ul>
-      <li><strong>Table number</strong> — free text, so a two-table vendor can be "19/20". It is written the way the floor plan is written.</li>
-      <li><strong>Payment</strong> — <em>Not paid yet</em>, <em>Paid</em>, <em>Fee waived</em> or <em>Dropped out</em>. Fee waived is for Timothy MDO, the Word of Life 8th grade and the youth group; marking those as unpaid would leave them on your chase list forever.</li>
+      <li><strong>Category</strong> — pick one from the list. This is new, and it is the one that makes the list sortable: what a vendor writes under "what do you sell" is a paragraph, so it can only ever sort by whichever word it happens to start with. Category is how you answer "how many bakers have we got" or "are the candle people all together".</li>
+      <li><strong>Tbls</strong> — how many tables. Changing it changes what they are asked to pay, and the row says so.</li>
+      <li><strong>Table #</strong> — free text, so a two-table vendor can be "19/20". It is written the way the floor plan is written.</li>
+      <li><strong>Payment</strong> — <em>Not paid yet</em>, <em>Paid</em>, <em>Fee waived</em> or <em>Dropped out</em>. Fee waived is for Timothy MDO, the Word of Life 8th grade and the youth group; marking those as unpaid would leave them on your chase list forever. Marking a row <em>Paid</em> records the amount asked for, unless you have already typed a different one.</li>
+      <li><strong>Check or cash</strong> — for a vendor who said they would send a check. Type the check number, or press <strong>&#10003; In</strong> to record that one arrived today; either one turns the row Paid. A vendor paying by card says "Card, online" and has nothing to fill in.</li>
+    </ul>
+    <p><strong>Every column heading sorts</strong> — click once for A to Z, again to turn it round. The list arrives sorted by category, then by vendor name.</p>
+    <p>The new <strong>Awaiting check</strong> filter, and the <em>Checks not in yet</em> number at the top, are the two vendors who told you a check was coming and whose check has not arrived. Before this they looked identical to somebody who simply never paid.</p>
+    <p><strong>The chevron at the end of a row</strong> (&#9662;) opens the rest of the application underneath it — what they sell, whether they are selling food, what they plugged in last year, who they would like to be near, any photos they sent, their contact details, and two more boxes:</p>
+    <ul>
+      <li><strong>Your notes</strong> — only ever seen here. The vendor is not shown this.</li>
       <li><strong>Amount paid</strong> — leave it blank until you have actually checked. Blank means "not looked at yet", which is a different thing from "they paid nothing."</li>
     </ul>
 
@@ -715,6 +725,19 @@ li{margin-bottom:6px;}
     <p><strong>What a vendor is charged.</strong> The table fee is $30 and the vendor pays a little more than that ($31.20 for one table) so that after the card processor takes its cut the market still receives the full $30. You do not have to work any of that out — it is computed from the table fee and the processor's rate in Settings. If the church ever changes payment processors, the only two things to change are <strong>Card processing fee (%)</strong> and <strong>Card processing fee (fixed)</strong>; every price on the vendor page follows.</p>
 
     <p>Applications are switched on and off from the panel at the top of this screen — see the <a href="#christmas-market-annual">annual checklist</a> above.</p>
+
+    <h4>Volunteers — four views, and four things to print</h4>
+    <p>The same roster, looked at four ways. If the market runs over two days there is a day switch above them, because Friday setup and Saturday market are different crews.</p>
+    <ul>
+      <li><strong>By job</strong> — a panel per job, most short-handed first, with the lead named. <strong>Sheet</strong> beside a job prints that lead their own page and nobody else's.</li>
+      <li><strong>By time</strong> — slot by slot down the day, with every job running in that slot side by side and a count of how short each slot is. This is the one for whoever is running the floor.</li>
+      <li><strong>Grid</strong> — every job against the clock. Each block covers the hours that shift actually runs, so a 7:30&ndash;11:00 job is a tall block and a 9:00&ndash;11:00 job beside it is a shorter one. Green is covered, amber is short, red is nobody yet, and blank means that job is not running then. <em>Across the top</em> turns the whole thing on its side.</li>
+      <li><strong>Everybody</strong> — alphabetical: each person, when they arrive, when they can go home, and every shift they hold. This is the welcome-table list.</li>
+    </ul>
+    <p><strong>The four Print buttons</strong> each open a preview of exactly what will come out of the printer — job-lead sheets, the master list, by time slot, and the grid. Press your browser's own Print (&#8984;P or Ctrl-P) from there. The admin's own sidebar and buttons are not printed. <strong>Export CSV</strong> gives you one row per person per shift across both days, <em>plus a row for every spot nobody has taken</em>, marked <code>(open)</code> — because in November what you are looking for is the holes, not the people who have already signed up.</p>
+    <div class="callout">
+      <p><strong>If a shift's time cannot be read, the three views that need a clock say so rather than guessing.</strong> Serve sends a shift's time as words, and a few ways of writing it cannot be turned into a real start and end. Those shifts still appear under <strong>By job</strong>, which needs no clock — so nothing is ever hidden, and the tab tells you how many are affected.</p>
+    </div>
 
     <span class="toc-anchor" id="gym-tab"></span>
     <h3>Gym Rentals tab</h3>

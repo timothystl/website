@@ -123,6 +123,9 @@ jobs:
 #                                        # the renter portal at 390px — the
 #                                        # device it is actually opened on
 #   node test/list-section.test.mjs      # the shared list pattern
+#   node --experimental-loader ./test/html-loader.mjs test/market-admin.test.mjs
+#                                        # the Christmas Market vendor table —
+#                                        # see below
 #   node test/editor.test.mjs            # the block editor shell
 #   node test/editor-phone.test.mjs      # the editor at 390px, by tap
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
@@ -149,6 +152,20 @@ jobs:
 # need no browser (every file present, no config naming a plugin we did not
 # vendor, the version in the path) are in admin/tinymce-assets.test.mjs,
 # which DOES run above.
+#
+# ⚠ market-admin is the one to run after any change to the vendor table or
+# MARKET_JS. The row IS the form there, so everything that makes it work
+# happens in the browser: a cell saving on its own, the payment pill and the
+# money line redrawing from what the SERVER said the row became, a column
+# sorting, a row opening underneath itself. It boots the real Worker against
+# SQLite, so an assertion about what a cell shows after it saves is an
+# assertion about what was actually stored — and it drives the failure case
+# too, with the route aborted, because the whole risk of editing in place is a
+# change that looks saved and never landed. Two of its checks exist only
+# because looking at the rendered page found what no assertion had: a select
+# never overflows its box, so a clipped label cannot be measured with
+# scrollWidth, and an explicit `display` beats the browser's own
+# [hidden]{display:none}.
 #
 # ⚠ rich-field is the one to run after any change to tinymceField or
 # RICH_FIELD_JS. TinyMCE Cloud bills per editor instance that finishes
