@@ -761,6 +761,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries', '', 1) : '',
     hp('pages_edit')      ? navItem('/partners', 'Partners', activeTab === 'partners', '', 1) : '',
     hp('pages_edit')      ? navItem('/values', 'Values', activeTab === 'values', '', 1) : '',
+    hp('pages_edit')      ? navItem('/calendar-categories', 'Calendar', activeTab === 'calcats', '', 1) : '',
     showNews              ? navItem('/newsitems', 'News &amp; Events', activeTab === 'news', '', 1) : '',
     hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons', '', 1) : '',
     hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education', '', 1) : '',
@@ -772,7 +773,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   // was for. The state is decided server-side so the sidebar is never drawn
   // in the wrong shape and then corrected — a nav that moves after paint is
   // a nav you cannot click confidently.
-  const PAGES_CHILD_TABS = ['ministries', 'partners', 'values', 'news', 'sermons', 'christian-education'];
+  const PAGES_CHILD_TABS = ['ministries', 'partners', 'values', 'calcats', 'news', 'sermons', 'christian-education'];
   const inPages = activeTab === 'pages' || PAGES_CHILD_TABS.includes(activeTab);
 
   const canPages = hp('pages_edit') || hp('pages_edit_own');
@@ -910,6 +911,7 @@ const TRAIL = {
   ministries: { group: GROUPS.website, section: 'Ministry pages' },
   partners: { group: GROUPS.website, section: 'Partner ministries' },
   values: { group: GROUPS.website, section: 'Core values' },
+  calcats: { group: GROUPS.website, section: 'Calendar categories' },
   news: { group: GROUPS.website, section: 'News & Events' },
   sermons: { group: GROUPS.website, section: 'Sermons' },
   'christian-education': { group: GROUPS.website, section: 'Christian Education' },

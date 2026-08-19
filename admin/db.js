@@ -502,6 +502,30 @@ export const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
   created_at       TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── THE CALENDAR'S CATEGORIES ────────────────────────────────
+// One row per category the public calendar knows about. Seeded from
+// DEFAULT_CATEGORIES in admin/calendar.js so the day this screen appears
+// nothing on the site moves.
+//
+// ⚠ THE COLOR IS A PALETTE KEY, NOT A HEX. A category's color is the ink of
+// the time and the tint behind it on every chip; a free hex is one paste away
+// from a month nobody can read. See CALENDAR_PALETTE.
+//
+// ⚠ `color_id` IS UNIQUE where it is set, because two categories claiming
+// Blueberry is a question with no answer. Enforced by the index below rather
+// than by the form alone, so a stale tab cannot get past it.
+export const DB_INIT_CALENDAR_CATEGORIES = `CREATE TABLE IF NOT EXISTS calendar_categories (
+  key         TEXT PRIMARY KEY,
+  name        TEXT,
+  color_id    TEXT,
+  palette     TEXT,
+  sort_order  INTEGER DEFAULT 0,
+  active      INTEGER DEFAULT 1,
+  updated_at  TEXT
+)`;
+export const DB_INIT_CALENDAR_CATEGORIES_COLOR = `CREATE UNIQUE INDEX IF NOT EXISTS idx_calcat_color
+  ON calendar_categories (color_id) WHERE color_id IS NOT NULL AND color_id <> ''`;
+
 export const DB_INIT_GYM_BOOKINGS = `CREATE TABLE IF NOT EXISTS gym_bookings (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   group_id         INTEGER NOT NULL,

@@ -3844,17 +3844,29 @@ function tlcCalPill(act, val, active, label, dotColor) {
 }
 
 function tlcCalSourceBand(st) {
+  // ⚠ A SOURCE PILL IS ONLY OFFERED WHEN THE MONTH HAS THAT SOURCE IN IT. The
+  // building-use pill in particular: most months have no rentals at all, and a
+  // pill whose only possible outcome is the empty state is the dead control
+  // this site is held to everywhere else. The one currently selected is kept
+  // even if the new month has none of it, so a filter can never become
+  // impossible to clear.
+  var has = {};
+  st.events.forEach(function (e) {
+    if (e.source === 'both') { has.gcal = true; has.news = true; } else { has[e.source] = true; }
+  });
+  var pills = [tlcCalPill('src', 'all', st.src === 'all', 'All sources')];
+  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use']].forEach(function (p) {
+    if (has[p[0]] || st.src === p[0]) pills.push(tlcCalPill('src', p[0], st.src === p[0], p[1]));
+  });
+  var keys = [];
+  if (has.gcal)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.gcal + '"></span>Google</span>');
+  if (has.news)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.news + '"></span>News &amp; Events</span>');
+  if (has.building) keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.building + '"></span>Building use</span>');
+  if (pills.length <= 1) return '';
   return '<div class="tlc-cal-src">' +
     '<span class="tlc-cal-eyebrow">Source</span>' +
-    '<div class="tlc-cal-pills">' +
-      tlcCalPill('src', 'all', st.src === 'all', 'Both sources') +
-      tlcCalPill('src', 'gcal', st.src === 'gcal', 'Google Calendar') +
-      tlcCalPill('src', 'news', st.src === 'news', 'News & Events') +
-    '</div>' +
-    '<div class="tlc-cal-key">' +
-      '<span class="k"><span class="tlc-cal-swatch" style="background:var(--mid)"></span>Google</span>' +
-      '<span class="k"><span class="tlc-cal-swatch" style="background:var(--amber)"></span>News &amp; Events</span>' +
-    '</div>' +
+    '<div class="tlc-cal-pills">' + pills.join('') + '</div>' +
+    '<div class="tlc-cal-key">' + keys.join('') + '</div>' +
   '</div>';
 }
 
@@ -3876,8 +3888,8 @@ function tlcCalCatBand(st) {
   return '<div class="tlc-cal-cats">' + pills.join('') + '</div>';
 }
 
-var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', both: '#4A5E3A' };
-var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', both: 'In both' };
+var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', building: '#7D7972', both: '#4A5E3A' };
+var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', building: 'Building use', both: 'In more than one' };
 
 // The six weeks the grid draws: back to the Sunday on or before the 1st, then
 // 42 days. Six rows always, so the calendar does not change height as the
