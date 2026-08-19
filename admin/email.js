@@ -2,11 +2,30 @@
 // Extracted from tlc-admin-worker.js
 
 import { formatDate } from './helpers.js';
+// ⚠ Direct from blocks.js, not via helpers.js — helpers.js already imports
+// blocks.js, and blocks.js imports nothing that leads back here, so this adds
+// no cycle. One definition of what counts as a safe address, shared with the
+// page editor rather than reinvented for email.
+import { safeUrl } from './blocks.js';
 
 // Short plain-text fields that end up in a broadcast email — a note heading, a
 // subject — are typed by staff and land in six hundred inboxes. Rich bodies are
 // deliberately not run through this: they come from the editor and are HTML on
-// purpose. (The wider AC-2 sweep over this file is still open.)
+// purpose, and they are allowlist-sanitized on the way into the database
+// (sanitizeClassicRich, FX-04).
+//
+// ── FX-13 / AC-2: EVERYTHING ELSE IS ESCAPED NOW ────────────────────────────
+// This helper existed and was used ONCE, on an extra note's heading. Every
+// other short plain-text field — the subject, an event's name and time, a news
+// title, a Bible class topic, a CTA's label — went into six hundred inboxes
+// unescaped, and the two CTA URLs went in INSIDE `href="…"`, where a typed
+// double quote closes the attribute.
+//
+// The rule for this file: a field the office types as TEXT goes through esc();
+// a field the office types as MARKUP (the notes, a news body) does not, because
+// it is meant to carry tags and is sanitized where it is stored. A URL goes
+// through safeUrl() first and then esc(), in that order — safeUrl decides
+// whether it is a URL at all, esc decides whether it can escape the attribute.
 const esc = (v) => String(v == null ? '' : v)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -182,7 +201,9 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
       .filter(tag => !truncated.includes(tag))
       .map(tag => {
         const m = tag.match(/src=["']([^"']+)["']/i);
-        return m ? `<img src="${m[1]}" alt="" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-top:8px;">` : '';
+        // ⚠ Rebuilt from a regex match over stored markup, so it is a fresh
+        // attribute this file is writing rather than one it is passing through.
+        return m ? `<img src="${esc(safeUrl(m[1]))}" alt="" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-top:8px;">` : '';
       }).join('');
     return truncated + missingImgHtml;
   }
@@ -190,7 +211,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   // ── QUICK ANNOUNCEMENT layout (full-width, no events column) ──
   if (isQuick) {
     const ctaButtonHtml = (ctaLabel && ctaUrl)
-      ? `<div style="text-align:center;margin:22px 0 0;"><a href="${ctaUrl}" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:700;padding:12px 28px;border-radius:6px;text-decoration:none;">${ctaLabel}</a></div>`
+      ? `<div style="text-align:center;margin:22px 0 0;"><a href="${esc(safeUrl(ctaUrl))}" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:700;padding:12px 28px;border-radius:6px;text-decoration:none;">${esc(ctaLabel)}</a></div>`
       : '';
     return `<!DOCTYPE html>
 <html>
@@ -214,8 +235,8 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
       </td></tr>
       <!-- DATE + SUBJECT + FULL-WIDTH BODY -->
       <tr><td style="background:white;padding:24px 28px 28px;border-left:1px solid #E7DFD1;border-right:1px solid #E7DFD1;">
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">${dateStr}</div>
-        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#1E2D4A;margin-bottom:18px;padding-bottom:16px;border-bottom:2px solid #C9973A;">${subject}</div>
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">${esc(dateStr)}</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#1E2D4A;margin-bottom:18px;padding-bottom:16px;border-bottom:2px solid #C9973A;">${esc(subject)}</div>
         <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#1A1A2A;line-height:1.85;">${pastorNote || ''}</div>
         ${ctaButtonHtml}
         <!-- FOOTER -->
@@ -252,8 +273,8 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
       </div>
     </td>
     <td style="padding-left:9px;vertical-align:top;">
-      <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${e.event_name || ''}</div>
-      <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${e.event_time || ''}${e.event_desc ? ' · ' + e.event_desc : ''}</div>
+      <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${esc(e.event_name || '')}</div>
+      <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${esc(e.event_time || '')}${e.event_desc ? ' · ' + esc(e.event_desc) : ''}</div>
     </td>
   </tr></table>
 </td></tr>`).join('') : '';
@@ -271,20 +292,20 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   const secondaryNews = newsItems[1] || null;
   const additionalNews = newsItems.slice(2);
 
-  const mainNewsImg = mainNews && mainNews.image_url ? `<img src="${fixImgSrc(mainNews.image_url)}" alt="" style="width:100%;max-height:220px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:10px;">` : '';
+  const mainNewsImg = mainNews && mainNews.image_url ? `<img src="${esc(safeUrl(fixImgSrc(mainNews.image_url)))}" alt="" style="width:100%;max-height:220px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:10px;">` : '';
   const mainNewsHtml = mainNews ? `
 <tr><td style="padding:22px 0 0;border-top:2px solid #C9973A;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Featured</div>
-  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#1E2D4A;margin-bottom:8px;">${mainNews.title}</div>
+  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#1E2D4A;margin-bottom:8px;">${esc(mainNews.title)}</div>
   ${mainNewsImg}
   ${(mainNews.summary || mainNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#1A1A2A;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary || fixBodyImgSrcs(mainNews.body), 280)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
 
-  const secondaryNewsImg = secondaryNews && secondaryNews.image_url ? `<img src="${fixImgSrc(secondaryNews.image_url)}" alt="" style="width:100%;max-height:200px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:8px;">` : '';
+  const secondaryNewsImg = secondaryNews && secondaryNews.image_url ? `<img src="${esc(safeUrl(fixImgSrc(secondaryNews.image_url)))}" alt="" style="width:100%;max-height:200px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:8px;">` : '';
   const secondaryNewsHtml = secondaryNews ? `
 <tr><td style="padding:18px 0 0;border-top:1px solid #E7DFD1;">
-  <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#1E2D4A;margin-bottom:6px;">${secondaryNews.title}</div>
+  <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#1E2D4A;margin-bottom:6px;">${esc(secondaryNews.title)}</div>
   ${secondaryNewsImg}
   ${(secondaryNews.summary || secondaryNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#1A1A2A;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary || fixBodyImgSrcs(secondaryNews.body), 200)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
@@ -306,7 +327,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
 
   // Tertiary note / CTA block
   const tertiaryCta = (tertiaryCtaLabel && tertiaryCtaUrl)
-    ? `<div style="text-align:center;margin-top:14px;"><a href="${tertiaryCtaUrl}" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:10px 24px;border-radius:6px;text-decoration:none;">${tertiaryCtaLabel}</a></div>`
+    ? `<div style="text-align:center;margin-top:14px;"><a href="${esc(safeUrl(tertiaryCtaUrl))}" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:10px 24px;border-radius:6px;text-decoration:none;">${esc(tertiaryCtaLabel)}</a></div>`
     : '';
   const tertiaryNoteHtml = tertiaryNote ? `
 <tr><td style="padding-top:20px;border-top:1px solid #E7DFD1;">
@@ -334,7 +355,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <table width="100%" cellpadding="0" cellspacing="0">
     ${additionalNews.map(item => `
     <tr><td style="padding:11px 0;border-bottom:1px solid #F0E8DC;">
-      <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#1E2D4A;margin-bottom:4px;">${item.title}</div>
+      <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#1E2D4A;margin-bottom:4px;">${esc(item.title)}</div>
       ${(item.summary || item.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#1A1A2A;line-height:1.65;margin-bottom:6px;">${truncate(item.summary || fixBodyImgSrcs(item.body), 150)}</div>` : ''}
       <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
     </td></tr>`).join('')}
@@ -374,8 +395,8 @@ img{max-width:100% !important;height:auto !important;}
       </td></tr>
       <!-- DATE + SUBJECT -->
       <tr><td style="background:white;padding:24px 28px 0;border-left:1px solid #E7DFD1;border-right:1px solid #E7DFD1;">
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">${dateStr}</div>
-        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#1E2D4A;margin-bottom:18px;">${subject}</div>
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">${esc(dateStr)}</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#1E2D4A;margin-bottom:18px;">${esc(subject)}</div>
         <!-- 2/3 pastor note + 1/3 events -->
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
@@ -404,8 +425,8 @@ img{max-width:100% !important;height:auto !important;}
       <table width="100%" cellpadding="0" cellspacing="0"><tr>
         ${c.date ? `<td width="42" valign="top"><div style="background:#1E2D4A;color:white;border-radius:5px;padding:5px 6px;text-align:center;width:34px;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">${new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{month:'short'})}</div><div style="font-family:'Lora',Georgia,serif;font-size:16px;line-height:1.1;color:white;">${new Date(c.date+'T12:00:00').getDate()}</div></div></td>` : ''}
         <td style="padding-left:${c.date?'9':'0'}px;vertical-align:top;">
-          <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${c.topic}</div>
-          <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${[c.leader,c.location].filter(Boolean).join(' · ')}</div>
+          <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${esc(c.topic)}</div>
+          <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${esc([c.leader,c.location].filter(Boolean).join(' · '))}</div>
         </td>
       </tr></table>
     </td></tr>`).join('')}

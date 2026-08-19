@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, MARKET_CSS, MARKET_JS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.31.2'; // minor: the classic rich fields are sanitized (FX-04), Turnstile can be switched on safely (FX-05), the 85KB block stylesheet is a cacheable asset (FX-17), and the /api/pages cache chokepoint covers what actually feeds it (FX-19)
+export const VERSION = 'v5.32.0'; // minor: the escaping sweep — every plain-text field in the newsletter email and the public renderer is escaped, escText is attribute-safe, the gym's four partial escapes are gone, and the document title is escaped at the sink
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -626,13 +626,20 @@ ${RICH_FIELD_JS}
 ${MARKET_JS}
 `;
 
+// ⚠ THE TITLE IS ESCAPED HERE, AT THE SINK, NOT AT THE CALLERS (FX-16). Half a
+// dozen screens build a title out of a record — `Edit — ${g.name}`,
+// `Invoice ${invNum}` — and a `<title>` is RCDATA, so a name containing a
+// literal closing title tag ends the element and everything after it is parsed
+// as markup. Escaping in the one place every screen goes through is the
+// difference between a rule and six places somebody has to remember. No caller
+// passes markup as a title; a title is text by definition.
 export function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
+<title>${escapeHtml(title)}</title>
 <link rel="manifest" href="/site.webmanifest">
 <link rel="icon" href="https://timothystl.org/favicon.ico" sizes="any">
 <link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">

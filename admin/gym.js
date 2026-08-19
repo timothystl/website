@@ -1062,6 +1062,14 @@ function rangeText(hours) {
 // The basket is built from renter-supplied nothing — every value here is ours
 // — but the labels go through innerHTML, so escape on principle rather than
 // on audit.
+//
+//
+// ⚠ THIS ONE IS BROWSER CODE, NOT THE SERVER'S escapeHtml. It sits inside the
+// portal's inline <script>, so it cannot be replaced by the escapeHtml this
+// module imports — that identifier does not exist in the browser. It stays a
+// real function on purpose. (The four HAND-ROLLED PARTIAL escapes that used to
+// be scattered through the server-rendered markup are the ones FX-16 removed;
+// this full one was never the problem.)
 function esc(v) {
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1473,7 +1481,7 @@ function calcTotal() {
           try {
             await sendTransactionalEmail(env, {
               subject: `Gym hold placed \u2014 ${group.name} \u2014 ${formatDate(fields.booking_date)}`,
-              htmlContent: `<p><strong>${group.name}</strong> placed a 48-hour hold:</p><p>Date: ${formatDate(fields.booking_date)}<br>Time: ${fmt12h(fields.start_time)} \u2013 ${fmt12h(fields.end_time)}</p><p>Visit <a href="https://admin.timothystl.org/gym-rentals">admin.timothystl.org/gym-rentals</a> to review.</p>`,
+              htmlContent: `<p><strong>${escapeHtml(group.name)}</strong> placed a 48-hour hold:</p><p>Date: ${formatDate(fields.booking_date)}<br>Time: ${fmt12h(fields.start_time)} \u2013 ${fmt12h(fields.end_time)}</p><p>Visit <a href="https://admin.timothystl.org/gym-rentals">admin.timothystl.org/gym-rentals</a> to review.</p>`,
               toEmails: [adminEmailRow.value],
             });
           } catch (_) {}
@@ -1779,7 +1787,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
           try {
             await sendTransactionalEmail(env, {
               subject: `${created} hold(s) placed — ${group.name}`,
-              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><ul>${slotLines}</ul>${skipped > 0 ? `<p>(${skipped} slot(s) skipped due to conflicts.)</p>` : ''}<p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
+              htmlContent: `<p><strong>${escapeHtml(group.name)}</strong> placed ${created} hold(s) via the booking portal.</p><ul>${slotLines}</ul>${skipped > 0 ? `<p>(${skipped} slot(s) skipped due to conflicts.)</p>` : ''}<p>Notes: ${notes ? escapeHtml(notes) : '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
               toEmails: [adminEmail],
             });
           } catch (_) {}
@@ -2683,9 +2691,9 @@ document.addEventListener('change', function(e) {
         const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${GYM_SETTINGS_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...GYM_SETTINGS_KEYS).all();
         const fieldsHtml = settings.results.map(s => `
           <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
-            <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
-            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
-            <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+            <label>${escapeHtml(s.label || s.key)}</label>
+            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${escapeHtml(s.hint)}</div>` : ''}
+            <input type="text" name="${escapeHtml(s.key)}" value="${escapeHtml(s.value || '')}" style="font-family:var(--mono,monospace);font-size:13px;">
           </div>`).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
@@ -2833,7 +2841,6 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
           : em === 'saved' ? `<div class="alert alert-success">✓ Changes saved.</div>`
           : em === 'regen' ? `<div class="alert alert-success">✓ New token generated. Old link no longer works — share the new one.</div>`
           : '';
-        const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, badges, g.name)}
 <div class="tlc-wrap">
@@ -2844,19 +2851,19 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
     <form method="POST" action="/gym-rentals/groups/update/${g.id}">
       <div class="form-group">
         <label>Group name *</label>
-        <input type="text" name="name" required value="${esc(g.name)}">
+        <input type="text" name="name" required value="${escapeHtml(g.name)}">
       </div>
       <div class="form-group">
         <label>Contact person</label>
-        <input type="text" name="contact" value="${esc(g.contact)}">
+        <input type="text" name="contact" value="${escapeHtml(g.contact)}">
       </div>
       <div class="form-group">
         <label>Contact email</label>
-        <input type="email" name="email" value="${esc(g.email)}">
+        <input type="email" name="email" value="${escapeHtml(g.email)}">
       </div>
       <div class="form-group">
         <label>Phone</label>
-        <input type="text" name="phone" value="${esc(g.phone)}">
+        <input type="text" name="phone" value="${escapeHtml(g.phone)}">
       </div>
       <div class="form-group">
         <label>Max simultaneous holds</label>
@@ -2893,7 +2900,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
       </script>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only</span></label>
-        <textarea name="notes" maxlength="1000">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
+        <textarea name="notes" maxlength="1000">${escapeHtml(g.notes || '')}</textarea>
       </div>
       <div class="btn-row">
         <button type="submit" class="btn btn-primary">Save changes</button>
@@ -2912,7 +2919,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
          it can never be pushed off the right edge: one flex row, the field
          flex:1, the button flex:none. Not a grid. -->
     <div style="display:flex;gap:10px;align-items:center;">
-      <input type="text" id="portal-link" value="${esc(portalLink)}" readonly style="font-family:monospace;font-size:12px;background:var(--tlc-sand,#F4EFE5);flex:1;min-width:0;">
+      <input type="text" id="portal-link" value="${escapeHtml(portalLink)}" readonly style="font-family:monospace;font-size:12px;background:var(--tlc-sand,#F4EFE5);flex:1;min-width:0;">
       <button type="button" id="portal-copy" class="btn btn-primary btn-sm" style="flex:none;">Copy</button>
     </div>
     <!-- Regenerate invalidates a link sitting in other people's inboxes. It was
@@ -3577,7 +3584,7 @@ updateSummary();
         const errAlert    = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date and set its times.</div>`
           : errParam === 'times'    ? `<div class="alert alert-error">Each selected date needs a valid start and end time (end must be after start).</div>`
           : errParam === 'nogroup'  ? `<div class="alert alert-error">Please select a group.</div>`
-          : errParam === 'confirm'  ? `<div class="alert alert-error">Booking failed: ${errDetail ? errDetail.replace(/</g,'&lt;') : 'unknown error'}. Please try again or contact support.</div>`
+          : errParam === 'confirm'  ? `<div class="alert alert-error">Booking failed: ${errDetail ? escapeHtml(errDetail) : 'unknown error'}. Please try again or contact support.</div>`
           : '';
 
         const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
@@ -3687,12 +3694,12 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
       </div>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
-        <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
+        <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${escapeHtml(selNotes)}</textarea>
       </div>
       <!-- Pre-filled slots from back-navigation (read by JS via DOM, no injection) -->
-      <input type="hidden" id="initial-slots" value="${selSlotsRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">
-      <input type="hidden" id="booked-dates" value="${JSON.stringify([...bookedSet]).replace(/"/g,'&quot;')}">
-      <input type="hidden" id="blocked-dates" value="${JSON.stringify([...blockedSet]).replace(/"/g,'&quot;')}">
+      <input type="hidden" id="initial-slots" value="${escapeHtml(selSlotsRaw)}">
+      <input type="hidden" id="booked-dates" value="${escapeHtml(JSON.stringify([...bookedSet]))}">
+      <input type="hidden" id="blocked-dates" value="${escapeHtml(JSON.stringify([...blockedSet]))}">
       <input type="hidden" id="today-str" value="${todayStr}">
       <input type="hidden" id="num-months" value="${numMonths}">
       <input type="hidden" name="slots" id="slots-json">
@@ -4169,13 +4176,13 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
         </tr>
       </tfoot>
     </table>
-    ${notes ? `<div style="font-size:13px;color:var(--charcoal);margin-bottom:18px;"><strong>Notes:</strong> ${notes.replace(/</g,'&lt;')}</div>` : ''}
+    ${notes ? `<div style="font-size:13px;color:var(--charcoal);margin-bottom:18px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ''}
     <form method="POST" action="/gym-rentals/bookings/confirm" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.textContent='Creating…';setTimeout(function(){b.disabled=true;},10);}return true;">
       <input type="hidden" name="group_id" value="${group_id}">
       ${hiddenSlots}
       <input type="hidden" name="rate" value="${rate}">
       <input type="hidden" name="rate_type" value="${rate_type}">
-      <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
+      <input type="hidden" name="notes" value="${escapeHtml(notes)}">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary">Confirm &amp; Send Invoice</button>
         <a href="${editBack}" class="btn btn-secondary">← Edit</a>
@@ -4197,7 +4204,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
         let step = 'init';
         const errPage = (msg) => new Response(
           `<html><body style="font-family:monospace;padding:20px;background:#fff3f3;color:#900;">
-          <h2>Confirm Error (step: ${step})</h2><pre>${String(msg).replace(/</g,'&lt;')}</pre>
+          <h2>Confirm Error (step: ${escapeHtml(step)})</h2><pre>${escapeHtml(msg)}</pre>
           <p><a href="/gym-rentals/bookings/new">← Back</a></p>
           </body></html>`, { status: 500, headers: {'Content-Type':'text/html'} }
         );
@@ -4740,7 +4747,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
             try {
               await sendTransactionalEmail(env, {
                 subject: `Gym rental cancelled — ${formatDate(booking.booking_date)}`,
-                htmlContent: `<p>Hi ${group.name},</p><p>Your gym rental booking has been cancelled by the church office:</p><ul><li><strong>Date:</strong> ${formatDate(booking.booking_date)}</li><li><strong>Time:</strong> ${fmt12h(booking.start_time)} – ${fmt12h(booking.end_time)}</li></ul><p>If you have questions, please contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
+                htmlContent: `<p>Hi ${escapeHtml(group.name)},</p><p>Your gym rental booking has been cancelled by the church office:</p><ul><li><strong>Date:</strong> ${formatDate(booking.booking_date)}</li><li><strong>Time:</strong> ${fmt12h(booking.start_time)} – ${fmt12h(booking.end_time)}</li></ul><p>If you have questions, please contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
                 toEmails: [group.email],
               });
             } catch (_) {}
@@ -5225,7 +5232,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurri
           try {
             await sendTransactionalEmail(env, {
               subject: `Recurring rental approved — ${DOW_NAMES[rec.day_of_week]}s ${fmt12h(rec.start_time)}–${fmt12h(rec.end_time)}`,
-              htmlContent: `<p>Hi ${group.name},</p>
+              htmlContent: `<p>Hi ${escapeHtml(group.name)},</p>
 <p>Your recurring gym rental request has been approved. We've created <strong>${created} bookings</strong>:</p>
 <ul>
   <li><strong>Day:</strong> ${DOW_NAMES[rec.day_of_week]}s</li>
