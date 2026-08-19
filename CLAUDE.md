@@ -8372,6 +8372,13 @@ fetches regardless for the nav, footer and appearance record.
   link is worth doing and needs the canvas's own load ordering thought about —
   it is not this change. The strip lines in the client stay for the same reason
   a cached `/api/ministry` response can still carry the inline form.
+- **⚠ `/api/give-page` STILL SHIPS THE BYTES, and that is a decision.** It is
+  the second place `BLOCK_CSS` leaves this Worker, for `give.timothystl.org`.
+  Switching it would put a render-blocking cross-origin stylesheet into the
+  critical path of **the page that takes the money** — and this file's own rule
+  is that the giving page changes deliberately, with somebody watching, not as
+  a side effect of a performance pass. 85KB on one hostname most visitors reach
+  once is the cheaper half of the problem anyway. Left inline, on purpose.
 
 ### The chokepoint's comment was longer than its list (FX-19)
 
