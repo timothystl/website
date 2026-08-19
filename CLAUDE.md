@@ -637,14 +637,40 @@ you half the events.
   hardcoded in the old embed URL, so adding the school's calendar is a field
   rather than a deploy. ⚠ It is a different thing from `gcal_calendar_id`, which
   is the single calendar gym bookings are WRITTEN to.
-- **⚠ The Calendar BLOCK is still a Google embed, deliberately**, and that is the
-  one inconsistency worth knowing about rather than discovering: its URL field
-  takes a Google Form and other embeds as well as a calendar, so it cannot simply
-  become the church calendar — which means a page built in the editor with a
-  Calendar block still gets Google's cap. `tlcCalSrc()` in `public/index.html` is
-  gone with the embeds it served, so `calendarSrc()` in `admin/blocks.js` is the
-  last implementation standing and its mirror test in `admin/blocks.test.mjs` now
-  asserts exactly that.
+- **⚠ THE CALENDAR BLOCK WAS STILL A GOOGLE EMBED, AND THAT MADE THIS WHOLE
+  FEATURE INVISIBLE ON THE ONE PAGE IT WAS BUILT FOR (fixed same day).** The
+  first version of this entry recorded the block staying an embed as "the one
+  inconsistency worth knowing about rather than discovering," on the assumption
+  that `/calendar` was still unpublished — the pending list in this file said 24
+  of 25 drafts were. **It was wrong: 28 pages are published, `/calendar` among
+  them.** So the SPA's takeover hid the hardcoded mount and rendered the page's
+  blocks instead — a `hero` and a Calendar block, which was a Google iframe,
+  "N more" cap and all. Reported as "when i go to the calendar page it is still
+  the google calendar", and it was: **every test passed because they all drove
+  the hardcoded page nobody was being served.**
+  - **The switch is on the ADDRESS, not on the block type.** A Google Calendar
+    address — or none at all — means the church calendar, and renders a mount
+    (`[data-tlc-calendar]`) that `tlcCalScan()` fills. The field also takes a
+    Google Form and other embeds, and those still get an iframe; keying on the
+    type instead would turn every embedded form on the site into a month grid.
+  - **⚠ `tlcCalScan()` has to run on BOTH paths.** The client takeover and the
+    edge render put block markup on the page by different routes, and the edge
+    one never calls `tlcTakeOverPage()` at all — which is the path a visitor
+    typing the address straight in actually gets.
+  - **⚠ `tlcCalRetire()` exists because the hardcoded mount is not merely
+    hidden, it is already rendered.** By the time the takeover hides its
+    section it has drawn its own print sheet, and two print sheets in one
+    document is two printed pages — invisible on screen, and the kind of thing
+    nobody finds until the office prints the month.
+  - **⚠ THE LESSON IS ABOUT WHAT THE TESTS DROVE.** `test/public-calendar.test.mjs`
+    was thorough about the hardcoded markup and had nothing at all for a
+    published page, which is what the site actually serves. It has both now,
+    and the published-page group was verified against the bug in both halves —
+    reverting the block, and removing the scan.
+  `tlcCalSrc()` in `public/index.html` is gone with the embeds it served, so
+  `calendarSrc()` in `admin/blocks.js` is the last implementation standing and
+  its mirror test in `admin/blocks.test.mjs` asserts exactly that. It is still
+  reached, by a non-calendar embed.
 
 **⚠ VERIFIED LIVE AFTER THE MERGE, AND TWO THINGS THIS SECTION FIRST SAID WERE
 WRONG.** It was written saying nothing had been through a real Google — true of
@@ -6746,7 +6772,8 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 ### Still Needs to Be Built
 - ~~**A custom-rendered calendar, reading the church's own feed**~~ — **done v5.29.0, 2026-08-19.** Option (3), the one the note called a real project: `/calendar` and the `/news` strip are drawn by the site from `/api/calendar`, a merged Google + News & Events feed, and there is no per-day cap at all. See "The calendar is ours now" above. ⚠ **Verified against production after the merge, and the calendar the note was written about is fixed**: Sunday 23 August returns all six of its events where Google's embed folded three of them into "N more". The note's caveat about `calendar.google.com` being unreachable applies to the sandbox this was built in, not to the deployed Worker, which reads Google fine. What is left is the office coloring its Google events so the category filters have something to separate.
-- **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
+- ~~**24 of the 25 page drafts are still unpublished**~~ — ⚠ **STALE, AND IT MISLED A SESSION INTO SHIPPING AN INVISIBLE FEATURE.** Checked against the live `/api/pages` on 2026-08-19: **28 pages are published**, including `/calendar`, `/news`, `/home`, `/about` and `/worship`. Anything reasoning about "what a visitor actually sees" must read `rendered` from `/api/pages` rather than this line — see "The calendar is ours now" above for what believing it cost. The original note follows, for the history:
+- **(historic)** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
 
 - ~~**Weekly newsletter display wants adjustments**~~ — **done v4.35.0, 2026-08-13.** It was the archive, not the composer: the newest letter is open and everything older folds away under its month, closed. See "The newsletter archive folds away by month" above. *(Original note:)* flagged 2026-08-05, Andrew's own words, no specifics given yet.
 - **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.

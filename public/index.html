@@ -3024,6 +3024,14 @@ async function tlcMaybeTakeOverSitePage(id) {
   if (!html) return false;
   if (!already && !tlcTakeOverPage(id, html)) return false;
   sitePageTakeover[id] = true;
+  // ⚠ The edge path injects the markup server-side and never calls
+  // tlcTakeOverPage at all, so the scan has to happen here as well — that is
+  // the case a visitor typing the address straight in actually gets.
+  if (already) {
+    var edged = document.getElementById('page-' + id);
+    tlcCalRetire(edged);
+    tlcCalScan(edged);
+  }
   if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
     try {
       var posts = await fetch('https://admin.timothystl.org/api/ministry/' + id + '/posts');
@@ -3072,6 +3080,8 @@ function tlcTakeOverPage(slug, blocksHtml) {
   pageEl.insertBefore(host, pageEl.firstChild);
   host.innerHTML = fixImgUrls(markup);
   tlcRunBlockScripts(host);
+  tlcCalRetire(pageEl);
+  tlcCalScan(host);
   var pageDiv = host.querySelector('.tlcb-page');
   // A page rendered through a layout has already decided whether it runs full
   // width — forcing it here would put a sidebar page edge to edge. Only the
@@ -3601,13 +3611,62 @@ function tlcCalMatches(st, ev) {
 // is the lazy behavior the iframe already had — /news costs no more than it did.
 function tlcCalMount(hostId, opts) {
   var host = document.getElementById(hostId);
+  return host ? tlcCalMountEl(host, opts) : null;
+}
+
+// ⚠ EVERY CALENDAR BLOCK ON A PUBLISHED PAGE IS A MOUNT TOO, and missing this
+// is what made the whole feature invisible on /calendar. The hardcoded mounts
+// above are only reached while a page is UNPUBLISHED; once the office
+// publishes it from the page editor, the SPA hides the hardcoded markup and
+// renders the page's blocks instead. A calendar block renders
+// `[data-tlc-calendar]` (admin/blocks.js) and this is what fills it.
+//
+// Called after every path that puts block markup on the page — the client
+// takeover and the edge render alike — and safe to call twice, because
+// tlcCalMountEl() returns the existing view for a host it has already mounted.
+function tlcCalScan(root) {
+  var els = (root || document).querySelectorAll('[data-tlc-calendar]');
+  for (var i = 0; i < els.length; i++) {
+    // ⚠ ONE PRINT SHEET IN THE DOCUMENT, still. Only a calendar sitting on the
+    // calendar page draws it; the same block dropped onto /news or a ministry
+    // page is compact, or printing that page would produce a month nobody
+    // asked for on a second sheet.
+    var onCalendarPage = !!(els[i].closest && els[i].closest('#page-calendar'));
+    tlcCalMountEl(els[i], { compact: !onCalendarPage });
+  }
+}
+
+// ⚠ THE HARDCODED MOUNT IS DEAD ONCE THE PAGE IS TAKEN OVER, and leaving it
+// alone is not harmless: by then it has usually already rendered, print sheet
+// and all, and two print sheets in one document is two printed pages. Its
+// whole section is display:none so nothing is visible, which is exactly why
+// this is the kind of thing nobody notices until the office prints the month.
+// Retired rather than hidden — a block mount is never touched.
+function tlcCalRetire(pageEl) {
+  if (!pageEl) return;
+  for (var i = tlcCalViews.length - 1; i >= 0; i--) {
+    var h = tlcCalViews[i].host;
+    if (!pageEl.contains(h) || h.hasAttribute('data-tlc-calendar')) continue;
+    // Walk up looking for the inline display:none the takeover writes — a
+    // layout test (offsetParent) would also read "dead" for a page that is
+    // simply not the one on screen.
+    var n = h, dead = false;
+    while (n && n !== pageEl) {
+      if (n.style && n.style.display === 'none') { dead = true; break; }
+      n = n.parentNode;
+    }
+    if (dead) { h.innerHTML = ''; tlcCalViews.splice(i, 1); }
+  }
+}
+
+function tlcCalMountEl(host, opts) {
   if (!host) return null;
   var found = null;
   for (var i = 0; i < tlcCalViews.length; i++) if (tlcCalViews[i].host === host) found = tlcCalViews[i];
   if (found) { tlcCalLoad(found); return found; }
   var today = tlcCalToday();
   var st = {
-    host: host, id: hostId,
+    host: host, id: host.id || '',
     y: +today.slice(0, 4), m: +today.slice(5, 7),
     filter: 'all', src: 'all', view: 'month', sel: null,
     events: [], cats: [], sources: {}, status: 'loading',

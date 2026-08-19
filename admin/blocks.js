@@ -4871,9 +4871,36 @@ function renderInner(b, opts) {
     // which is worse than not offering the choice: they believe it worked and
     // stop looking.
     const px = (EMBED_HEIGHTS.find((h) => h.key === b.embedHeight) || EMBED_HEIGHTS[1]).px;
+
+    // ⚠ A GOOGLE CALENDAR ADDRESS — OR NONE AT ALL — MEANS THE CHURCH
+    // CALENDAR, AND THE CHURCH CALENDAR IS NOT AN EMBED ANY MORE.
+    //
+    // This is the gap that made the whole v5.29.0 feature invisible on the one
+    // page it was built for. /calendar had been PUBLISHED from the page editor
+    // with one of these blocks on it, so the SPA's takeover hid the hardcoded
+    // mount and rendered this block instead — a Google iframe, complete with
+    // the "N more" cap the feature exists to remove. The page looked exactly
+    // as it had before, and every test passed, because they all drove the
+    // hardcoded page nobody was being served.
+    //
+    // So a calendar block now renders a MOUNT for the site's own month.
+    // ⚠ It is still an embed for anything else: this field also takes a Google
+    // Form and other embeds, and those have nothing to do with the church
+    // calendar. That is the whole reason the test is on the ADDRESS rather
+    // than on the block type.
+    const isChurchCalendar = !src || /^https?:\/\/calendar\.google\.com\//i.test(src);
+    if (isChurchCalendar) {
+      // ⚠ In the editor the canvas has neither the site's stylesheet nor its
+      // calendar script, so a bare mount would read as a block that renders
+      // nothing. It says what will be there instead.
+      const inner = opts.editing
+        ? `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">The church calendar — the month, drawn by the site from the Google calendars and News &amp; Events together. Nothing to paste.</div>`
+        : `<div class="tlc-cal-mount" data-tlc-calendar></div>`;
+      return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
+    }
     const inner = src && !opts.editing
       ? `<iframe src="${esc(calendarSrc(src, px))}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
-      : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">${src ? 'Calendar embed' : 'Paste a Google Calendar embed URL in the panel on the right.'}</div>`;
+      : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">Embed</div>`;
     return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
   }
 

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { CATEGORIES } from '../admin/calendar.js';
+import { renderPage, sanitizeBlock, newBlock, BLOCK_CSS } from '../admin/blocks.js';
 
 const globalRoot = (process.env.NODE_PATH || execSync('npm root -g').toString()).trim().split(path.delimiter)[0];
 const { chromium } = createRequire(path.join(globalRoot, 'x.js'))('playwright');
@@ -94,7 +95,7 @@ const FEED = { from: day(1), to: day(28), events: BUSY_SUNDAY.concat(OTHER_DAYS)
   categories: CATEGORIES, sources: { google: true, news: true, googleReason: '' } };
 
 async function open(opts = {}) {
-  const { feed = FEED, width = 1280, height = 950, status = 200, page: which = 'calendar' } = opts;
+  const { feed = FEED, width = 1280, height = 950, status = 200, page: which = 'calendar', rendered = {} } = opts;
   const ctx = await browser.newContext({ viewport: { width, height } });
   const p = await ctx.newPage();
   const errors = [];
@@ -108,7 +109,8 @@ async function open(opts = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(feed) });
     }
     if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ pages: [], menu: null, rendered: {}, redirects: {}, css: '' }) });
+      body: JSON.stringify({ pages: [], menu: null, rendered, redirects: {},
+        css: Object.keys(rendered).length ? BLOCK_CSS : '' }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
   await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
@@ -352,6 +354,48 @@ async function goToFixtureMonth(p) {
   ok(hidden.cal, 'the interactive calendar does not print');
   ok(hidden.nav && hidden.foot && hidden.hero, 'and neither does the page around it, which would take the first sheet');
   await p.emulateMedia({ media: 'screen' });
+  await ctx.close();
+}
+
+// ── A PUBLISHED /calendar PAGE GETS THE REAL CALENDAR ───────
+{
+  // ⚠ THE CASE THAT WAS COMPLETELY UNTESTED, AND THE REASON THIS FEATURE WAS
+  // INVISIBLE ON THE ONE PAGE IT WAS BUILT FOR. Every other group here drives
+  // the hardcoded markup in public/index.html — which is only what a visitor
+  // gets while the page is UNPUBLISHED. /calendar had in fact been published
+  // from the page editor, so the SPA hid that markup and rendered the page's
+  // blocks instead: a Calendar block, which was still a Google iframe, cap and
+  // all. The page looked exactly as it had before and every test stayed green.
+  const block = sanitizeBlock({ ...newBlock('calendar'), url: 'https://calendar.google.com/calendar/embed?src=x' });
+  const html = renderPage([block], { editing: false, withCss: false });
+  const { p, ctx, errors } = await open({ rendered: { calendar: html } });
+  await p.waitForSelector('#page-calendar .tlc-cal', { timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(400);
+
+  eq(await p.$$eval('#page-calendar iframe[src*="calendar.google.com"]', (f) => f.length), 0,
+    'a published calendar page carries no Google embed at all');
+  ok(await p.$('#page-calendar .tlcb--calendar .tlc-cal'), "the block's own mount is filled with the church calendar");
+  const chips = await p.$$eval('#page-calendar .tlcb--calendar .tlc-cal-chip', (c) => c.length);
+  eq(chips, CHIPS_ALL, 'and it draws the real month, uncapped');
+  // The block sits on the calendar page, so it is the one that owns the sheet.
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 1, 'exactly one print sheet, on the block mount');
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// ── but a real embed is still a real embed ──────────────────
+{
+  // ⚠ The field takes a Google Form and other embeds too, and those have
+  // nothing to do with the church calendar. The switch is on the ADDRESS, not
+  // on the block type — get that wrong and every embedded form on the site
+  // turns into a month grid.
+  const block = sanitizeBlock({ ...newBlock('calendar'), url: 'https://docs.google.com/forms/d/e/abc/viewform' });
+  const html = renderPage([block], { editing: false, withCss: false });
+  const { p, ctx } = await open({ rendered: { calendar: html } });
+  await p.waitForTimeout(500);
+  eq(await p.$$eval('#page-calendar iframe[src*="docs.google.com/forms"]', (f) => f.length), 1,
+    'a form embed is still an iframe');
+  eq(await p.$$eval('#page-calendar [data-tlc-calendar]', (x) => x.length), 0, 'and gets no calendar mount');
   await ctx.close();
 }
 
