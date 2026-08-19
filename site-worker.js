@@ -4,6 +4,44 @@
 
 import { renderGiveLandingHtml, renderGiveBlocksHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
 
+// ── PUBLIC PUSH: the site's own service worker ──────────────────
+// The admin's is admin.timothystl.org's own — see SERVICE_WORKER_JS in
+// admin/helpers.js — and a push subscription is scoped to the ORIGIN it was
+// registered on, so a congregation member's browser needs one registered
+// here, on this origin, not on the admin's. Same shape and the same reason:
+// no caching, no fetch interception — a "worship is canceled" push must
+// never be followed by a stale cached page telling somebody it is not.
+const SITE_SERVICE_WORKER_JS = `
+self.addEventListener('install', function(event){ self.skipWaiting(); });
+self.addEventListener('activate', function(event){ event.waitUntil(self.clients.claim()); });
+
+self.addEventListener('push', function(event){
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  var title = data.title || 'Timothy Lutheran Church';
+  var url = data.url || '/';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: '/images/android-chrome-192x192.png',
+    badge: '/images/android-chrome-192x192.png',
+    tag: data.tag || undefined,
+    data: { url: url }
+  }));
+});
+
+self.addEventListener('notificationclick', function(event){
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list){
+    for (var i = 0; i < list.length; i++) {
+      var client = list[i];
+      if ('focus' in client) { client.focus(); if ('navigate' in client) client.navigate(url); return; }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  }));
+});
+`;
+
 const ERROR_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -503,6 +541,19 @@ export default {
       ), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' },
       });
+    }
+
+    // Served at the plain path so its scope covers the whole origin — a worker
+    // registered under a subpath would only ever control that subpath. Cached
+    // briefly rather than not at all: a deploy changing this file should reach
+    // browsers within a few minutes, not sit behind a year-long immutable
+    // cache the way the images and fonts below do.
+    if (url.pathname === '/sw.js') {
+      return new Response(SITE_SERVICE_WORKER_JS, { headers: {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+        'Service-Worker-Allowed': '/',
+      }});
     }
 
     const path = url.pathname.replace(/^\//, '').replace(/\/$/, '').toLowerCase();
