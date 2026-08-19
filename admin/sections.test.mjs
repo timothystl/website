@@ -46,7 +46,17 @@ group('the values that had drifted');
   eq(section('ed').title, 'Christian Education', 'Christian Ed is titled in full');
   eq(section('links').title, 'Taps & links', 'the links screen is Taps & links');
 
-  eq(section('news').filters.join(','), 'All,Live,Scheduled,Expired', 'News has four filters and no Pinned');
+  // ⚠ A DELIBERATE DEPARTURE FROM THE HANDOFF, and the reason is worth keeping:
+  // the design's four were written when every post in this list was something
+  // the office had written. The Word of Life school year put twenty-nine dated
+  // rows in it, and the list sorts furthest-future first — so without a way to
+  // isolate them the school year sits on top of whatever was written for next
+  // Sunday. The property the original assertion was really protecting still
+  // holds: there is no Pinned filter, because pinned rows already sort to the
+  // top and a filter for them would be a control with nothing to find.
+  eq(section('news').filters.join(','), 'All,Live,Scheduled,Expired,Calendar only',
+    'News keeps the design\'s four and adds Calendar only');
+  ok(!section('news').filters.includes('Pinned'), 'and still has no Pinned filter');
   eq(section('ed').filters.join(','), 'All,Running,Paused', 'Christian Ed filters on Running, not "On the website"');
   eq(section('notices').filters.join(','), 'All,Showing,Hidden', 'Notices filters on Showing/Hidden');
   eq(section('staff').filters.join(','), 'All,On the website,Hidden', 'Staff filters on being on the website');
@@ -78,7 +88,7 @@ group('filter values are derivable and stable');
 {
   // The client filters on these strings, so they have to be predictable from
   // the label rather than hand-maintained in parallel.
-  eq(filtersOf('news').map((f) => f.value).join(','), 'all,live,scheduled,expired', 'simple labels');
+  eq(filtersOf('news').map((f) => f.value).join(','), 'all,live,scheduled,expired,calendar-only', 'simple labels');
   eq(filtersOf('ministries').map((f) => f.value).join(','), 'all,with-posts,draft-edits,not-in-menu',
     'multi-word labels hyphenate');
   eq(filtersOf('media').map((f) => f.value).join(','), 'all,photos,files,needs-alt-text,over-1-mb,unused',

@@ -299,6 +299,11 @@ export function normalizeNewsItem(row, cats) {
     url: '/news',
   };
   if (!start) return { ...base, start: row.event_date, end: lastDay, allDay: true };
+  // ⚠ AN END NOBODY TYPED IS LEFT EQUAL TO THE START, not derived here. The
+  // page shows a time RANGE wherever it has room, so a derived end would print
+  // a duration nobody stated — "7:00 – 8:00 pm" on a meeting whose length
+  // nobody knows. `.ics` still needs a number and derives one at that boundary
+  // instead (see icsEnd), which is the only place it is genuinely required.
   return { ...base, start, end: newsEnd(row.event_date, lastDay, start, row.event_end_time), allDay: false };
 }
 
@@ -338,10 +343,25 @@ export function newsEnd(ymd, lastDay, start, endTime) {
   // A run of days with a start time but no end time finishes at the end of its
   // last day, rather than an hour after it began on the first one.
   if (lastDay !== ymd) return `${lastDay}T23:59:00`;
-  const m = /T(\d{2}):(\d{2})/.exec(start);
-  const h = Number(m[1]);
-  if (h >= 23) return `${ymd}T23:59:00`;
-  return `${ymd}T${String(h + 1).padStart(2, '0')}:${m[2]}:00`;
+  // Nothing was said, so nothing is claimed. `icsEnd()` is where a number
+  // finally has to exist.
+  return start;
+}
+
+// ⚠ `.ics` HAS NO WAY TO SAY "starts at 7, we did not say when it stops".
+// DTEND equal to DTSTART is a zero-length event, which a calendar app draws as
+// a hairline somebody's eye slides straight past. So an unstated end becomes
+// one hour HERE — at the one boundary that requires a number — rather than on
+// the event itself, where the page would print it as a duration nobody stated.
+// Clamped to the same day, or an 11:30 pm event lands on tomorrow's grid.
+export function icsEnd(ev) {
+  const end = ev.end || ev.start;
+  if (end > ev.start) return end;
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(ev.start || ''));
+  if (!m) return end;
+  const h = Number(m[2]);
+  if (h >= 23) return `${m[1]}T23:59:00`;
+  return `${m[1]}T${String(h + 1).padStart(2, '0')}:${m[3]}:00`;
 }
 
 // ── DE-DUPE ─────────────────────────────────────────────────────────────────
@@ -466,7 +486,7 @@ export function buildIcs(events, { name = 'Timothy Lutheran Church', tz = 'Ameri
       lines.push(`DTEND;VALUE=DATE:${stamp(addDays(ev.end, 1))}`);
     } else {
       lines.push(`DTSTART;TZID=${tz}:${stamp(ev.start)}`);
-      lines.push(`DTEND;TZID=${tz}:${stamp(ev.end || ev.start)}`);
+      lines.push(`DTEND;TZID=${tz}:${stamp(icsEnd(ev))}`);
     }
     lines.push(`SUMMARY:${icsEsc(ev.title)}`);
     if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
@@ -651,7 +671,13 @@ export async function readNewsEvents(env, from, to, cats) {
 // ⚠ AND `notes` IS NEVER READ EITHER. It is typed by the renter, and it is the
 // field the July 2026 review found being rendered unescaped into staff email
 // (GY-2). It has no business on a public calendar at all.
-export const BUILDING_IN_USE = 'Building in use';
+// ⚠ THE RENTER IS STILL NEVER NAMED, and that has not moved. What changed is
+// that "Building in use" told a visitor almost nothing: it did not say WHICH
+// space, and the church has exactly one it rents out. Naming the room is not a
+// privacy question — the renter is, and `gym_groups` is still not joined and
+// `notes` is still not read.
+export const BUILDING_IN_USE = 'Gym rented';
+export const BUILDING_ROOM = 'Gym';
 
 export async function readGymBookings(env, from, to) {
   try {
@@ -683,7 +709,7 @@ export function normalizeGymBooking(row) {
     end: `${row.booking_date}T${end}:00`,
     allDay: false,
     title: BUILDING_IN_USE,
-    location: '', description: '',
+    location: BUILDING_ROOM, description: '',
     category: 'facility',
     source: 'building',
   };

@@ -8291,6 +8291,10 @@ ${classesJs}
         if (item.publish_date && item.publish_date > today) state = 'scheduled';
         else if (item.expire_date && item.expire_date < today) state = 'expired';
         const expiringSoon = state === 'live' && item.expire_date && item.expire_date <= soon;
+        // A post that goes on the month and deliberately not into the news
+        // feed — a school break, a week of testing. `channels` is a list, so a
+        // post ticked for the calendar AND the website is not one of these.
+        const calOnly = String(item.channels || '').split(',').map((c) => c.trim()).filter(Boolean).join(',') === 'calendar';
 
         const status = state === 'scheduled' ? statusPill('auto', 'Scheduled')
           : state === 'expired' ? statusPill('plain', 'Expired')
@@ -8303,11 +8307,18 @@ ${classesJs}
         // called out rather than left blank.
         const expires = item.expire_date
           ? escapeHtml(item.expire_date)
-          : `<span style="color:#7A5B18;">Never</span>`;
+          : calOnly
+            ? `<span style="color:#6A6858;">On the calendar</span>`
+            : `<span style="color:#7A5B18;">Never</span>`;
 
         return {
           href: `/newsitems/edit/${item.id}`,
-          filter: [state, item.value || ''].filter(Boolean),
+          // ⚠ A CALENDAR-ONLY POST IS ITS OWN FILTER, because there are
+          // twenty-nine of them and this list sorts furthest-future first —
+          // so the school year sits on top of whatever the office wrote for
+          // next Sunday. The chip isolates them; it does not hide them from
+          // All, which would make the list a half-truth.
+          filter: [state, item.value || '', calOnly ? 'calendar-only' : ''].filter(Boolean),
           search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
           cells: [
             // The pin marker sits BEFORE the title, where the eye starts —
@@ -8325,10 +8336,10 @@ ${classesJs}
             expires,
             status,
           ],
-          warn: !item.expire_date
+          warn: (!item.expire_date && !calOnly)
             ? 'No expiry date, so this post stays on the site until somebody removes it by hand.'
             : '',
-          warnCta: !item.expire_date ? { label: 'Set one', href: `/newsitems/edit/${item.id}` } : null,
+          warnCta: (!item.expire_date && !calOnly) ? { label: 'Set one', href: `/newsitems/edit/${item.id}` } : null,
         };
       });
 

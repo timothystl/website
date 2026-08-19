@@ -4738,7 +4738,8 @@ group('building rentals reach the calendar, and never name the renter');
 
     const building = feed.events.filter((e) => e.source === 'building');
     eq(building.length, 1, 'the confirmed booking is on the calendar');
-    eq(building[0].title, 'Building in use', 'and it says the building is in use');
+    eq(building[0].title, 'Gym rented', 'and it names the room rather than saying only that something is on');
+    eq(building[0].location, 'Gym', 'which room, since the church rents exactly one');
     eq(building[0].start, '2026-08-20T18:00:00', 'with the real time');
     eq(building[0].category, 'facility', 'filed under Facility / rentals');
 
@@ -5062,6 +5063,19 @@ group('the Word of Life school year is on the calendar, and off the news feed');
     // would draw a four-day bar and claim the school was shut on days it was
     // never open.
     eq(march.events.filter((e) => e.title.startsWith('No school —')).length, 2, 'two closures in March, not one bar across the weekend');
+
+    // ⚠ TWENTY-NINE ROWS IN A LIST SORTED FURTHEST-FUTURE FIRST would put the
+    // school year on top of whatever the office wrote for next Sunday, so the
+    // admin list has a chip that isolates them. It does not hide them from
+    // All, which would make the list a half-truth.
+    const list = await (await call(env, '/newsitems', { cookie: admin.cookie })).text();
+    ok(list.includes('Calendar only'), 'the News list offers a Calendar only filter');
+    ok(/data-filter="[^"]*calendar-only/.test(list), 'and the school rows carry it');
+    ok(list.includes('Spring break'), 'while still being in the list itself');
+    // ⚠ And they are not told off for having no expiry: not having one is
+    // exactly what a date on the month is for.
+    ok(!/calendar-only[\s\S]{0,900}No expiry date/.test(list),
+      'a calendar-only post is not warned about its missing expiry date');
 
     // ⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM. Without it a date
     // the office removed on purpose comes back on the next deploy, silently.

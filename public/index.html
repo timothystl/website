@@ -3599,12 +3599,35 @@ function tlcCalDow(ymd) {
 
 function tlcCalTime(ev) {
   if (ev.allDay) return 'All day';
-  var m = /T(\d{2}):(\d{2})/.exec(ev.start || '');
+  return tlcCalClock(ev.start);
+}
+function tlcCalClock(iso) {
+  var m = /T(\d{2}):(\d{2})/.exec(iso || '');
   if (!m) return '';
   var h = +m[1], mn = m[2];
   var ap = h < 12 ? 'AM' : 'PM';
   h = h % 12; if (h === 0) h = 12;
   return h + ':' + mn + ' ' + ap;
+}
+// The block of time something occupies, where there is room to print it — the
+// list view and the detail panel. A gym rental in particular is only useful as
+// a block: "is the gym free at two" is the question somebody is asking.
+//
+// ⚠ ONLY WHEN THE END IS GENUINELY KNOWN. An end equal to the start means
+// nobody said when it finishes (see normalizeNewsItem — the +1 hour that
+// `.ics` needs is derived at that boundary and never on the event), so this
+// falls back to the start alone rather than printing a duration nobody stated.
+// ⚠ And only within one day. A multi-day event's end belongs to another date
+// entirely, and "9:00 AM – 11:59 PM" said of a five-day camp is nonsense.
+function tlcCalSpan(ev) {
+  if (ev.allDay) return 'All day';
+  var a = String(ev.start || ''), b = String(ev.end || '');
+  if (!b || b <= a || b.slice(0, 10) !== a.slice(0, 10)) return tlcCalClock(a);
+  // One meridiem when both halves share it: "1:00 – 3:00 PM", not
+  // "1:00 PM – 3:00 PM", which is how a printed bulletin would set it.
+  var sa = tlcCalClock(a), sb = tlcCalClock(b);
+  var ma = sa.slice(-2), mb = sb.slice(-2);
+  return (ma === mb ? sa.slice(0, -3) : sa) + ' \u2013 ' + sb;
 }
 // The print sheet gets a 112px-tall cell for the whole day, so the time is a
 // short prefix rather than a column: "8a", "10:45a", "12p".
@@ -4066,7 +4089,7 @@ function tlcCalList(st, visible) {
         var continued = d !== String(ev.start).slice(0, 10);
         return '<button class="tlc-cal-listev" data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
           '<span class="ltime" style="color:' + tlcCalEsc(c.color) + '">' +
-            tlcCalEsc(continued ? 'Continues' : tlcCalTime(ev)) + '</span>' +
+            tlcCalEsc(continued ? 'Continues' : tlcCalSpan(ev)) + '</span>' +
           '<span><span class="lt">' + tlcCalEsc(ev.title) + '</span>' +
           (ev.location ? '<span class="lw">' + tlcCalEsc(ev.location) + '</span>'
                        : '<span class="lw">' + tlcCalEsc(c.name) + '</span>') + '</span>' +
@@ -4104,7 +4127,7 @@ function tlcCalDetail(st) {
   var c = tlcCalCat(st, ev.category);
   var d = String(ev.start).slice(0, 10);
   var when = TLC_CAL_DOWS[tlcCalDow(d)] + ', ' + TLC_CAL_MONTHS[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)) +
-    (ev.allDay ? '' : ' · ' + tlcCalTime(ev));
+    (ev.allDay ? '' : ' · ' + tlcCalSpan(ev));
   return '<div class="tlc-cal-detail" role="region" aria-label="Event details">' +
     '<span class="meta" style="color:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(c.name) + ' · ' + tlcCalEsc(when) + '</span>' +
     '<h3>' + tlcCalEsc(ev.title) + '</h3>' +

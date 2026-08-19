@@ -20,7 +20,8 @@ import {
   normalizeGoogleEvent, normalizeNewsItem, dedupeEvents, sortEvents,
   buildIcs, foldIcsLine, parseCalendarIds, DEFAULT_CALENDAR_IDS,
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
-  normalizeClock, clockOnDay, newsEnd, parseFilterList, filterEvents, feedName,
+  normalizeClock, clockOnDay, newsEnd, icsEnd, parseFilterList, filterEvents, feedName,
+  normalizeGymBooking, BUILDING_IN_USE, BUILDING_ROOM,
 } from './calendar.js';
 
 let pass = 0;
@@ -418,15 +419,25 @@ test('a time that is not a time is no time, never a guess', () => {
   }
 });
 
-test('a stated end is kept; an unstated one is an hour and is never shown', () => {
+test('an unstated end stays unstated on the event, and is derived only for .ics', () => {
   const cats = mergedCategories([]);
   const stated = normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_time: '09:00', event_end_time: '11:30' }, cats);
   assert.equal(stated.end, '2026-09-01T11:30:00');
+
+  // ⚠ THE PAGE PRINTS A TIME RANGE WHEREVER IT HAS ROOM, so an end nobody
+  // typed must not look like one they did: "7:00 – 8:00 pm" on a meeting whose
+  // length nobody knows is a claim the record does not make.
   const derived = normalizeNewsItem({ id: 2, title: 'Y', event_date: '2026-09-01', event_time: '09:00' }, cats);
-  assert.equal(derived.end, '2026-09-01T10:00:00');
+  assert.equal(derived.end, derived.start, 'an unstated end equals the start');
+
   // An end BEFORE the start is a typo, not an overnight event.
   const backwards = normalizeNewsItem({ id: 3, title: 'Z', event_date: '2026-09-01', event_time: '09:00', event_end_time: '08:00' }, cats);
-  assert.equal(backwards.end, '2026-09-01T10:00:00');
+  assert.equal(backwards.end, backwards.start);
+
+  // ⚠ AND .ics STILL GETS A NUMBER, because DTEND equal to DTSTART is a
+  // zero-length event a calendar app draws as a hairline.
+  assert.equal(icsEnd(derived), '2026-09-01T10:00:00');
+  assert.equal(icsEnd(stated), '2026-09-01T11:30:00', 'a stated end is not overwritten');
 });
 
 test('a derived end never spills onto the next day', () => {
@@ -443,9 +454,10 @@ test('a derived end never spills onto the next day', () => {
   // drops or silently shifts.
   for (const t of ['23:00', '23:30', '23:59']) {
     const ev = normalizeNewsItem({ id: 1, title: 'Late', event_date: '2026-09-01', event_time: t }, cats);
-    assert.equal(ev.end.slice(0, 10), '2026-09-01', `${t} must end on its own day`);
-    assert.match(ev.end, /T([01]\d|2[0-3]):[0-5]\d:00$/, `${t} produced an impossible end: ${ev.end}`);
-    assert.ok(ev.end >= ev.start, `${t} must not end before it starts`);
+    const end = icsEnd(ev);
+    assert.equal(end.slice(0, 10), '2026-09-01', `${t} must end on its own day`);
+    assert.match(end, /T([01]\d|2[0-3]):[0-5]\d:00$/, `${t} produced an impossible end: ${end}`);
+    assert.ok(end >= ev.start, `${t} must not end before it starts`);
   }
 });
 
@@ -570,6 +582,22 @@ test('a filtered feed says what is in it, so two of them are told apart', () => 
   assert.equal(feedName(['worship'], cats), 'Timothy Lutheran Church — Worship');
   assert.ok(feedName(['worship', 'music', 'meetings', 'youth'], cats).endsWith('+1'),
     'a long list is trimmed rather than filling the sidebar');
+});
+
+
+test('a gym rental names the room and its block of time, and never the renter', () => {
+  const ev = normalizeGymBooking({ id: 9, booking_date: '2026-09-01', start_time: '13:00', end_time: '15:00' });
+  assert.equal(ev.title, 'Gym rented');
+  assert.equal(ev.location, 'Gym');
+  assert.equal(ev.start, '2026-09-01T13:00:00');
+  assert.equal(ev.end, '2026-09-01T15:00:00', 'the whole block, so "is the gym free at two" can be answered');
+  // ⚠ The privacy rule has not moved: gym_groups is not joined and notes are
+  // not read, so there is nothing in the row a renter typed.
+  assert.equal(ev.description, '');
+  const text = JSON.stringify(ev).toLowerCase();
+  for (const leak of ['group', 'contact', 'note', 'email', 'phone']) {
+    assert.ok(!text.includes(leak), `a booking must carry no ${leak}`);
+  }
 });
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());

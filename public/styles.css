@@ -800,30 +800,38 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
      widget somebody cannot click. */
   [data-noprint]{display:none !important;}
 
-  /* ⚠ EVERYTHING ELSE HERE IS SCOPED TO THE CALENDAR PAGE, and that scoping is
-     deliberate rather than tidiness. The page around the sheet — the navy
-     hero, the nav, the newsletter band, the footer, a notice banner — would
-     otherwise take the first sheet and push the month onto a second, which is
-     the one thing a one-page sheet must not do. But hiding all of that for
-     EVERY page would quietly change how the whole site prints, which nobody
-     asked for: somebody printing a ministry page today gets its hero and its
-     footer, and should go on getting them.
+  /* ⚠ AN ALLOWLIST, NOT A DENYLIST, AND THAT IS THE WHOLE FIX. This used to
+     name the chrome to hide — the nav, the hero, the newsletter band, the
+     footer, a notice banner — which was right for the hardcoded calendar page
+     and wrong the moment /calendar was PUBLISHED from the page editor. A
+     published page renders `.tlcb` blocks that appear on no denylist, so they
+     printed above the sheet and pushed the month onto a second and third page.
+     Reported as "the print function looks like it is printing the whole page",
+     and it was.
+
+     So: anything that is not the sheet, not inside it, and not on the path
+     down to it is not printed. That holds whatever is on the page around it,
+     which is the property a denylist could never have.
+
+     ⚠ SCOPED TO A DOCUMENT THAT ACTUALLY HAS A SHEET. `.tlc-print-sheet` is
+     drawn by the /calendar mount and by nothing else — the /news strip is
+     `compact` and draws none — so this cannot reach a ministry page somebody
+     is printing with its hero and its footer, which is the behavior the old
+     scoping existed to protect and still does.
      ⚠ An inactive .page is already display:none, so only the page actually
-     showing is ever in the printed document — which is also why :has() is the
-     right test here and there is no class to set and unset as the SPA
-     navigates. A browser without :has() prints the calendar page with its
-     chrome above the sheet: degraded, not broken, and every current browser
-     has it. */
-  body:has(#page-calendar.active) .nav,
-  body:has(#page-calendar.active) footer,
-  body:has(#page-calendar.active) #newsletter-band,
-  body:has(#page-calendar.active) .page-hero,
-  body:has(#page-calendar.active) [id^="notices-"]{display:none !important;}
-  body:has(#page-calendar.active)::before{display:none !important;}
-  /* The sheet takes the paper, so the section padding and the content-column
-     cap around it are given up — again only on this one page. */
-  body:has(#page-calendar.active) .section{padding:0 !important;background:#fff !important;}
-  body:has(#page-calendar.active) .wrap{max-width:none !important;padding:0 !important;}
+     showing is ever in the printed document. A browser without :has() prints
+     the page with its chrome above the sheet: degraded, not broken, and every
+     current browser has it. */
+  body:has(.tlc-print-sheet) *:not(:has(.tlc-print-sheet), .tlc-print-sheet, .tlc-print-sheet *){
+    display:none !important;}
+  body:has(.tlc-print-sheet)::before{display:none !important;}
+  /* The sheet takes the paper, so every wrapper on the path down to it gives
+     up its padding, its width cap and its background. They are still in the
+     document — they have to be, or the sheet goes with them — so they are
+     flattened rather than hidden. */
+  body:has(.tlc-print-sheet) :has(.tlc-print-sheet){
+    padding:0 !important;margin:0 !important;max-width:none !important;
+    background:#fff !important;box-shadow:none !important;border:none !important;}
   .tlc-print-sheet{display:flex !important;flex-direction:column;gap:14px;
     background:#fff;padding:0;box-shadow:none;border:none;
     /* The page box, so the grid below has a fixed height to divide. */
