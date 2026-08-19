@@ -4006,15 +4006,23 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
     // reverting the header on the request side fails this assertion.
     let sentKey = null;
     globalThis.fetch = async (u, init) => {
-      // ⚠ THE HEADER RIDES ON THE Request, NOT ON `init`. The Worker builds a
-      // real Request and passes `{ signal }` as the second argument, so a
-      // stub reading `init.headers` alone saw undefined and this assertion
-      // failed for a reason that had nothing to do with the header being
-      // sent — which is the same shape of blind spot the comment above warns
-      // about, one level further out. Read whichever of the two carries it.
-      sentKey = (init && init.headers && init.headers['X-Intake-Key'])
-        || (u && u.headers && typeof u.headers.get === 'function' && u.headers.get('X-Intake-Key'))
-        || null;
+      // ⚠ READ THE HEADER OFF WHICHEVER ARGUMENT CARRIES IT. The call under
+      // test builds a real `Request` and hands it to the VOLUNTEER_WORKER
+      // service binding, falling back to `fetch(req, { signal })` when no
+      // binding is configured — which is this harness. So `init` holds only
+      // the abort signal and the header lives on `u`. Reading `init.headers`
+      // alone reported `undefined` and failed this assertion for a key that
+      // was being sent perfectly well.
+      //
+      // Both forms are still checked rather than just the Request one: the
+      // property this assertion exists to hold is "the secret went with the
+      // request", and it has to keep holding if the call ever goes back to a
+      // plain fetch(url, init). Verified against the bug in both directions —
+      // dropping 'X-Intake-Key' from the Request in admin/market.js still
+      // fails this.
+      sentKey = (typeof Request !== 'undefined' && u instanceof Request)
+        ? u.headers.get('X-Intake-Key')
+        : (init && init.headers && init.headers['X-Intake-Key']);
       return new Response(JSON.stringify({
         open: true, signedUp: 7, openShifts: 4,
         roles: [
@@ -4450,6 +4458,80 @@ group('the Square webhook refuses a bad signature, and quietly ignores a payment
   eq(unrelated.status, 200, 'a correctly signed event for an order id nobody applied under is still answered 200');
   const rows = db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE payment_status = 'paid'").get();
   eq(rows.n, 0, 'and nothing on the coordinator’s list was touched by it');
+}
+
+group('the church calendar feed is PUBLIC, and answers with no session at all');
+{
+  const { db, env } = await boot();
+  // ⚠ THIS IS THE CHECK THAT MATTERS, AND IT IS THE ONE /api/latest-sermon
+  // failed on its first attempt: a public route written BELOW the session gate
+  // answers every visitor with a 302 to the login page. No unit test can see
+  // that — only booting the real Worker and asking without a cookie can.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [
+    { id: 'g1', summary: 'Divine Service', colorId: '9',
+      start: { dateTime: '2026-08-16T08:00:00-05:00' }, end: { dateTime: '2026-08-16T09:15:00-05:00' } },
+  ] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels, value) VALUES (?,?,?,?,?,?,?)")
+      .run('Rally Day picnic', 'Bring a dish.', '2026-08-01', '2026-08-16', '2026-12-31', 'web', 'outreach');
+
+    const res = await call(env, '/api/calendar?month=2026-08', { fresh: true });
+    eq(res.status, 200, 'a visitor with no cookie gets the feed, not the login page');
+    eq(res.headers.get('access-control-allow-origin'), '*', 'and the SPA on the other origin may read it');
+    const feed = await res.json();
+    eq(feed.from, '2026-08-01', 'the month asked for is the month returned');
+    eq(feed.to, '2026-08-31', 'to its real last day');
+    ok(feed.categories.length >= 10, 'the palette rides along, so the page hardcodes none of it');
+
+    // Both halves arrived, and the de-dupe left them as two different events.
+    const titles = feed.events.map((e) => e.title);
+    ok(titles.includes('Divine Service'), 'the Google half is there');
+    ok(titles.includes('Rally Day picnic'), 'and so is the News & Events half');
+    const svc = feed.events.find((e) => e.title === 'Divine Service');
+    eq(svc.start, '2026-08-16T08:00:00', 'and the time is the church wall clock, with no offset on it');
+    eq(svc.category, 'worship', 'Blueberry filed it under Worship');
+    const news = feed.events.find((e) => e.title === 'Rally Day picnic');
+    eq(news.source, 'news', 'the News entry says where it came from');
+    eq(news.allDay, true, 'and is all-day, because a News record has no time column');
+
+    // A month nobody asked for, and a crafted one, both answer rather than throwing.
+    eq((await call(env, '/api/calendar', { fresh: true })).status, 200, 'no month is today’s month');
+    const junk = await call(env, '/api/calendar?month=nonsense', { fresh: true });
+    eq(junk.status, 200, 'a crafted month falls back rather than erroring');
+
+    // The subscribe feed, on the same route family and just as public.
+    const ics = await call(env, '/api/calendar.ics?month=2026-08', { fresh: true });
+    eq(ics.status, 200, 'the .ics is public too');
+    ok((ics.headers.get('content-type') || '').includes('text/calendar'),
+      'and is served as a calendar, or no app will subscribe to it');
+    const body = await ics.text();
+    ok(body.startsWith('BEGIN:VCALENDAR'), 'it is a calendar');
+    ok(body.includes('SUMMARY:Divine Service'), 'carrying the Google entry');
+    // ⚠ AND THE NEWS ENTRY, which is the whole reason to offer our own .ics
+    // rather than pointing people at Google's — subscribing there gets you
+    // half the church's events.
+    ok(body.includes('SUMMARY:Rally Day picnic'), 'and the News & Events entry Google does not have');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('with Google unreachable the feed still answers, and says which half is missing');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+      .run('Trunk or Treat', 'Costumes welcome.', '2026-10-01', '2026-10-31', '2026-12-31', 'web');
+    const res = await call(env, '/api/calendar?month=2026-10', { fresh: true });
+    eq(res.status, 200, 'an unreachable Google is not a 500 — to the browser that is indistinguishable from a dead network');
+    const feed = await res.json();
+    eq(feed.sources.google, false, 'the page is told the Google half is missing, so it can say so');
+    eq(feed.events.length, 1, 'and still gets everything that did answer');
+    eq(feed.events[0].title, 'Trunk or Treat');
+  } finally { globalThis.fetch = realFetch; }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

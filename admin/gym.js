@@ -258,7 +258,14 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
 // ── GOOGLE CALENDAR INTEGRATION ──────────────────────────────
 // Requires Worker secrets: GCAL_SERVICE_ACCOUNT_EMAIL, GCAL_PRIVATE_KEY
 // The service account must be granted "Make changes to events" on the target calendar.
-async function getGCalAccessToken(env) {
+//
+// ⚠ EXPORTED, and the scope is a parameter for exactly one reason: the public
+// church calendar (admin/calendar.js) reads the same Google calendars through
+// the same service account, and a second copy of JWT signing is a second place
+// for a wrong byte to produce a token that silently never authenticates. The
+// default is the write scope this module has always requested, so the gym's own
+// behavior is byte-identical; the reader asks for calendar.readonly instead.
+export async function getGCalAccessToken(env, scope = 'https://www.googleapis.com/auth/calendar.events') {
   const email  = (env.GCAL_SERVICE_ACCOUNT_EMAIL || '').trim();
   const rawKey = env.GCAL_PRIVATE_KEY;
   if (!email || !rawKey) return null;
@@ -266,7 +273,7 @@ async function getGCalAccessToken(env) {
     const now  = Math.floor(Date.now() / 1000);
     const b64u = obj => btoa(JSON.stringify(obj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
     const hdr  = b64u({ alg:'RS256', typ:'JWT' });
-    const pay  = b64u({ iss: email, scope:'https://www.googleapis.com/auth/calendar.events', aud:'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+    const pay  = b64u({ iss: email, scope, aud:'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
     const sigInput = `${hdr}.${pay}`;
     const pem  = rawKey.replace(/\\n/g,'\n').replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
     const keyBuf = Uint8Array.from(atob(pem), c => c.charCodeAt(0));

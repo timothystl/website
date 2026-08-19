@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Newsreader:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E4E0D6;font-family:'Newsreader',Georgia,serif;color:#1A1A2A;}
+*,*::before,*::after{box-sizing:border-box;}
+a{color:#2E7EA6;text-decoration:none;}
+a:hover{color:#1E2D4A;}
+@media print{
+  @page{size:letter landscape;margin:0.35in;}
+  body{background:#fff;}
+  [data-noprint]{display:none !important;}
+  [data-printsheet]{box-shadow:none !important;border:none !important;padding:0 !important;}
+}
+</style>
+</helmet>
+
+<section data-noprint="1" style="padding:56px 56px 8px;display:flex;flex-direction:column;gap:24px;">
+  <div style="max-width:820px;display:flex;flex-direction:column;gap:10px;">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;">Turn 3 · two sources, one calendar</span>
+    <h2 id="3a" style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:700;color:#1E2D4A;margin:0;">3a · Merged feed</h2>
+    <p style="font-size:17px;line-height:1.7;color:#4A4860;margin:0;text-wrap:pretty;">Yes — because we render the calendar ourselves, the feed is ours to assemble. The Worker pulls the Google calendars <em>and</em> the News &amp; Events records behind <code style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;background:#EDE9E0;padding:1px 5px;border-radius:4px;">admin.timothystl.org/api/news</code>, normalizes both into one shape, and de-duplicates. Nothing has to be re-entered in Google, and Google never has to import from anywhere. WOL and MDO are now separate categories.</p>
+  </div>
+  <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+    <div style="width:640px;background:#fff;border:1px solid #DDE3ED;border-radius:12px;box-shadow:0 6px 32px rgba(30,45,74,.14);overflow:hidden;">
+      <div style="padding:16px 22px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:#1E2D4A;">Showing</span>
+        <div style="display:flex;gap:6px;">
+          <sc-for list="{{ sources }}" as="s" hint-placeholder-count="3">
+            <button onClick="{{ s.onClick }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;border:1px solid {{ s.bd }};background:{{ s.bg }};color:{{ s.fg }};">{{ s.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="max-height:520px;overflow:auto;">
+        <sc-if value="{{ mergedEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:44px 22px;text-align:center;display:flex;flex-direction:column;gap:6px;">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:800;color:#1E2D4A;">Nothing this month</span>
+            <span style="font-size:15px;color:#8A8898;">No August events match that combination of source and category.</span>
+          </div>
+        </sc-if>
+        <sc-for list="{{ merged }}" as="m" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:74px 1fr;gap:16px;padding:16px 22px;border-bottom:1px solid #EDE9E0;">
+            <div style="display:flex;flex-direction:column;">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8A8898;">{{ m.dow }}</span>
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#1E2D4A;">{{ m.long }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+              <sc-for list="{{ m.events }}" as="e" hint-placeholder-count="1">
+                <div style="display:grid;grid-template-columns:10px 1fr;gap:11px;min-width:0;">
+                  <span title="{{ e.src }}" style="width:10px;height:10px;border-radius:3px;background:{{ e.srcColor }};transform:translateY(6px);"></span>
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                    <span style="font-size:17px;line-height:1.4;color:#1A1A2A;">{{ e.title }}</span>
+                    <span style="font-size:14px;color:#8A8898;">{{ e.time }} · {{ e.where }} · {{ e.cat }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="width:380px;display:flex;flex-direction:column;gap:14px;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;padding:24px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8A8898;">Where a thing gets entered</span>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:#2E7EA6;">Google Calendar</span>
+          <span style="font-size:15px;line-height:1.6;color:#4A4860;">Anything with a room and a time. Category set by the event's color. Stays the office's day-to-day tool.</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:#C9973A;">News &amp; Events</span>
+          <span style="font-size:15px;line-height:1.6;color:#4A4860;">Anything needing a description, photo, or signup — school dates, Rally Day, the Christmas Market. Add a date and it appears on the calendar too.</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;border-top:1px solid #DDE3ED;padding-top:14px;">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:#1E2D4A;">If it's in both</span>
+          <span style="font-size:15px;line-height:1.6;color:#4A4860;">Same title within 30 minutes on the same day collapses to one entry; the News record wins, so the richer copy shows.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding:32px 56px 24px;display:flex;flex-direction:column;gap:20px;">
+  <div data-noprint="1" style="max-width:760px;display:flex;flex-direction:column;gap:10px;">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;">Turn 2 · print</span>
+    <h2 id="2a" style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:700;color:#1E2D4A;margin:0;">2a · One-page month grid</h2>
+    <p style="font-size:17px;line-height:1.7;color:#4A4860;margin:0;text-wrap:pretty;">Landscape letter, every event on the sheet, category as a colored rule beside the time. Print from any direction lands here — the boards themselves never print.</p>
+  </div>
+  <div data-printsheet="1" style="width:1056px;background:#fff;border:1px solid #DDE3ED;border-radius:12px;padding:34px 38px;box-shadow:0 6px 32px rgba(30,45,74,.14);display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #1E2D4A;padding-bottom:10px;">
+      <div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#4A4860;">Timothy Lutheran Church · 6704 Fyler Ave</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-weight:700;color:#1E2D4A;line-height:1.2;">August 2026</div>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;max-width:560px;justify-content:flex-end;">
+        <sc-for list="{{ legend }}" as="l" hint-placeholder-count="9">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="width:8px;height:8px;border-radius:2px;background:{{ l.color }};"></span>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:9px;font-weight:700;color:#4A4860;">{{ l.name }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-left:1px solid #C9C5BD;border-top:1px solid #C9C5BD;">
+      <sc-for list="{{ dowsShort }}" as="d" hint-placeholder-count="7">
+        <div style="border-right:1px solid #C9C5BD;border-bottom:1px solid #C9C5BD;padding:4px 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:9px;font-weight:800;letter-spacing:.1em;color:#4A4860;background:#F1EFEA;">{{ d }}</div>
+      </sc-for>
+      <sc-for list="{{ printCells }}" as="c" hint-placeholder-count="42">
+        <div style="min-width:0;height:112px;overflow:hidden;border-right:1px solid #C9C5BD;border-bottom:1px solid #C9C5BD;padding:4px 5px 5px;display:flex;flex-direction:column;gap:2px;background:{{ c.bg }};">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;color:{{ c.numColor }};">{{ c.label }}</span>
+          <sc-for list="{{ c.events }}" as="e" hint-placeholder-count="2">
+            <div style="display:grid;grid-template-columns:3px 1fr;gap:4px;min-width:0;">
+              <span style="background:{{ e.color }};border-radius:2px;"></span>
+              <span style="font-size:9.5px;line-height:1.25;color:#1A1A2A;min-width:0;"><b style="font-family:'Bricolage Grotesque',sans-serif;font-size:8.5px;font-weight:800;letter-spacing:.01em;">{{ e.short }}</b> {{ e.title }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-family:'Bricolage Grotesque',sans-serif;font-size:9px;color:#8A8898;">
+      <span>timothystl.org/calendar · (314) 781-8673</span>
+      <span>Sunday worship 8:00 &amp; 10:45 am</span>
+    </div>
+  </div>
+</section>
+
+<section data-noprint="1" style="padding:32px 56px 72px;display:flex;flex-direction:column;gap:28px;">
+  <div style="max-width:760px;display:flex;flex-direction:column;gap:10px;">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;">Turn 1 · /calendar and the /news embed</span>
+    <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-size:40px;font-weight:700;line-height:1.15;color:#1E2D4A;margin:0;">A calendar the church renders itself</h1>
+    <p style="font-size:17px;line-height:1.7;color:#4A4860;margin:0;text-wrap:pretty;"><a href="#1a">1a</a> is the page as it renders today, with Google's own per-cell cap. <a href="#1b">1b</a>, <a href="#1c">1c</a> and <a href="#1d">1d</a> read the same two Google calendars through the Worker and draw the month here, where nothing gets folded away. Events shown are placeholder — real feed data replaces them.</p>
+  </div>
+
+  <div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap;">
+
+    <div id="1a" style="display:flex;flex-direction:column;gap:12px;width:1080px;">
+      <div style="display:flex;align-items:baseline;gap:12px;">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;letter-spacing:.08em;background:#1E2D4A;color:#fff;padding:4px 9px;border-radius:999px;">1a</span>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#1E2D4A;">Today — the Google embed</span>
+        <span style="font-size:15px;color:#6A6878;">iframe at 1100px; Sunday still reads "3 more"</span>
+      </div>
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;overflow:hidden;box-shadow:0 6px 32px rgba(30,45,74,.14);">
+        <nav style="background:#4A5E3A;border-bottom:3px solid #C9973A;">
+          <div style="max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <img src="public/logo.png" alt="Timothy Lutheran Church" style="width:44px;height:44px;border-radius:50%;object-fit:contain;background:#fff;padding:3px;">
+              <div>
+                <span style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:17px;font-weight:800;letter-spacing:-.01em;color:#fff;">Timothy Lutheran Church</span>
+                <span style="display:block;font-size:12px;font-weight:300;color:#E8C070;">from our Neighborhood to the Nations</span>
+              </div>
+            </div>
+            <ul style="display:flex;align-items:center;gap:4px;list-style:none;margin:0;padding:0;">
+              <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="8">
+                <li><span style="display:inline-block;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;">{{ n }}</span></li>
+              </sc-for>
+              <li><span style="display:inline-block;background:#C9973A;color:#fff;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;padding:12px 19px;border-radius:999px;">Give</span></li>
+            </ul>
+          </div>
+        </nav>
+        <div style="background:#1E2D4A;padding:56px 28px;text-align:center;">
+          <span style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;">What's coming up</span>
+          <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-size:52px;font-weight:700;line-height:1.15;color:#fff;margin:0;">Calendar</h1>
+          <p style="font-size:17px;font-weight:300;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;line-height:1.75;">Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
+        </div>
+        <div style="background:#FBF8F3;padding:88px 0;">
+          <div style="max-width:1080px;margin:0 auto;padding:0 28px;">
+            <div style="border-radius:12px;overflow:hidden;border:1px solid #DDE3ED;">
+              <div style="background:#fff;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;">
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #dadce0;">
+                  <span style="font-size:20px;color:#3c4043;">‹</span>
+                  <span style="font-size:20px;color:#3c4043;">›</span>
+                  <span style="font-size:20px;color:#3c4043;font-weight:400;">August 2026</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-left:1px solid #dadce0;">
+                  <sc-for list="{{ dowsShort }}" as="d" hint-placeholder-count="7">
+                    <div style="border-right:1px solid #dadce0;border-bottom:1px solid #dadce0;padding:6px 0;text-align:center;font-size:11px;color:#70757a;letter-spacing:.06em;">{{ d }}</div>
+                  </sc-for>
+                  <sc-for list="{{ cells }}" as="c" hint-placeholder-count="42">
+                    <div style="min-width:0;min-height:142px;border-right:1px solid #dadce0;border-bottom:1px solid #dadce0;padding:4px 4px 6px;display:flex;flex-direction:column;gap:2px;">
+                      <div style="font-size:11px;text-align:center;padding:2px 0 4px;color:{{ c.gNumColor }};">{{ c.label }}</div>
+                      <sc-for list="{{ c.capped }}" as="e" hint-placeholder-count="2">
+                        <div style="display:flex;align-items:center;gap:4px;padding:1px 4px;border-radius:3px;font-size:11px;color:#3c4043;white-space:nowrap;overflow:hidden;min-width:0;">
+                          <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:{{ e.color }};"></span>
+                          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">{{ e.gLabel }}</span>
+                        </div>
+                      </sc-for>
+                      <sc-if value="{{ c.more }}" hint-placeholder-val="{{ true }}">
+                        <div style="font-size:11px;color:#70757a;padding:1px 4px;">{{ c.moreLabel }}</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <a href="#1a" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#2E7EA6;font-weight:600;">Open in Google Calendar</a>
+            </div>
+          </div>
+        </div>
+        <footer style="background:#111E32;padding:48px 28px 28px;">
+          <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr;gap:40px;margin-bottom:40px;">
+            <div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:#fff;margin-bottom:4px;">Timothy Lutheran Church</div>
+              <div style="font-size:15px;font-weight:300;font-style:italic;color:#C9973A;margin-bottom:14px;">from our Neighborhood to the Nations</div>
+              <div style="font-size:14px;font-weight:300;color:rgba(255,255,255,.55);line-height:1.8;">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>(314) 781-8673 · office@timothystl.org</div>
+            </div>
+            <div>
+              <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:0 0 12px;">Visit</h4>
+              <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;">
+                <sc-for list="{{ footVisit }}" as="f" hint-placeholder-count="4">
+                  <li style="font-size:14px;font-weight:300;color:rgba(255,255,255,.6);">{{ f }}</li>
+                </sc-for>
+              </ul>
+            </div>
+            <div>
+              <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:0 0 12px;">Connect</h4>
+              <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;">
+                <sc-for list="{{ footConnect }}" as="f" hint-placeholder-count="4">
+                  <li style="font-size:14px;font-weight:300;color:rgba(255,255,255,.6);">{{ f }}</li>
+                </sc-for>
+              </ul>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <div id="1b" style="display:flex;flex-direction:column;gap:12px;width:1080px;">
+      <div style="display:flex;align-items:baseline;gap:12px;">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;letter-spacing:.08em;background:#1E2D4A;color:#fff;padding:4px 9px;border-radius:999px;">1b</span>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#1E2D4A;">Month, uncapped</span>
+        <span style="font-size:15px;color:#6A6878;">rows grow to the busiest day; filters by calendar</span>
+      </div>
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;overflow:hidden;box-shadow:0 6px 32px rgba(30,45,74,.14);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #DDE3ED;background:#fff;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="display:flex;gap:6px;">
+              <button style="width:34px;height:34px;border:1px solid #DDE3ED;background:#fff;border-radius:8px;font-size:16px;color:#1E2D4A;cursor:pointer;" style-hover="background:#EDF2F7">‹</button>
+              <button style="width:34px;height:34px;border:1px solid #DDE3ED;background:#fff;border-radius:8px;font-size:16px;color:#1E2D4A;cursor:pointer;" style-hover="background:#EDF2F7">›</button>
+            </div>
+            <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:700;color:#1E2D4A;margin:0;">August 2026</h2>
+            <button style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#2E7EA6;background:none;border:1px solid #C4CEDF;border-radius:999px;padding:6px 12px;cursor:pointer;">Today</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;background:#EDF2F7;border-radius:999px;padding:3px;">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#fff;background:#1E2D4A;border-radius:999px;padding:7px 14px;">Month</span>
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#4A4860;padding:7px 14px;">List</span>
+            </div>
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#1E2D4A;border:1.5px solid #1E2D4A;border-radius:999px;padding:7px 14px;">Subscribe</span>
+            <button onClick="{{ doPrint }}" style="display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#fff;background:#1E2D4A;border:none;border-radius:999px;padding:8px 15px;cursor:pointer;" style-hover="background:#2A3F60">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Print month
+            </button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 24px;border-bottom:1px solid #DDE3ED;background:#FBF8F3;flex-wrap:wrap;">
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8A8898;">Source</span>
+          <div style="display:flex;gap:6px;">
+            <sc-for list="{{ sources }}" as="s" hint-placeholder-count="3">
+              <button onClick="{{ s.onClick }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;border-radius:999px;padding:6px 13px;cursor:pointer;border:1px solid {{ s.bd }};background:{{ s.bg }};color:{{ s.fg }};">{{ s.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;margin-left:auto;">
+            <div style="display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#2E7EA6;"></span><span style="font-size:14px;color:#8A8898;">Google</span></div>
+            <div style="display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#C9973A;"></span><span style="font-size:14px;color:#8A8898;">News &amp; Events</span></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:14px 24px;border-bottom:1px solid #DDE3ED;background:#fff;flex-wrap:wrap;">
+          <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="5">
+            <button onClick="{{ ch.onClick }}" style="display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;border:1px solid {{ ch.bd }};background:{{ ch.bg }};color:{{ ch.fg }};">
+              <sc-if value="{{ ch.dot }}" hint-placeholder-val="{{ true }}">
+                <span style="width:8px;height:8px;border-radius:50%;background:{{ ch.dot }};"></span>
+              </sc-if>
+              {{ ch.label }}
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#fff;border-bottom:1px solid #DDE3ED;">
+          <sc-for list="{{ dows }}" as="d" hint-placeholder-count="7">
+            <div style="padding:10px 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8A8898;">{{ d }}</div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-left:1px solid #DDE3ED;">
+          <sc-for list="{{ cells }}" as="c" hint-placeholder-count="42">
+            <div style="min-width:0;min-height:150px;border-right:1px solid #DDE3ED;border-bottom:1px solid #DDE3ED;padding:9px 9px 12px;display:flex;flex-direction:column;gap:5px;background:{{ c.bg }};">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;color:{{ c.numColor }};">{{ c.label }}</span>
+                <sc-if value="{{ c.isToday }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;">Today</span>
+                </sc-if>
+              </div>
+              <sc-for list="{{ c.events }}" as="e" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:1px;min-width:0;padding:5px 7px;border-radius:7px;background:{{ e.tint }};" style-hover="filter:brightness(.97)">
+                  <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.06em;color:{{ e.color }};white-space:nowrap;font-variant-numeric:tabular-nums;">{{ e.time }}</span>
+                    <span title="{{ e.src }}" style="width:6px;height:6px;border-radius:2px;flex-shrink:0;background:{{ e.srcColor }};"></span>
+                  </div>
+                  <span style="font-size:13px;line-height:1.3;color:#1A1A2A;">{{ e.title }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="display:flex;flex-direction:column;gap:12px;width:900px;">
+      <div style="display:flex;align-items:baseline;gap:12px;">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;letter-spacing:.08em;background:#1E2D4A;color:#fff;padding:4px 9px;border-radius:999px;">1c</span>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#1E2D4A;">Week-grouped list</span>
+        <span style="font-size:15px;color:#6A6878;">no grid at all — identical on phone and desktop</span>
+      </div>
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;overflow:hidden;box-shadow:0 6px 32px rgba(30,45,74,.14);">
+        <div style="padding:26px 32px 20px;background:#1E2D4A;">
+          <span style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:6px;">What's coming up</span>
+          <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:700;color:#fff;margin:0 0 14px;">The next three weeks</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button onClick="{{ doPrint }}" style="display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#1E2D4A;background:#E8C070;border:none;border-radius:999px;padding:8px 14px;cursor:pointer;margin-right:4px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Print list
+            </button>
+            <sc-for list="{{ chipsDark }}" as="ch" hint-placeholder-count="5">
+              <button onClick="{{ ch.onClick }}" style="display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;border:1px solid {{ ch.bd }};background:{{ ch.bg }};color:{{ ch.fg }};">{{ ch.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:8px 0 32px;">
+          <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;">
+              <div style="position:sticky;top:0;background:#EDE9E0;border-bottom:1px solid #DDE3ED;padding:9px 32px;display:flex;align-items:baseline;gap:10px;">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#1E2D4A;">{{ w.label }}</span>
+                <span style="font-size:14px;color:#8A8898;">{{ w.range }}</span>
+              </div>
+              <sc-for list="{{ w.days }}" as="d" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:96px 1fr;gap:22px;padding:18px 32px;border-bottom:1px solid #E6E2D8;">
+                  <div style="display:flex;flex-direction:column;align-items:flex-start;">
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ d.dowColor }};">{{ d.dow }}</span>
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:32px;font-weight:700;line-height:1.1;color:{{ d.numColor }};">{{ d.num }}</span>
+                    <span style="font-size:13px;color:#8A8898;">{{ d.mon }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:10px;">
+                    <sc-for list="{{ d.events }}" as="e" hint-placeholder-count="3">
+                      <div style="display:grid;grid-template-columns:88px 1fr;gap:14px;align-items:baseline;">
+                        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;color:{{ e.color }};font-variant-numeric:tabular-nums;">{{ e.time }}</span>
+                        <div style="display:flex;flex-direction:column;gap:2px;">
+                          <span style="font-size:17px;line-height:1.4;color:#1A1A2A;">{{ e.title }}</span>
+                          <span style="font-size:14px;color:#8A8898;">{{ e.where }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div id="1d" style="display:flex;flex-direction:column;gap:12px;width:1080px;">
+      <div style="display:flex;align-items:baseline;gap:12px;">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;letter-spacing:.08em;background:#1E2D4A;color:#fff;padding:4px 9px;border-radius:999px;">1d</span>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#1E2D4A;">Navigator + agenda</span>
+        <span style="font-size:15px;color:#6A6878;">mini month to jump; the month spelled out beside it</span>
+      </div>
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;overflow:hidden;box-shadow:0 6px 32px rgba(30,45,74,.14);display:grid;grid-template-columns:320px 1fr;">
+        <div style="border-right:1px solid #DDE3ED;padding:24px;display:flex;flex-direction:column;gap:20px;background:#fff;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#1E2D4A;">August 2026</span>
+            <div style="display:flex;gap:4px;color:#8A8898;font-size:15px;"><span>‹</span><span>›</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;">
+            <sc-for list="{{ dowsMini }}" as="d" hint-placeholder-count="7">
+              <div style="text-align:center;font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;color:#8A8898;padding-bottom:4px;">{{ d }}</div>
+            </sc-for>
+            <sc-for list="{{ miniCells }}" as="m" hint-placeholder-count="42">
+              <button onClick="{{ m.onClick }}" style="aspect-ratio:1;border:none;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;background:{{ m.bg }};color:{{ m.fg }};" style-hover="outline:1px solid #C4CEDF">
+                {{ m.label }}
+                <span style="width:4px;height:4px;border-radius:50%;background:{{ m.dot }};"></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px;border-top:1px solid #DDE3ED;padding-top:18px;">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8A8898;">Categories · set by Google event color</span>
+            <sc-for list="{{ legend }}" as="l" hint-placeholder-count="9">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="width:10px;height:10px;border-radius:3px;flex-shrink:0;background:{{ l.color }};"></span>
+                <span style="font-size:15px;color:#4A4860;">{{ l.name }}</span>
+                <span style="font-size:12px;color:#B0ACA4;margin-left:auto;">{{ l.gname }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto;">
+            <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;text-align:center;background:#1E2D4A;color:#fff;border-radius:999px;padding:12px;">Subscribe in your calendar app</span>
+            <button onClick="{{ doPrint }}" style="display:flex;align-items:center;justify-content:center;gap:7px;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:800;color:#1E2D4A;background:none;border:1.5px solid #1E2D4A;border-radius:999px;padding:11px;cursor:pointer;" style-hover="background:#EDF2F7">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Print this month
+            </button>
+            <span style="font-size:14px;color:#8A8898;text-align:center;">Apple · Google · Outlook · one-page PDF</span>
+          </div>
+        </div>
+        <div style="max-height:760px;overflow:auto;background:#FBF8F3;">
+          <sc-for list="{{ agenda }}" as="a" hint-placeholder-count="10">
+            <div style="display:grid;grid-template-columns:120px 1fr;gap:20px;padding:20px 28px;border-bottom:1px solid #E6E2D8;background:{{ a.bg }};">
+              <div style="display:flex;flex-direction:column;">
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ a.dowColor }};">{{ a.dow }}</span>
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-weight:700;line-height:1.15;color:{{ a.numColor }};">{{ a.long }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                <sc-for list="{{ a.events }}" as="e" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:10px 84px 1fr;gap:12px;align-items:baseline;">
+                    <span style="width:10px;height:10px;border-radius:3px;background:{{ e.color }};transform:translateY(2px);"></span>
+                    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;color:#4A4860;font-variant-numeric:tabular-nums;">{{ e.time }}</span>
+                    <div style="display:flex;flex-direction:column;gap:1px;">
+                      <span style="font-size:16px;line-height:1.4;color:#1A1A2A;">{{ e.title }}</span>
+                      <span style="font-size:14px;color:#8A8898;">{{ e.where }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+// Category comes from the Google event color, set once in Google. The Worker
+// maps colorId -> category, and the site draws it in the church palette rather
+// than Google's own hue, so nine categories still read as one calendar.
+const CAT = {
+  worship:  { name: 'Worship',           gname: 'Blueberry', color: '#1E2D4A', tint: '#EDF2F7' },
+  learn:    { name: 'Learn / Bible study', gname: 'Peacock',  color: '#2E7EA6', tint: '#E8F1F6' },
+  ministry: { name: 'Ministry & service', gname: 'Basil',     color: '#4A5E3A', tint: '#EDF1E9' },
+  facility: { name: 'Facility / rentals', gname: 'Graphite',  color: '#7D7972', tint: '#F1EFEA' },
+  youth:    { name: 'Youth & family',    gname: 'Tangerine', color: '#B0821E', tint: '#F8F0DE' },
+  wol:      { name: 'Word of Life School',gname: 'Sage',     color: '#3A4E5C', tint: '#EAEFF2' },
+  mdo:      { name: "Mother's Day Out",  gname: 'Banana',    color: '#8A6E2F', tint: '#F5EFE0' },
+  music:    { name: 'Music',             gname: 'Grape',     color: '#7A5A7A', tint: '#F2ECF2' },
+  meeting:  { name: 'Meetings',          gname: 'Lavender',  color: '#6A8090', tint: '#EEF2F4' },
+  special:  { name: 'Special events',    gname: 'Tomato',    color: '#C9973A', tint: '#FBF1DC' }
+};
+const EXTRA = {
+  4:  [['7:00 pm', 'Elders Meeting', 'meeting', 'Conference Room']],
+  6:  [['9:00 am', 'Quilters', 'ministry', 'Fellowship Hall']],
+  8:  [['9:00 am', 'Food Pantry Distribution', 'ministry', 'Gym entrance'], ['1:00 pm', 'Gym Rental — Youth Basketball', 'facility', 'Gym']],
+  11: [['7:00 pm', 'Church Council', 'meeting', 'Conference Room']],
+  13: [['9:00 am', 'Quilters', 'ministry', 'Fellowship Hall'], ['6:30 pm', 'Stephen Ministry Training', 'ministry', 'Room 4']],
+  15: [['10:00 am', 'Word of Life School Open House', 'wol', 'School building', 'news']],
+  16: [['5:00 pm', 'Youth Group', 'youth', 'Youth Room']],
+  18: [['6:30 pm', 'Christmas Market Planning', 'meeting', 'Conference Room']],
+  19: [['5:30 pm', 'Neighborhood Supper', 'ministry', 'Fellowship Hall']],
+  20: [['9:00 am', 'Quilters', 'ministry', 'Fellowship Hall']],
+  21: [['7:00 pm', 'Youth Lock-In', 'youth', 'Gym']],
+  22: [['8:00 am', "Men's Breakfast", 'ministry', 'Fellowship Hall'], ['1:00 pm', 'Gym Rental — Volleyball', 'facility', 'Gym']],
+  23: [['12:15 pm', 'Handbell Rehearsal', 'music', 'Balcony']],
+  25: [['6:30 pm', 'MDO Parent Night', 'mdo', 'Room 2', 'news']],
+  26: [['8:30 am', 'WOL First Day of School', 'wol', 'School building', 'news']],
+  27: [['9:00 am', 'Quilters', 'ministry', 'Fellowship Hall']],
+  28: [['6:00 pm', 'Family Movie Night', 'youth', 'Fellowship Hall']],
+  29: [['9:00 am', 'Food Pantry Distribution', 'ministry', 'Gym entrance']],
+  30: [['12:00 pm', 'Rally Day Picnic', 'special', 'Church lawn', 'news']]
+};
+const SUNDAY = [
+  ['8:00 am', 'Divine Service', 'worship', 'Sanctuary'],
+  ['9:30 am', 'Bible Class & Sunday School', 'learn', 'Fellowship Hall'],
+  ['10:45 am', 'Divine Service', 'worship', 'Sanctuary']
+];
+const WED = [
+  ['10:00 am', 'Wednesday Bible Class', 'learn', 'Conference Room'],
+  ['6:00 pm', 'Confirmation', 'learn', 'Room 4'],
+  ['7:00 pm', 'Choir Rehearsal', 'music', 'Sanctuary']
+];
+// Two sources today, recorded separately: the Google calendars, and the news &
+// events records behind admin.timothystl.org/api/news. The Worker normalizes
+// both into one shape, so an item entered once shows up everywhere.
+const SRC = {
+  gcal: { label: 'Google Calendar', mark: 'G', color: '#2E7EA6' },
+  news: { label: 'News & Events',   mark: 'N', color: '#C9973A' }
+};
+const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TODAY = 19;
+
+class Component extends DCLogic {
+  state = { filter: 'all', sel: 19, src: 'all' };
+
+  eventsFor(day, all) {
+    const dow = new Date(2026, 7, day).getDay();
+    let raw = [];
+    if (dow === 0) raw = raw.concat(SUNDAY);
+    if (dow === 3) raw = raw.concat(WED);
+    raw = raw.concat(EXTRA[day] || []);
+    raw.sort((a, b) => this.mins(a[0]) - this.mins(b[0]));
+    return raw
+      .filter(e => all || ((this.state.filter === 'all' || e[2] === this.state.filter)
+        && (this.state.src === 'all' || (e[4] || 'gcal') === this.state.src)))
+      .map(e => ({
+        time: e[0], title: e[1], where: e[3],
+        src: SRC[e[4] || 'gcal'].label, srcMark: SRC[e[4] || 'gcal'].mark, srcColor: SRC[e[4] || 'gcal'].color,
+        cat: CAT[e[2]].name,
+        color: CAT[e[2]].color, tint: CAT[e[2]].tint,
+        short: e[0].replace(':00', '').replace(' am', 'a').replace(' pm', 'p'),
+        gLabel: e[0].replace(':00', '').replace(' am', 'am').replace(' pm', 'pm') + ' ' + e[1]
+      }));
+  }
+  mins(t) {
+    const m = /^(\d+):(\d+) (am|pm)$/.exec(t);
+    let h = +m[1] % 12; if (m[3] === 'pm') h += 12;
+    return h * 60 + (+m[2]);
+  }
+  chip(key, label, dot, dark) {
+    const on = this.state.filter === key;
+    return {
+      key, label, dot,
+      bg: on ? (dark ? '#C9973A' : '#1E2D4A') : (dark ? 'rgba(255,255,255,.06)' : '#fff'),
+      fg: on ? '#fff' : (dark ? 'rgba(255,255,255,.8)' : '#4A4860'),
+      bd: on ? (dark ? '#C9973A' : '#1E2D4A') : (dark ? 'rgba(255,255,255,.25)' : '#DDE3ED'),
+      onClick: () => this.setState({ filter: key })
+    };
+  }
+
+  srcChip(key, label) {
+    const on = this.state.src === key;
+    return {
+      label,
+      bg: on ? '#1E2D4A' : '#fff',
+      fg: on ? '#fff' : '#4A4860',
+      bd: on ? '#1E2D4A' : '#DDE3ED',
+      onClick: () => this.setState({ src: key })
+    };
+  }
+
+  renderVals() {
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(2026, 7, 1 - 6 + i); // Aug 1 2026 is a Saturday
+      const inMonth = d.getMonth() === 7;
+      const day = d.getDate();
+      const events = inMonth ? this.eventsFor(day) : [];
+      const isToday = inMonth && day === TODAY;
+      cells.push({
+        label: String(day), isToday, events,
+        capped: events.slice(0, 2),
+        more: events.length > 2,
+        moreLabel: (events.length - 2) + ' more',
+        bg: isToday ? '#FDF6E7' : (inMonth ? '#fff' : '#F4F1EA'),
+        numColor: inMonth ? (isToday ? '#C9973A' : '#1E2D4A') : '#B8B4AC',
+        gNumColor: inMonth ? (isToday ? '#1a73e8' : '#3c4043') : '#a0a4a8'
+      });
+    }
+
+    const weeks = [];
+    const starts = [16, 23, 30];
+    const labels = ['This week', 'Next week', 'The week after'];
+    starts.forEach((s, wi) => {
+      const days = [];
+      for (let k = 0; k < 7; k++) {
+        const dt = new Date(2026, 7, s + k);
+        const inAug = dt.getMonth() === 7;
+        const num = dt.getDate();
+        const events = inAug ? this.eventsFor(num) : [];
+        if (!events.length) continue;
+        if (wi === 0 && num < TODAY) continue;
+        days.push({
+          dow: DOW[dt.getDay()].slice(0, 3), num: String(num),
+          mon: dt.toLocaleDateString('en-US', { month: 'short' }),
+          dowColor: num === TODAY ? '#C9973A' : '#8A8898',
+          numColor: num === TODAY ? '#C9973A' : '#1E2D4A',
+          events
+        });
+      }
+      const end = new Date(2026, 7, s + 6);
+      weeks.push({
+        label: labels[wi], days,
+        range: 'Aug ' + s + ' – ' + (end.getMonth() === 7 ? end.getDate() : 'Sep ' + end.getDate())
+      });
+    });
+
+    const miniCells = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(2026, 7, 1 - 6 + i);
+      const inMonth = d.getMonth() === 7;
+      const day = d.getDate();
+      const has = inMonth && this.eventsFor(day).length > 0;
+      const sel = inMonth && day === this.state.sel;
+      miniCells.push({
+        label: String(day),
+        bg: sel ? '#1E2D4A' : 'transparent',
+        fg: sel ? '#fff' : (inMonth ? '#1A1A2A' : '#C4C0B8'),
+        dot: has ? (sel ? '#E8C070' : '#C9973A') : 'transparent',
+        onClick: () => this.setState({ sel: inMonth ? day : this.state.sel })
+      });
+    }
+
+    const agenda = [];
+    for (let day = 1; day <= 31; day++) {
+      const events = this.eventsFor(day);
+      if (!events.length) continue;
+      const dt = new Date(2026, 7, day);
+      const sel = day === this.state.sel;
+      agenda.push({
+        dow: DOW[dt.getDay()], long: 'August ' + day, events,
+        bg: sel ? '#FDF6E7' : 'transparent',
+        dowColor: sel ? '#C9973A' : '#8A8898',
+        numColor: sel ? '#C9973A' : '#1E2D4A'
+      });
+    }
+
+    const mk = dark => [this.chip('all', 'All events', null, dark)]
+      .concat(Object.keys(CAT).map(k => this.chip(k, CAT[k].name, CAT[k].color, dark)));
+
+    const printCells = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(2026, 7, 1 - 6 + i);
+      const inMonth = d.getMonth() === 7;
+      const day = d.getDate();
+      const raw = inMonth ? this.eventsFor(day, true) : [];
+      printCells.push({
+        label: String(day), events: raw,
+        numColor: inMonth ? '#111' : '#B4B0A8',
+        bg: inMonth ? '#fff' : '#F6F4EF'
+      });
+    }
+
+    return {
+      cells, weeks, miniCells, agenda, printCells,
+      sources: [
+        this.srcChip('all', 'Both sources'),
+        this.srcChip('gcal', SRC.gcal.label),
+        this.srcChip('news', SRC.news.label)
+      ],
+      merged: (() => {
+        const out = [];
+        for (let day = 1; day <= 31; day++) {
+          const ev = this.eventsFor(day);
+          if (!ev.length) continue;
+          const dt = new Date(2026, 7, day);
+          out.push({ dow: DOW[dt.getDay()].slice(0, 3), long: 'Aug ' + day, events: ev });
+        }
+        return out;
+      })(),
+      mergedEmpty: (() => {
+        for (let day = 1; day <= 31; day++) if (this.eventsFor(day).length) return false;
+        return true;
+      })(),
+      doPrint: () => window.print(),
+      chips: mk(false), chipsDark: mk(true),
+      dows: DOW, dowsShort: DOW.map(d => d.slice(0, 3).toUpperCase()), dowsMini: DOW.map(d => d[0]),
+      legend: Object.keys(CAT).map(k => CAT[k]),
+      navItems: ['About', 'Worship', 'Learn', 'Sermons', 'Ministries', 'News & Events', 'Calendar', 'Contact'],
+      footVisit: ['Plan your visit', 'Service times', 'Live stream', 'Sunday Worship', 'News & Events'],
+      footConnect: ['About us', 'Ministries', 'Prayer request', 'Contact', 'News', 'Give online']
+    };
+  }
+}
+
+</script>
+</body>
+</html>
