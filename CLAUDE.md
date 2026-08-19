@@ -7896,16 +7896,17 @@ doing," not by severity.** Phase 1 is the set that needs no design decision and
 no conversation — patches and one piece of configuration. Phase 5 and 6 need
 Dinger's or Andrew's call on a policy, or a design of their own.
 
-⚠ **Status, 2026-08-19.** Phase 0 is done, and so are the four Andrew picked
-out of it: **FX-01 · FX-02 · FX-03 · FX-04 · FX-17 · FX-19 are shipped**, and
-**FX-05 is half done** — its code prerequisite is in, the Worker secret itself
-is a human step (see the entry). Everything else below is still a plan.
+⚠ **Status, 2026-08-19.** **Phases 0, 2 and the four picked out of Phases 1
+and 3 are shipped: FX-01 · FX-02 · FX-03 · FX-04 · FX-13 · FX-14 · FX-15 ·
+FX-16 · FX-17 · FX-19.** **FX-05 is half done** — its code prerequisite is in,
+the Worker secret itself is a human step (see the entry). Everything else below
+is still a plan.
 
 | Phase | What it is | Codes |
 |---|---|---|
 | **0** | Green CI and honest docs — the floor everything else stands on | ~~FX-01 … FX-03~~ **DONE** |
 | **1** | Close the exposures. Small, self-contained, no decisions | ~~FX-04~~ **DONE** · FX-05 **part** · FX-06 … FX-12 |
-| **2** | The escaping sweep — one theme, done once, properly | FX-13 … FX-16 |
+| **2** | The escaping sweep — one theme, done once, properly | ~~FX-13 … FX-16~~ **DONE** |
 | **3** | Loading speed — the wins that need no new design | ~~FX-17~~ **DONE** · FX-18 · ~~FX-19~~ **DONE** · FX-20 … FX-23 |
 | **4** | Correctness the office would feel | FX-24 … FX-28 |
 | **5** | Policy calls — needs a decision before code | FX-29 … FX-31 |
@@ -8022,24 +8023,25 @@ them or write down that they are deliberately public.
 
 One theme. Doing it in pieces is how it stayed open for a year.
 
-**FX-13 · Escape `admin/email.js`.** (`SEC-2`/`AC-2`.) `esc()` is used **once**,
+**FX-13 · Escape `admin/email.js` — DONE.** (`SEC-2`/`AC-2`.) See "The
+escaping sweep" below. The original statement follows. `esc()` is used **once**,
 on `n.title`. Unescaped: `subject` (218, 378), `e.event_name` / `e.event_time` /
 `e.event_desc` (255-256), `mainNews.title` / `secondaryNews.title` /
 `item.title` (278, 287, 337), and `ctaUrl` / `ctaLabel` /
 `tertiaryCtaUrl` / `tertiaryCtaLabel` (193, 309). The two URL cases sit **inside
 `href="…"`**, so a typed double quote closes the attribute.
 
-**FX-14 · Escape the public newsletter renderer.** `public/index.html`'s
+**FX-14 · Escape the public newsletter renderer — DONE.** `public/index.html`'s
 `loadNewsletters()` and `loadNewsletterDetail()` apply `escText()` to some
 fields and not their neighbors — `n.subject`, `e.event_name`, `e.event_time`,
 `e.event_desc`, `c.topic`, `c.leader`, `c.location` and `n.tertiary_cta_url`
 (into an `href`, `:2231`) all go in raw. ⚠ Note the rich bodies are *meant* to
 carry markup; those are FX-04's problem, not this one.
 
-**FX-15 · Make `escText()` attribute-safe, or stop using it near attributes.**
+**FX-15 · Make `escText()` attribute-safe — DONE.**
 `public/index.html:1979` escapes `& < >` and not quotes.
 
-**FX-16 · Replace the hand-rolled partial escapes in `admin/gym.js`.** `:2889`
+**FX-16 · Replace the hand-rolled partial escapes in `admin/gym.js` — DONE.** `:2889`
 escapes `& <`, `:4165` escapes `<`, `:4171` escapes `"`. Each does enough for
 its own context and none is `escapeHtml` — which is imported into that file and
 used 31 times already. Include the one genuine miss: `:1775`, where the
@@ -8440,3 +8442,86 @@ Run, for all of it: every `admin/*.test.mjs`, plus
 (1215), `test/site-edge-render.test.mjs`, `test/give-page.test.mjs`,
 `test/events-admin.test.mjs`, `test/links-page.test.mjs`,
 `test/site-taps.test.mjs`.
+
+---
+
+## The escaping sweep (Phase 2 — FX-13 … FX-16, 2026-08-19)
+
+AC-2 was raised in July 2026. v3.11.0 added a local `esc()` to `admin/email.js`
+and used it **once**, on an extra note's heading, and called that "a step toward
+AC-2, not the whole sweep." It stayed one step for a year. This is the sweep.
+
+**The rule, written down because it is what makes the sweep finishable:** a
+field the office types as **text** is escaped; a field the office types as
+**markup** is not, because it is meant to carry tags and is allowlist-sanitized
+where it is stored (FX-04). A **URL** goes through `safeUrl()` first and then
+`esc()`, in that order — `safeUrl` decides whether it is an address at all,
+`esc` decides whether it can escape the attribute.
+
+- **`admin/email.js` escaped one field out of about a dozen** (FX-13). The
+  subject, an event's name/time/description, three news titles, a Bible class's
+  topic/leader/location and both CTA labels all went into six hundred inboxes
+  raw — and both CTA **URLs** went in inside `href="…"`, where a typed double
+  quote closes the attribute. All escaped now; the notes and news bodies
+  deliberately are not.
+- **⚠ The public renderer was inconsistent with itself**, which is the tell
+  that a sweep was abandoned halfway: `loadNewsletterDetail()` applied
+  `escText()` to a news title and interpolated `n.subject`, `e.event_name`,
+  `c.topic` and `n.tertiary_cta_url` raw in the same function (FX-14).
+- **⚠ `escText()` escaped `& < >` and not quotes** (FX-15), so it was never
+  safe in an attribute — and FX-14 needed to put a value in one. It escapes
+  quotes now; in a text node `&quot;` renders as a quote, so there is no cost
+  and no reason to keep two helpers and one trap. `safeHref()` is its new
+  companion: the same four rules as `safeUrl()` in `admin/blocks.js`,
+  deliberately narrow, because anything it does not recognize becomes no link
+  rather than a guess.
+- **`admin/gym.js` had four hand-rolled partial escapes** (FX-16) — one doing
+  `& <`, one doing `<` alone, one doing `"` alone. Each was enough for its own
+  context and none was `escapeHtml`, which that file already imports and uses
+  31 times. All four are gone, and **the fourth GY-2 site is closed**: the
+  renter's own `notes` reached the office's HTML email unescaped in the
+  multi-slot `/request-slots` path, two lines above the renter's own copy of
+  the same string being escaped correctly.
+- **⚠ `group.name` in the four gym emails is escaped now too**, which the
+  July review had deliberately left: it is office-entered behind `gym_manage`,
+  so it was defense-in-depth rather than an attack path. That reasoning was
+  sound while the SCREENS were unescaped too — it is not, once they are. A file
+  where the same field is escaped on the screen and raw in the email is one
+  nobody can state a rule about.
+
+**⚠ TWO THINGS THIS PASS FOUND THAT THE REVIEW HAD NOT.**
+
+- **The gym's `esc()` is not a module-level function — it is browser code
+  inside a template literal**, shipped to the renter portal. Deleting a
+  *local* `const esc` on the group screen (which was one of the partial
+  escapes) therefore left five server-side `${esc(...)}` call sites
+  referencing an identifier that does not exist. **It imports cleanly and
+  throws `ReferenceError` the moment somebody opens the screen**, and the
+  entire suite stayed green through it, because nothing had ever asked for
+  that page. It has a test now.
+- **The document title was never escaped.** `html()` builds
+  `<title>${title}</title>` and half a dozen screens title themselves from a
+  record — `Edit — ${g.name}`, `Invoice ${invNum}`. A `<title>` is RCDATA, so a
+  value containing a literal closing title tag ends the element and everything
+  after it is markup. ⚠ Fixed **at the sink**, in `html()`, not at the six
+  callers: that is the difference between a rule and six places somebody has to
+  remember. No caller passes markup as a title; a title is text by definition.
+
+**⚠ AND THE BACKTICK TRAP CAUGHT THIS PASS TOO — the fifth time.** A comment
+written above the gym's client-side `esc` quoted the identifier in backticks.
+That comment sits inside a template literal, so the backtick terminated the
+literal and broke the module. The rule is already in this file and is worth
+restating: **in `admin/gym.js`, `admin/ui.js` and anywhere else a comment lives
+inside a template literal, describe an identifier — never quote one, and never
+use a backtick.**
+
+Run: `node admin/escaping.test.mjs` — it CALLS `buildEmailHtml` with a hostile
+string in every plain-text slot at once and asserts none survives while every
+markup field keeps its tags; it lifts `escText`/`safeHref` out of
+`public/index.html` by brace-matching and exercises them for real; it pins the
+public renderer's call sites as a source rule (the shape
+`admin/link-style.test.mjs` already uses); and it asserts no partial escape
+survives in `admin/gym.js`, matching **chains** rather than lines so the one
+legitimate full escape is not mistaken for two halves. Plus the new
+`a gym group's own screen renders` group in `test/admin-redesign.test.mjs`.
+Every group was verified by reverting the fix and watching it fail.

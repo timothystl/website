@@ -1991,8 +1991,30 @@ function fixImgUrls(html) {
 }
 // Escapes plain-text admin fields (not TinyMCE rich-text body/content, which is
 // trusted HTML by design sitewide) before inserting via innerHTML.
+// ⚠ THE CLIENT'S OWN safeUrl (FX-14). A CTA address typed in the admin lands
+// in an `href` here. Escaping it stops it breaking OUT of the attribute;
+// it does not stop `javascript:` being a perfectly well-formed attribute
+// value. Same three rules as safeUrl() in admin/blocks.js — http(s), mailto,
+// tel, or site-relative — deliberately narrow rather than clever, because
+// anything it does not recognize becomes no link at all rather than a guess.
+function safeHref(u) {
+  var s = String(u == null ? '' : u).trim();
+  if (!s) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
+  if (/^[/#]/.test(s)) return s;
+  return '';
+}
+
+// ⚠ QUOTES TOO (FX-15). This escaped `& < >` and stopped, which is enough for a
+// text node and NOT enough for an attribute value — and this is a helper other
+// people reach for. A double quote inside `href="…"` closes the attribute and
+// everything after it becomes markup. Escaping quotes costs nothing in a text
+// node, where `&quot;` renders as a quote, so there is no reason to have two
+// helpers and one trap.
 function escText(s) {
-  return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s == null ? '' : String(s))
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
@@ -2180,18 +2202,18 @@ async function loadNewsletters() {
             const eDate = e.event_date ? new Date(e.event_date+'T12:00:00') : null;
             return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--border);">' +
               (eDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>' + eDate.toLocaleDateString('en-US',{month:'short'}) + '</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>' + eDate.getDate() + '</div></div>' : '') +
-              '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">' + (e.event_name||'') + '</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">' + (e.event_time||'') + (e.event_desc ? ' · '+e.event_desc : '') + '</div></div></div>';
+              '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">' + escText(e.event_name||'') + '</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">' + escText(e.event_time||'') + (e.event_desc ? ' · '+escText(e.event_desc) : '') + '</div></div></div>';
           }).join('') + '</div>';
       }
       let ministryHtml = '';
       if (n.ministry_content && n.ministry_type !== 'none') {
         ministryHtml = '<div style="margin-top:16px;background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px 16px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>From Our Ministries</div>' +
-          (n.ministry_type === 'image' ? '<img src="' + n.ministry_content + '" style="max-width:100%;border-radius:8px;" alt="Ministry update">' : '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">' + n.ministry_content.replace(/\n/g,'<br>') + '</div>') +
+          (n.ministry_type === 'image' ? '<img src="' + escText(safeHref(n.ministry_content)) + '" style="max-width:100%;border-radius:8px;" alt="Ministry update">' : '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">' + n.ministry_content.replace(/\n/g,'<br>') + '</div>') +
           '</div>';
       }
       return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">' + date + '</div>' +
-        '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:12px;">' + n.subject + '</div>' +
+        '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:12px;">' + escText(n.subject) + '</div>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:12px;border-bottom:1px solid var(--border);">' + (n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>')) + '</div>' : '') +
         '<div style="margin-top:12px;"><button onclick="loadNewsletterDetail(' + n.id + ')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:0;">Read this letter</button></div>' +
         eventsHtml + ministryHtml + '</div>';
@@ -2223,7 +2245,7 @@ async function loadNewsletterDetail(id) {
           const eDate = e.event_date ? new Date(e.event_date+'T12:00:00') : null;
           return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--border);">' +
             (eDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>' + eDate.toLocaleDateString('en-US',{month:'short'}) + '</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>' + eDate.getDate() + '</div></div>' : '') +
-            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+(e.event_name||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+(e.event_time||'')+(e.event_desc?' · '+e.event_desc:'')+'</div></div></div>';
+            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+escText(e.event_name||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+escText(e.event_time||'')+(e.event_desc?' · '+escText(e.event_desc):'')+'</div></div></div>';
         }).join('') + '</div>';
     }
     let secHtml = n.secondary_note ? '<div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.85;">'+n.secondary_note+'</div>' : '';
@@ -2241,7 +2263,7 @@ async function loadNewsletterDetail(id) {
     let tertiaryHtml = '';
     if (n.tertiary_note) {
       const ctaBtn = (n.tertiary_cta_label && n.tertiary_cta_url)
-        ? '<div style="margin-top:14px;"><a href="'+n.tertiary_cta_url+'" style="display:inline-block;background:var(--amber);color:var(--steel);font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 22px;border-radius:6px;text-decoration:none;">'+n.tertiary_cta_label+'</a></div>'
+        ? '<div style="margin-top:14px;"><a href="'+escText(safeHref(n.tertiary_cta_url))+'" style="display:inline-block;background:var(--amber);color:var(--steel);font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 22px;border-radius:6px;text-decoration:none;">'+escText(n.tertiary_cta_label)+'</a></div>'
         : '';
       tertiaryHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);"><div style="background:var(--linen);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:16px 18px;"><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+n.tertiary_note+'</div>'+ctaBtn+'</div></div>';
     }
@@ -2278,7 +2300,7 @@ async function loadNewsletterDetail(id) {
           const cDate = c.date ? new Date(c.date+'T12:00:00') : null;
           return '<div style="display:flex;align-items:center;gap:14px;padding:9px 0;border-top:1px solid var(--border);">' +
             (cDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>'+cDate.toLocaleDateString('en-US',{month:'short'})+'</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>'+cDate.getDate()+'</div></div>' : '') +
-            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+(c.topic||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+[c.leader,c.location].filter(Boolean).join(' · ')+'</div></div></div>';
+            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+escText(c.topic||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+escText([c.leader,c.location].filter(Boolean).join(' · '))+'</div></div></div>';
         }).join('') +
         '</div>';
     }

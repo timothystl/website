@@ -4665,5 +4665,45 @@ group('the /api/pages cache chokepoint covers what feeds pageData (FX-19)');
   }
 }
 
+// ── FX-16: the gym's escaping, and the screen that had no test at all ───────
+// ⚠ THIS GROUP EXISTS BECAUSE OF A NEAR MISS. admin/gym.js defines an `esc`
+// helper at module level — except it does not: that definition sits INSIDE a
+// template literal, as browser code shipped to the renter portal, so it is a
+// string and not a binding. A local `const esc` on this screen was the only
+// thing making `${esc(g.name)}` resolve. Removing it during the FX-16 sweep
+// left five server-side call sites referencing an identifier that does not
+// exist — which imports cleanly and throws ReferenceError the moment somebody
+// opens the screen. The whole suite stayed green through it, because nothing
+// asked for this page.
+group("a gym group's own screen renders, and escapes what it renders (FX-16)");
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ALL_PERMISSIONS, 'dinger.gym');
+
+  db.prepare('INSERT INTO gym_groups (name, contact, email, phone, notes, access_token, active) VALUES (?,?,?,?,?,?,1)')
+    .run('Lindenwood "Hoops" & Co <script>alert(1)</script>', 'Ann O\'Brien',
+         'ann@example.com', '(314) 555-0100', 'Weekly practice <b>6pm</b>', 'tok-esc-test');
+  const gid = db.prepare("SELECT id FROM gym_groups WHERE access_token = 'tok-esc-test'").get().id;
+
+  const res = await call(env, `/gym-rentals/groups/edit/${gid}`, { cookie });
+  eq(res.status, 200, "the group's screen renders at all");
+  const body = await res.text();
+
+  // The name lands in a value="…" attribute. A raw double quote closes it.
+  ok(!body.includes('value="Lindenwood "Hoops"'), 'the quote in the name cannot close the attribute');
+  has(body, '&quot;Hoops&quot;', 'it is escaped instead');
+  ok(!/<script>alert\(1\)<\/script>/.test(body), 'and the script tag never reaches the markup');
+  has(body, '&lt;script&gt;', 'having been escaped');
+  // ⚠ Found by driving this screen rather than by reading it: the name was
+  // also going raw into <title>, which is RCDATA — a name containing a literal
+  // closing title tag ends the element and the rest is parsed as markup.
+  // Escaped at the sink in html(), so every screen that titles itself from a
+  // record is covered, not just this one.
+  ok(!/<title>[^<]*<script>/.test(body), 'and not through the document title either');
+  // The notes textarea is the other renter-reachable field on this screen.
+  has(body, '&lt;b&gt;6pm&lt;/b&gt;', 'the notes are escaped in the textarea');
+  ok(!body.includes('<b>6pm</b>'), 'and not rendered as markup');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
