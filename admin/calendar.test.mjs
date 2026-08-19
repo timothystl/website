@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import {
   CATEGORIES, NEUTRAL_CATEGORY, categoryFor, categoryRecord, categoryForNews,
-  addDays, shiftMonth, monthRange, wallClock, plainText,
+  addDays, shiftMonth, monthRange, wallClock, plainText, mergedCategories,
   normalizeGoogleEvent, normalizeNewsItem, dedupeEvents, sortEvents,
   buildIcs, foldIcsLine, parseCalendarIds, DEFAULT_CALENDAR_IDS,
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
@@ -63,6 +63,26 @@ test('every category has a color and a tint, and the neutral one is reachable', 
     assert.match(c.tint, /^#[0-9A-F]{6}$/i, `${c.key} tint`);
   }
   assert.equal(categoryRecord('nonsense').key, NEUTRAL_CATEGORY, 'an unknown key resolves rather than throwing');
+});
+
+test('a News record can be told outright what it is on the calendar', () => {
+  // ⚠ THE GAP THIS CLOSES. The value tag only ever reached three of the
+  // calendar's categories, so a post could never be marked as a meeting or a
+  // rehearsal — it silently became Special events, whatever it actually was.
+  assert.equal(categoryForNews({ calendar_category: 'meetings' }), 'meetings');
+  assert.equal(categoryForNews({ calendar_category: 'music', value: 'worship' }), 'music',
+    'and what the office said beats what the value tag implies');
+  // Blank is the ordinary state — every post written before the field existed
+  // has one — and still falls through to the guess.
+  assert.equal(categoryForNews({ calendar_category: '', value: 'worship' }), 'worship');
+  assert.equal(categoryForNews({ calendar_category: null, value: 'outreach' }), 'ministry');
+  // ⚠ A category that no longer exists, or has been retired, must not come
+  // back through this door either.
+  assert.equal(categoryForNews({ calendar_category: 'nonsense' }), 'special',
+    'an unknown category falls through to the guess rather than being honored');
+  const retired = mergedCategories([{ key: 'music', active: 0 }]);
+  assert.equal(categoryForNews({ calendar_category: 'music' }, retired), 'special',
+    'and so does a retired one');
 });
 
 test('a News record takes its category from the value it was tagged with', () => {

@@ -917,6 +917,26 @@ half was not possible at all.**
   leading slash, so a new category would be stored as `/fellowship` and quietly
   match nothing. Caught by a test, not by reading it.
 
+**⚠ AND A NEWS POST CAN NOW SAY WHAT IT IS, which the first pass could not.**
+Dinger, immediately after: *"how will I mark from Google feed if it is a Bible
+study or meeting etc. same from news feed"*. For Google the answer was already
+the color. For a News & Events post there was no answer at all:
+`categoryForNews()` inferred the category from the four VALUES, and those only
+ever reached three of the calendar's ten — so a council meeting with a date on
+it became **Special events**, whatever anybody did. `news_items.calendar_category`
+is the field that says so outright, offered on the post form from the LIVE
+category list, and blank still falls through to the old guess so nothing already
+written moved. ⚠ A category that has been retired, or never existed, is refused
+by that door too — otherwise retiring one would quietly bring it back through
+the News side.
+
+**⚠ Bible classes are deliberately NOT a calendar source, and the reason is in
+the data.** `bible_classes.schedule` is free text — "Sundays, 9:30 am" — with no
+date and no structured recurrence, so there is nothing to place on a month.
+The classes that genuinely meet weekly are already on the calendar as recurring
+Google events, which is what `singleEvents=true` expands. Do not "fix" this by
+parsing that string.
+
 **Building rentals are a third source, and the renter is never named.**
 `readGymBookings()` reads `gym_bookings` directly rather than the Google
 calendar the gym pushes to — the push is best-effort, silently does nothing

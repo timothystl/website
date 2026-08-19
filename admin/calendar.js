@@ -171,10 +171,19 @@ const NEWS_VALUE_CATEGORY = {
   acceptance: 'ministry',
 };
 export function categoryForNews(row, cats) {
+  const live = activeCategories(cats);
+  // ⚠ WHAT THE OFFICE ACTUALLY SAID WINS. The value-tag guess below only ever
+  // reached three of the calendar's categories, so a post could never be
+  // marked as a meeting or a rehearsal — it silently became Special events.
+  // `calendar_category` is the field that says so outright; blank still falls
+  // through to the guess, so every post written before it existed is unmoved.
+  const said = String((row && row.calendar_category) || '').trim();
+  if (said && live.some((c) => c.key === said)) return said;
   const raw = String((row && (row.value || row.theme)) || '').trim().toLowerCase();
   const want = NEWS_VALUE_CATEGORY[raw] || 'special';
-  // ⚠ A category the office has retired must not come back through this door.
-  return activeCategories(cats).some((c) => c.key === want) ? want : NEUTRAL_CATEGORY;
+  // ⚠ A category the office has retired must not come back through this door —
+  // by either route.
+  return live.some((c) => c.key === want) ? want : NEUTRAL_CATEGORY;
 }
 
 // ── DATE HELPERS ────────────────────────────────────────────────────────────
@@ -510,7 +519,7 @@ export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, 
 export async function readNewsEvents(env, from, to, cats) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, title, summary, body, event_date, publish_date, theme, value
+      `SELECT id, title, summary, body, event_date, publish_date, theme, value, calendar_category
          FROM news_items
         WHERE event_date IS NOT NULL AND event_date >= ? AND event_date <= ?
           AND (channels IS NULL OR channels LIKE '%web%')
