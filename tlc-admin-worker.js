@@ -5725,6 +5725,32 @@ ${PAYROLL_HTML}`, 'Payroll');
         return new Response(JSON.stringify({ error: 'Could not read the report.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
+      // A period already emailed today asks before sending again, rather
+      // than silently piling a second copy into the bookkeeper's inbox — the
+      // exact "keep spamming" complaint the toast fix above was found while
+      // chasing. This is a real question, not an error: `already_sent` is a
+      // 200 the client reads specially, and `force:true` on a resend skips
+      // the check entirely rather than needing a second distinct route.
+      if (body.periodStart && !body.force) {
+        const prior = await env.DB.prepare(
+          `SELECT created_at, after_state FROM audit_log
+           WHERE entity_type='payroll' AND entity_id=? AND action='email'
+           ORDER BY created_at DESC LIMIT 1`
+        ).bind(String(body.periodStart)).first().catch(() => null);
+        if (prior) {
+          const sinceMs = Date.now() - new Date(prior.created_at).getTime();
+          if (sinceMs >= 0 && sinceMs < 12 * 60 * 60 * 1000) {
+            let priorTo = '';
+            try { priorTo = JSON.parse(prior.after_state || '{}').to || ''; } catch (_) { /* ignore */ }
+            return new Response(JSON.stringify({
+              already_sent: true,
+              last_sent_at: prior.created_at,
+              last_sent_to: priorTo,
+            }), { headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }
+
       // The emailed report is the same report as the printed page and the CSV
       // — MDO first with its own columns, then church staff with theirs, then
       // one combined total. The page posts the FIGURES and this builds the

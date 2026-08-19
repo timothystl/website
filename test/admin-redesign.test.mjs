@@ -1749,10 +1749,68 @@ group('payroll emails its report to the bookkeeper');
     if (String(u).includes('brevo')) { sent2.push(JSON.parse(init.body)); return new Response('{}', { status: 201 }); }
     return realFetch(u, init);
   };
-  await post({ ...report, approved: false, incomplete: true });
+  // force:true is what makes this a second, deliberate send rather than the
+  // already-emailed-today check below refusing it.
+  await post({ ...report, approved: false, incomplete: true, force: true });
   globalThis.fetch = realFetch;
   ok(sent2[0].htmlContent.includes('Not yet approved'), 'an unapproved run is labeled as such');
   ok(sent2[0].htmlContent.includes('Incomplete'), 'and so is one missing its childcare figures');
+}
+
+group('a period already emailed today asks before sending it again');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('payroll_bookkeeper_email','books@example.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  const report = {
+    periodStart: '2026-08-03', periodEnd: '2026-08-16', periodLabel: 'Aug 3 – Aug 16, 2026',
+    approved: true, approvedBy: 'dinger', total: 100,
+    mdo: { subtotal: 100, rows: [{ name: 'A', salaried: true, rate: 0, hours: 0, pto: 0, gross: 100 }] },
+    church: { subtotal: 0, rows: [] },
+  };
+  const realFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (u, init) => {
+    if (String(u).includes('brevo')) { sent.push(1); return new Response('{}', { status: 201 }); }
+    return realFetch(u, init);
+  };
+  env.BREVO_API_KEY = 'test-key';
+  const post = (body) => worker.fetch(new Request('https://admin.timothystl.org/payroll/email', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env, ctx);
+
+  const first = await post(report);
+  eq(first.status, 200, 'the first send for this period goes straight through');
+  eq(sent.length, 1, 'and reaches Brevo once');
+
+  // Clicking Email report again for the same period, without confirming a
+  // resend, must not silently mail the bookkeeper a second time — that is
+  // the exact "keep spamming the bookkeeper" report this guards against.
+  const second = await post(report);
+  eq(second.status, 200, 'a same-day resend is not an error, it is a real question');
+  const secondBody = await second.json();
+  eq(secondBody.already_sent, true, 'and it says so rather than sending again');
+  eq(secondBody.last_sent_to, 'books@example.com, dinger@timothystl.org', 'naming who already got it');
+  ok(secondBody.last_sent_at, 'and when');
+  eq(sent.length, 1, 'no second email reached Brevo');
+
+  // A confirmed resend (force:true) is the one legitimate way past the check.
+  const third = await post({ ...report, force: true });
+  eq(third.status, 200, 'an explicit resend still works');
+  eq(sent.length, 2, 'and this time Brevo is actually called again');
+  globalThis.fetch = realFetch;
+
+  // A different period is unaffected by the first period's send.
+  globalThis.fetch = async (u, init) => {
+    if (String(u).includes('brevo')) return new Response('{}', { status: 201 });
+    return realFetch(u, init);
+  };
+  const otherRes = await post({ ...report, periodStart: '2026-08-17', periodEnd: '2026-08-30' });
+  globalThis.fetch = realFetch;
+  eq(otherRes.status, 200, 'a different period sends normally');
+  ok(!(await otherRes.json()).already_sent, 'and is never told it was already sent');
 }
 
 group('emailing payroll needs the payroll permission');
