@@ -5751,81 +5751,30 @@ ${PAYROLL_HTML}`, 'Payroll');
         }
       }
 
-      // The emailed report is the same report as the printed page and the CSV
-      // — MDO first with its own columns, then church staff with theirs, then
-      // one combined total. The page posts the FIGURES and this builds the
-      // tables, so a staff name can never arrive as markup in an outside
-      // inbox; it must not be reshaped into a generic Person/Gross table,
-      // because the allowance columns are what the bookkeeper keys in.
-      const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const n2 = (v) => (Number(v) || 0).toFixed(2);
-      const amt = (v) => (Number(v) > 0 ? money(v) : '—');
-      // The church table has no PTO column, so an hourly person's PTO is named
-      // inside the Base / Earnings cell — otherwise that cell would not
-      // reconcile to the Gross Pay beside it (PY-2). Matches the page.
-      const hoursAtRate = (p) => n2(p.hours) + (Number(p.pto) > 0 ? ' + ' + n2(p.pto) + ' PTO' : '') + ' hrs @ ' + money(p.rate);
       const mdoRows = Array.isArray(body.mdo?.rows) ? body.mdo.rows : [];
       const churchRows = Array.isArray(body.church?.rows) ? body.church.rows : [];
       if (!mdoRows.length && !churchRows.length) {
         return new Response(JSON.stringify({ error: 'There is nothing to send.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const th = 'padding:8px 10px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:700 10.5px/1.4 Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8271;text-align:left;';
-      const thR = th + 'text-align:right;';
-      const td = 'padding:8px 10px;border-bottom:1px solid #EFE7D9;font:400 12.5px/1.45 Arial,sans-serif;color:#3A3A4A;';
-      const tdR = td + 'text-align:right;white-space:nowrap;';
-      const subL = td + 'background:#FAF7F1;font-weight:700;';
-      const subR = tdR + 'background:#FAF7F1;font-weight:700;';
-      const groupLabel = (cols, text) => `<tr><td colspan="${cols}" style="padding:16px 10px 6px;font:700 11px/1.4 Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#1E2D4A;">${text}</td></tr>`;
-
-      const mdoTable = mdoRows.length ? groupLabel(5, 'MDO Staff')
-        + `<tr><th style="${th}">Name</th><th style="${th}">Rate</th><th style="${thR}">Hours</th><th style="${thR}">PTO</th><th style="${thR}">Gross Pay</th></tr>`
-        + mdoRows.map((p) => `<tr>
-          <td style="${td}"><strong>${escapeHtml(p.name)}</strong></td>
-          <td style="${td}">${p.salaried ? 'Salary' : escapeHtml(money(p.rate)) + '/hr'}</td>
-          <td style="${tdR}">${p.salaried ? '—' : escapeHtml(n2(p.hours))}</td>
-          <td style="${tdR}">${Number(p.pto) > 0 ? escapeHtml(n2(p.pto)) : '—'}</td>
-          <td style="${tdR}">${escapeHtml(money(p.gross))}</td>
-        </tr>`).join('')
-        + `<tr><td colspan="4" style="${subL}">MDO Subtotal</td><td style="${subR}">${escapeHtml(money(body.mdo?.subtotal))}</td></tr>` : '';
-
-      const churchTable = churchRows.length ? groupLabel(8, 'Church Staff')
-        + `<tr><th style="${th}">Name</th><th style="${thR}">Base / Earnings</th><th style="${thR}">Housing</th>`
-        + `<th style="${thR}">Ins Opt-Out</th><th style="${thR}">HSA</th><th style="${thR}">Mileage</th>`
-        + `<th style="${thR}">403(b)</th><th style="${thR}">Gross Pay</th></tr>`
-        + churchRows.map((p) => `<tr>
-          <td style="${td}"><strong>${escapeHtml(p.name)}</strong></td>
-          <td style="${tdR}">${escapeHtml(p.salaried ? money(p.base) : hoursAtRate(p))}</td>
-          <td style="${tdR}">${escapeHtml(amt(p.housing))}</td>
-          <td style="${tdR}">${escapeHtml(amt(p.optOut))}</td>
-          <td style="${tdR}">${escapeHtml(amt(p.hsa))}</td>
-          <td style="${tdR}">${escapeHtml(amt(p.mileage))}</td>
-          <td style="${tdR}">${Number(p.b403) > 0 ? '&minus;' + escapeHtml(money(p.b403)) : '—'}</td>
-          <td style="${tdR}">${escapeHtml(money(p.gross))}</td>
-        </tr>`).join('')
-        + `<tr><td colspan="7" style="${subL}">Church Subtotal</td><td style="${subR}">${escapeHtml(money(body.church?.subtotal))}</td></tr>` : '';
-
       const label = String(body.periodLabel || '').slice(0, 80);
-      // Whether it was signed off is on the face of the email, because that is
-      // the difference between "here are the figures" and "these are final".
+      // The figures live in the attached CSV and PDF now, not a table in the
+      // body — the body just says the period and that they're attached.
+      // Whether the run was signed off still stays in the body itself,
+      // because that's the difference between "here are the figures" and
+      // "these are final", and it's worth knowing before opening either file.
       const stateLine = body.approved
-        ? `<p style="margin:0 0 4px;font:400 13px/1.5 Arial,sans-serif;color:#3B4C2E;">Approved${body.approvedBy ? ' by ' + escapeHtml(String(body.approvedBy).slice(0, 60)) : ''}.</p>`
-        : `<p style="margin:0 0 4px;font:400 13px/1.5 Arial,sans-serif;color:#7A5B18;">Not yet approved — these figures may still change.</p>`;
+        ? `Approved${body.approvedBy ? ' by ' + escapeHtml(String(body.approvedBy).slice(0, 60)) : ''}.`
+        : `Not yet approved — these figures may still change.`;
       const warn = body.incomplete
-        ? `<p style="margin:12px 0;padding:11px 13px;border:1px solid #E4C8C8;border-radius:8px;background:#FAEFEF;font:400 13px/1.5 Arial,sans-serif;color:#8A4A4A;"><strong>Incomplete:</strong> the childcare app could not be reached, so no MDO staff are included below.</p>`
+        ? `<p style="margin:10px 0 0;font:400 13px/1.5 Arial,sans-serif;color:#8A4A4A;"><strong>Incomplete:</strong> the childcare app could not be reached, so no MDO staff are in this report.</p>`
         : '';
 
-      const emailHtml = `<div style="max-width:680px;margin:0 auto;padding:22px;background:#FBF8F3;font-family:Arial,sans-serif;">
-        <h1 style="margin:0 0 4px;font:600 21px/1.25 Georgia,serif;color:#1E2D4A;">Timothy Lutheran — gross pay</h1>
-        <p style="margin:0 0 4px;font:400 14px/1.5 Arial,sans-serif;color:#4A4860;">Pay period ${escapeHtml(label)}</p>
-        ${stateLine}
+      const emailHtml = `<div style="max-width:520px;margin:0 auto;padding:22px;background:#FBF8F3;font-family:Arial,sans-serif;">
+        <h1 style="margin:0 0 10px;font:600 20px/1.3 Georgia,serif;color:#1E2D4A;">Timothy Lutheran — payroll</h1>
+        <p style="margin:0;font:400 14px/1.6 Arial,sans-serif;color:#3A3A4A;">Payroll for ${escapeHtml(label)} is attached (CSV and PDF).</p>
+        <p style="margin:6px 0 0;font:400 13px/1.5 Arial,sans-serif;color:${body.approved ? '#3B4C2E' : '#7A5B18'};">${stateLine}</p>
         ${warn}
-        ${mdoTable ? `<table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E7DFD1;border-radius:10px;overflow:hidden;margin-top:14px;">${mdoTable}</table>` : ''}
-        ${churchTable ? `<table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E7DFD1;border-radius:10px;overflow:hidden;margin-top:14px;">${churchTable}</table>` : ''}
-        <p style="margin:16px 0 0;padding:14px 16px;border:1px solid #E6C98E;border-radius:10px;background:#FDF8EC;font:400 14px/1.5 Arial,sans-serif;color:#1E2D4A;">
-          <strong style="font-size:17px;">Total Gross Pay ${escapeHtml(money(body.total))}</strong><br>
-          <span style="font-size:12.5px;color:#4A4860;">Gross, before withholding. Taxes, withholding and bank details stay with the payroll service.</span>
-        </p>
         <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(currentUser?.username || 'the office')}.</p>
       </div>`;
 
