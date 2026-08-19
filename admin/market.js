@@ -1197,26 +1197,21 @@ export async function fetchRoster(env) {
     // ⚠ A TIMEOUT, because this is another application on another host
     // and an admin screen must not sit waiting on one. Four seconds and
     // the tab renders its own honest empty state instead.
-    // ⚠ THIS GOES THROUGH THE SERVICE BINDING, NOT A PLAIN fetch() TO THE
-    // HOSTNAME — and that switch is what actually fixed this, after two
-    // rounds of cache-layer fixes (Cache-Control: no-store on Serve's own
-    // responses, cf:{cacheTtl:0} here, then a cache-busting query string)
-    // all failed to stop a live 404 that an external curl to the exact
-    // same URL with the exact same key never reproduced. The cache-busted
-    // URL — one no colo could possibly have cached before — STILL 404'd,
-    // which rules out edge caching as the cause entirely: something about
-    // a plain fetch() from inside this Worker to an external hostname on
-    // the SAME Cloudflare account was resolving differently than a real
-    // request from off-network, consistently, at whichever colo this
-    // Worker's own execution landed on. `env.VOLUNTEER_WORKER` (bound to
-    // the chms repo's Worker in wrangler.toml, the same binding
-    // `forwardToChms()` in `admin/forms.js` already uses) sidesteps all
-    // of that: it is an in-process call directly into the currently
-    // deployed chms Worker code, with no DNS, no edge routing and no
-    // cache layer of any kind in between — there is nothing left for a
-    // colo to get wrong. `env.VOLUNTEER_WORKER` is undefined only in a
-    // harness with no service bindings configured, where falling back to
-    // a plain fetch is fine since nothing there could be stale.
+    // ⚠ THE SERVICE BINDING, NOT A PLAIN fetch() TO THE HOSTNAME. A plain
+    // fetch from inside this Worker to serve.timothystl.org answered 404
+    // persistently, where the identical URL with the identical key fetched
+    // from off-network never did — and three cache-layer fixes in a row
+    // (no-store on Serve's side, cf:{cacheTtl:0} here, then a cache-busting
+    // query string that no colo could possibly have seen before) all failed
+    // to shift it, which rules out caching as the cause. `env.VOLUNTEER_WORKER`
+    // (bound to the chms Worker in wrangler.toml — the same binding
+    // `forwardToChms()` in `admin/forms.js` already uses) is an in-process
+    // call into the deployed chms code with no DNS, no edge routing and no
+    // cache in between, and it fixed it. Do not "simplify" this back to a
+    // hostname fetch.
+    //
+    // ⚠ It is undefined only in a harness with no service bindings, where the
+    // plain-fetch fallback is fine because nothing there could be stale.
     const req = new Request(
       'https://serve.timothystl.org/api/signups/christmasmarket/summary',
       { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
@@ -1224,25 +1219,14 @@ export async function fetchRoster(env) {
       ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
       : await fetch(req, { signal: AbortSignal.timeout(4000) });
     if (res.ok) vol = await res.json();
-    else {
-      // Live diagnostic: the status alone hasn't been enough to explain
-      // a persistent "404" here that no external reproduction (same
-      // key, same URL) has matched — capture what Serve actually sent
-      // back, since this screen is already gated on canMarket and
-      // nothing here is shown to a visitor.
-      let bodySnippet = '';
-      let ct = '';
-      try {
-        ct = res.headers.get('content-type') || '';
-        const cfRay = res.headers.get('cf-ray') || '';
-        const text = await res.text();
-        bodySnippet = (text || '').slice(0, 300);
-        volError = `Serve answered ${res.status} (${ct || 'no content-type'}` +
-          (cfRay ? `, cf-ray ${cfRay}` : '') + `): ${bodySnippet || '(empty body)'}`;
-      } catch (readErr) {
-        volError = `Serve answered ${res.status}, and the body could not be read: ${readErr.message || readErr}`;
-      }
-    }
+    // ⚠ THE STATUS AND NOTHING ELSE. This used to capture Serve's raw
+    // response body and its cf-ray and render both onto the screen — a
+    // diagnostic for the 404 above, which the service binding fixed. Another
+    // application's raw error output is not something the market coordinator
+    // has any use for, and a body captured from a host that is misbehaving is
+    // the last thing worth painting into an admin page. What she needs is
+    // whether the roster could be read, which the empty state already says.
+    else volError = `Serve answered ${res.status}.`;
   } catch (e) { volError = `Serve could not be reached: ${e.message || e}`; }
 }
 // ⚠ And an answer that is not the shape this expects is not an answer.

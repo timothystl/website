@@ -30,7 +30,7 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { churchDate, churchDatePlus, partOfDay, churchFormat } from './admin/when.js';
-import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
+import { VERSION, html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
@@ -46,8 +46,8 @@ import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth, 
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
-         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText,
-         isSafeObjectPosition, safeZoomFactor, snapSpace,
+         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, BLOCK_CSS_RAW, blockCssLink, cleanText,
+         isSafeObjectPosition, safeZoomFactor, snapSpace, sanitizeClassicRich,
          STARTERS, starterOf } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import SCHEDULER_HTML from './admin/scheduler.html';
@@ -507,6 +507,23 @@ const NEWS_ORDER_SQL = `ORDER BY pinned DESC,
 // until a visitor mentions it.
 const fixImageUrls = (s) => (s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s);
 
+// ── FX-04, THE LEGACY HALF ───────────────────────────────────────────────────
+// Sanitizing on write protects everything saved from now on. It does nothing
+// for the rows already in the table, which were stored exactly as posted for as
+// long as these forms have existed — and those are the ones the public site is
+// rendering into `innerHTML` today.
+//
+// So the public read paths sanitize on the way out too. That is belt and
+// braces for a new row and the ONLY protection for an old one.
+//
+// ⚠ DELIBERATELY NOT A ONE-TIME MIGRATION OVER THE STORED BODIES. A pass like
+// that cannot be undone, and the one thing worse than unsanitized markup in the
+// archive is a script that rewrites six years of newsletters and gets it wrong
+// on a body nobody thought to check. Cleaning on the way out is reversible by
+// deleting one line; the stored bytes stay exactly as they were, so if this
+// profile turns out to eat something real, the content is still there.
+const richOut = (v) => (v ? sanitizeClassicRich(v) : v);
+
 async function pageData(env, reqKey) {
   if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
   const p = (async () => {
@@ -618,7 +635,11 @@ async function pageData(env, reqKey) {
       // dropped them would be hiding content somebody deliberately added.
       sermonLoose: (sermonNotes || []).filter((n) => !n.series_id),
       classes: bibleClasses || [],
-      news, staff, newsletters,
+      // FX-04: the `newsfeed` block emits `n.body` as markup, server-side, into
+      // every published page in /api/pages. Same legacy problem as /api/news,
+      // same answer — see richOut above.
+      news: (news || []).map((r) => ({ ...r, body: richOut(r.body) })),
+      staff, newsletters,
       // The four core values, composed here so the block is self-filling: the
       // words come from admin/values.js, office-edited words layered on top
       // from the core_values table (mergedValues — blank column means "still
@@ -1569,7 +1590,34 @@ export default {
     // would sit behind the edge copy until it aged out on its own. `/values`
     // is the identical case — editing a value's wording or photo changes the
     // self-filling Core values block on every page carrying one.
-    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu') || path.startsWith('/partners') || path.startsWith('/values'))) {
+    //
+    // ── FX-19: THE LIST WAS SHORTER THAN THE CLAIM ABOVE IT ────────────────
+    // The comment said "any POST that could change what /api/pages says" and
+    // the list was four prefixes. `pageData()` is fed by a great deal more than
+    // that, and every one of those rows is rendered INTO the payload by a
+    // self-filling block — so editing a staff member, a giving amount, a Bible
+    // class, a sermon, a news post or a market setting changed what a published
+    // page renders while the edge went on serving the copy from before.
+    //
+    // ⚠ The staleness was not the 120s of the response's own max-age. It was
+    // that PLUS up to 300s in site-worker.js's own per-isolate `pagesCache` —
+    // about seven minutes, which is long enough to read as "my edit did not
+    // save" and go round again.
+    //
+    // Over-busting costs one rebuild of a cached response. Under-busting costs
+    // a public site that disagrees with the admin, so when in doubt the prefix
+    // goes in the list.
+    const PAGE_DATA_PREFIXES = [
+      '/pages', '/menu', '/partners', '/values',   // the page tree and the chrome
+      '/staff',                                    // → the Staff grid block
+      '/giving',                                   // → Giving widget, Amount ladder
+      '/christian-education',                      // → Bible classes block
+      '/sermons',                                  // → Sermon library, the homepage card
+      '/newsitems',                                // → News feed, News highlights
+      '/market',                                   // → Market facts, Market application
+      '/events',                                   // → Registration block
+    ];
+    if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(ctx);
     }
 
@@ -1585,6 +1633,19 @@ export default {
       return new Response(ADMIN_SHELL_CSS, { headers: {
         'Content-Type': 'text/css; charset=utf-8',
         'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Robots-Tag': 'noindex, nofollow',
+      }});
+    }
+    // ── FX-17: THE BLOCK STYLESHEET, ON THE PUBLIC PATH ──
+    // 85KB that used to travel inline on every published page and again inside
+    // the /api/pages JSON. Same treatment the admin's own CSS already gets, with
+    // one difference: this one is fetched CROSS-ORIGIN, by timothystl.org, so it
+    // needs the CORS header the others do not.
+    if (path === '/assets/blocks.css' && method === 'GET') {
+      return new Response(BLOCK_CSS_RAW, { headers: {
+        'Content-Type': 'text/css; charset=utf-8',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*',
         'X-Robots-Tag': 'noindex, nofollow',
       }});
     }
@@ -2903,7 +2964,10 @@ export default {
           footerColumns: publicFooter(colRows.results || [], menuRows.results || [], menuPages),
         },
         rendered,
-        css: Object.keys(rendered).length ? BLOCK_CSS : '',
+        // FX-17: a <link> at the versioned, immutable asset route rather than
+        // 85KB of bytes. Carries the same id="tlcb-css" the inline tag did, which
+        // is what the client's own "is it already here?" check reads.
+        css: Object.keys(rendered).length ? blockCssLink(VERSION) : '',
         // Two kinds of alternate address, deliberately merged into one map so
         // the router resolves both the same way and neither can be forgotten:
         // the short links derived from each page's last address segment, and
@@ -3082,7 +3146,9 @@ export default {
          ${NEWS_ORDER_SQL}
          LIMIT ?`
       ).bind(today, today, today, limit).all();
-      return new Response(JSON.stringify(rows.results), {
+      // FX-04: `body` is the one field here the SPA renders as markup.
+      const newsOut = (rows.results || []).map((r) => ({ ...r, body: richOut(r.body) }));
+      return new Response(JSON.stringify(newsOut), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -3241,7 +3307,14 @@ export default {
         if (!evtsByNewsletter[e.newsletter_id]) evtsByNewsletter[e.newsletter_id] = [];
         evtsByNewsletter[e.newsletter_id].push(e);
       }
-      const newsletters = rows.results.map(row => ({ ...row, events: evtsByNewsletter[row.id] || [] }));
+      // FX-04: pastor_note and a text ministry_content are rendered as markup
+      // by loadNewsletters(). ministry_type 'image' is a bare URL, not markup.
+      const newsletters = rows.results.map(row => ({
+        ...row,
+        pastor_note: richOut(row.pastor_note),
+        ministry_content: row.ministry_type === 'image' ? row.ministry_content : richOut(row.ministry_content),
+        events: evtsByNewsletter[row.id] || [],
+      }));
       return new Response(JSON.stringify(newsletters), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
@@ -3269,7 +3342,14 @@ export default {
       let bibleClasses = [];
       try { bibleClasses = JSON.parse(row.bible_classes || '[]'); } catch (_) {}
 
-      return new Response(JSON.stringify({ ...row, events: evts.results, news_items: newsItems, bible_classes: bibleClasses }), {
+      // FX-04: every rich field this endpoint hands the SPA, which drops all
+      // five straight into `innerHTML` in loadNewsletterDetail().
+      const clean = { ...row };
+      for (const k of ['pastor_note', 'secondary_note', 'wol_content', 'lasm_content', 'tertiary_note']) {
+        clean[k] = richOut(clean[k]);
+      }
+      if (clean.ministry_type !== 'image') clean.ministry_content = richOut(clean.ministry_content);
+      return new Response(JSON.stringify({ ...clean, events: evts.results, news_items: newsItems, bible_classes: bibleClasses }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -6391,7 +6471,8 @@ ${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' 
       if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
       const seriesId = form.get('series_id') || null;
       await env.DB.prepare('INSERT INTO sermon_notes (series_id, date, title, scripture, outline, youtube_url) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '', form.get('outline') || '', form.get('youtube_url') || '').run();
+        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '',
+              sanitizeClassicRich(form.get('outline') || ''), form.get('youtube_url') || '').run();   // FX-04
       const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
       return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
     }
@@ -6412,7 +6493,8 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
       const title = (form.get('title') || '').trim();
       const seriesId = form.get('series_id') || null;
       await env.DB.prepare('UPDATE sermon_notes SET series_id=?, date=?, title=?, scripture=?, outline=?, youtube_url=? WHERE id=?')
-        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '', form.get('outline') || '', form.get('youtube_url') || '', id).run();
+        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '',
+              sanitizeClassicRich(form.get('outline') || ''), form.get('youtube_url') || '', id).run();   // FX-04
       const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
       return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
     }
@@ -6800,17 +6882,29 @@ addEvent();
       // Strip <img src="blob:..."> tags — these are temporary in-browser URLs
       // that render as broken icons in email if the upload didn't finish.
       const stripBlobImgs = s => (s || '').replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+      // ── FX-04: EVERY RICH FIELD ON THIS FORM GOES THROUGH HERE ──────────
+      // These fields are stored as markup on purpose and rendered as markup on
+      // purpose — into six hundred inboxes by admin/email.js, and into
+      // `innerHTML` on timothystl.org by loadNewsletters()/loadNewsletterDetail().
+      // Until this line they were stored exactly as posted, so an account
+      // holding only `newsletter_edit` could put script on the public site.
+      //
+      // ⚠ sanitizeClassicRich, NOT sanitizeRich. The classic toolbar has a
+      // table button and writes its own image styles; the page editor's
+      // allowlist would delete both. See the note on CLASSIC_PROFILE in
+      // admin/blocks.js.
+      const cleanRich = s => sanitizeClassicRich(stripBlobImgs(s));
 
       // Weekly-specific fields
-      const pastorNote = stripBlobImgs(form.get('pastor_note') || '');
-      const secondaryNote = fmt === 'weekly' ? stripBlobImgs(form.get('secondary_note') || '') : '';
-      const wolContent = fmt === 'weekly' ? stripBlobImgs(form.get('wol_content') || '') : '';
-      const lasmContent = fmt === 'weekly' ? stripBlobImgs(form.get('lasm_content') || '') : '';
-      const tertiaryNote = fmt === 'weekly' ? stripBlobImgs(form.get('tertiary_note') || '') : '';
+      const pastorNote = cleanRich(form.get('pastor_note') || '');
+      const secondaryNote = fmt === 'weekly' ? cleanRich(form.get('secondary_note') || '') : '';
+      const wolContent = fmt === 'weekly' ? cleanRich(form.get('wol_content') || '') : '';
+      const lasmContent = fmt === 'weekly' ? cleanRich(form.get('lasm_content') || '') : '';
+      const tertiaryNote = fmt === 'weekly' ? cleanRich(form.get('tertiary_note') || '') : '';
       // Blank slots collapse, so filling the third box without the second
       // does not leave a hole in the email.
       const extraNotesJson = fmt === 'weekly'
-        ? serializeExtras(extrasFromForm(form).map((n) => ({ title: n.title, body: stripBlobImgs(n.body) })))
+        ? serializeExtras(extrasFromForm(form).map((n) => ({ title: n.title, body: cleanRich(n.body) })))
         : '[]';
       const tertiaryCtaLabel = fmt === 'weekly' ? form.get('tertiary_cta_label') || '' : '';
       const tertiaryCtaUrl = fmt === 'weekly' ? form.get('tertiary_cta_url') || '' : '';
@@ -6819,7 +6913,7 @@ addEvent();
       const ministryType = 'text';
 
       // Quick-announcement-specific fields
-      const quickBody = stripBlobImgs(form.get('quick_body') || '');
+      const quickBody = cleanRich(form.get('quick_body') || '');
       const ctaUrl = form.get('cta_url') || '';
       const ctaLabel = form.get('cta_label') || '';
 
@@ -7977,7 +8071,7 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const form = await request.formData();
       const title = form.get('title') || '';
       const summary = form.get('summary') || '';
-      const body = form.get('body') || '';
+      const body = sanitizeClassicRich(form.get('body') || '');   // FX-04
       // blob: URLs are only valid in the browser tab that created them — dead
       // for every other visitor. Drop rather than store one if it slips through.
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
@@ -8020,7 +8114,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const form = await request.formData();
       const title = form.get('title') || '';
       const summary = form.get('summary') || '';
-      const body = form.get('body') || '';
+      const body = sanitizeClassicRich(form.get('body') || '');   // FX-04
       // blob: URLs are only valid in the browser tab that created them — dead
       // for every other visitor. Drop rather than store one if it slips through.
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
@@ -9208,7 +9302,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         const slug = path.slice('/ministries/update/'.length);
         const form = await request.formData();
         const title = form.get('title') || '';
-        const content = form.get('content') || '';
+        const content = sanitizeClassicRich(form.get('content') || '');   // FX-04
         const ctaLabel = form.get('cta_label') || '';
         const ctaUrl = form.get('cta_url') || '';
         const ctaLabel2 = form.get('cta_label_2') || '';
@@ -9386,7 +9480,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const post_date = form.get('post_date') || churchDate();
         const event_date = form.get('event_date') || null;
         const expire_date = form.get('expire_date') || null;
-        const body = form.get('body') || '';
+        const body = sanitizeClassicRich(form.get('body') || '');   // FX-04
         // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
       const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
@@ -9457,7 +9551,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const post_date = form.get('post_date') || '';
         const event_date = form.get('event_date') || null;
         const expire_date = form.get('expire_date') || null;
-        const body = form.get('body') || '';
+        const body = sanitizeClassicRich(form.get('body') || '');   // FX-04
         // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
       const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
@@ -9624,7 +9718,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`,
         const form = await request.formData();
         const pageSlug = form.get('page_slug') || STATIC_PAGES[0].slug;
         const label = form.get('label') || 'Untitled notice';
-        const body = form.get('content') || '';
+        const body = sanitizeClassicRich(form.get('content') || '');   // FX-04
         // ⚠ This was a hardcoded 1 while the add form showed no control. It
         // shows one now, ticked by default, so it has to be read — otherwise
         // unticking it would look like it worked and publish anyway.
@@ -9652,7 +9746,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`,
         const form = await request.formData();
         const pageSlug = form.get('page_slug') || STATIC_PAGES[0].slug;
         const label = form.get('label') || 'Untitled notice';
-        const body = form.get('content') || '';
+        const body = sanitizeClassicRich(form.get('content') || '');   // FX-04
         const published = form.has('published') ? 1 : 0;
         const now = new Date().toISOString();
         const before = await env.DB.prepare('SELECT page_slug, label, body FROM notices WHERE id = ?').bind(id).first();
@@ -11867,13 +11961,13 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
       if (entry.entity_type === 'news_item') {
         await env.DB.prepare(
           'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
-        ).bind(before.title, before.summary, before.body, before.image_url, before.publish_date, before.event_date, before.expire_date, before.pinned, entry.entity_id).run();
+        ).bind(before.title, before.summary, sanitizeClassicRich(before.body), before.image_url, before.publish_date, before.event_date, before.expire_date, before.pinned, entry.entity_id).run();
         await logAudit(env.DB, currentUser, 'rollback', 'news_item', entry.entity_id, entry.entity_label, null, before);
         return new Response('', { status: 302, headers: { Location: '/audit-log?msg=rolledback' } });
       } else if (entry.entity_type === 'ministry_page') {
         await env.DB.prepare(
           'UPDATE youth_pages SET title=?, content=?, cta_label=?, cta_url=? WHERE slug=?'
-        ).bind(before.title, before.content, before.cta_label, before.cta_url, entry.entity_id).run();
+        ).bind(before.title, sanitizeClassicRich(before.content), before.cta_label, before.cta_url, entry.entity_id).run();
         await logAudit(env.DB, currentUser, 'rollback', 'ministry_page', entry.entity_id, entry.entity_label, null, before);
         return new Response('', { status: 302, headers: { Location: '/audit-log?msg=rolledback' } });
       } else if (entry.entity_type === 'ministry_post') {

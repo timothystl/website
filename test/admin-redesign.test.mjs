@@ -4534,5 +4534,136 @@ group('with Google unreachable the feed still answers, and says which half is mi
   } finally { globalThis.fetch = realFetch; }
 }
 
+// ── FX-04, end to end through the real Worker ───────────────────────────────
+// The unit tests in admin/blocks.test.mjs pin what sanitizeClassicRich does.
+// This pins that it is actually WIRED — to the write path, so a new row is
+// clean, and to the public read path, so the rows already in the table are
+// neutralized without a destructive migration over six years of newsletters.
+group('classic rich fields cannot carry script to the public site (FX-04)');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ALL_PERMISSIONS, 'editor');
+
+  const NASTY = '<p>Real words.</p><script>alert(1)</script><img src=x onerror=alert(2)>';
+  const TABLE = '<table><tbody><tr><td style="text-align:center">Sunday</td></tr></tbody></table>';
+
+  // ── the write path ──
+  const created = await call(env, '/newsitems/create', { cookie, method: 'POST', form: {
+    title: 'A post', summary: 'x', body: NASTY + TABLE,
+    publish_date: churchDate(), ch_web: '1',
+  }});
+  eq(created.status, 302, 'the news post saves');
+  const stored = db.prepare("SELECT body FROM news_items WHERE title = 'A post'").get();
+  ok(stored, 'and the row is there');
+  ok(!/script/i.test(stored.body), 'STORED clean — no script tag reaches the database');
+  ok(!/onerror/i.test(stored.body), 'and no event handler either');
+  has(stored.body, 'Real words.', 'the words survive');
+  has(stored.body, '<table>', "and so does the table — this is the half a naive fix breaks");
+  has(stored.body, 'text-align:center', 'including the alignment inside it');
+
+  // ── the legacy read path ──
+  // A row written before FX-04 existed, inserted straight into the table the
+  // way six years of them already sit there. Nothing sanitized it on the way
+  // in, so the public endpoint is the only thing standing between it and
+  // `innerHTML` on timothystl.org.
+  db.prepare('INSERT INTO news_items (title, summary, body, publish_date, channels) VALUES (?,?,?,?,?)')
+    .run('Legacy', 'x', NASTY, churchDate(), 'web');
+  const legacyRaw = db.prepare("SELECT body FROM news_items WHERE title = 'Legacy'").get().body;
+  has(legacyRaw, '<script>', 'the legacy row really is unsanitized in the table');
+
+  const feed = await (await call(env, '/api/news', { fresh: true })).json();
+  const legacy = feed.find((r) => r.title === 'Legacy');
+  ok(legacy, 'the legacy post is served');
+  ok(!/script/i.test(legacy.body), '/api/news cleans it on the way out');
+  has(legacy.body, 'Real words.', 'without losing the words');
+  ok(legacyRaw.includes('<script>'),
+    'and the stored bytes are UNCHANGED — cleaning on read is reversible, a migration is not');
+
+  // ── the newsletter, which is the field that reaches six hundred inboxes ──
+  db.prepare("INSERT INTO newsletters (subject, pastor_note, published_at, status) VALUES (?,?,?,'published')")
+    .run('An issue', NASTY, churchDate());
+  const nlId = db.prepare("SELECT id FROM newsletters WHERE subject = 'An issue'").get().id;
+  const list = await (await call(env, '/api/newsletters', { fresh: true })).json();
+  const issue = list.find((n) => n.subject === 'An issue');
+  ok(issue && !/script/i.test(issue.pastor_note), '/api/newsletters cleans the pastor note');
+  const detail = await (await call(env, '/api/newsletter/' + nlId, { fresh: true })).json();
+  ok(!/script/i.test(detail.pastor_note), 'and so does /api/newsletter/:id');
+  has(detail.pastor_note, 'Real words.', 'still without losing the words');
+}
+
+// ── FX-17: the block stylesheet is a link, not 85KB, and it is cacheable ────
+group('the block stylesheet ships as a cacheable asset (FX-17)');
+{
+  const { env } = await boot();
+
+  const res = await call(env, '/assets/blocks.css', { fresh: true });
+  eq(res.status, 200, '/assets/blocks.css answers');
+  has(res.headers.get('content-type') || '', 'text/css', 'as CSS');
+  has(res.headers.get('cache-control') || '', 'immutable', 'cached for a year and immutable');
+  // ⚠ CROSS-ORIGIN, unlike /assets/admin.css. timothystl.org is the one asking.
+  eq(res.headers.get('access-control-allow-origin'), '*', 'and reachable from the public site');
+  const css = await res.text();
+  ok(css.length > 50000, 'it really is the whole stylesheet');
+  ok(!css.trimStart().startsWith('<style'), 'served as raw CSS, not as a <style> tag');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(Object.keys(api.rendered).length > 0,
+    'there are published pages, so this assertion is not vacuous');
+  has(api.css, '<link', '/api/pages ships a <link>');
+  has(api.css, 'id="tlcb-css"',
+    'carrying the id the client reads to decide whether the stylesheet is already here');
+  has(api.css, '/assets/blocks.css', 'pointed at the asset route');
+  ok(!api.css.includes('<style'), 'and not the bytes');
+  ok(api.css.length < 300,
+    `the payload carries a link, not a stylesheet — got ${api.css.length} bytes`);
+}
+
+// ── FX-19: everything that changes what /api/pages says busts the edge copy ──
+// The chokepoint runs BEFORE routing, so this is testable without caring
+// whether the route behind each prefix exists, what it does, or whether the
+// signed-in account may use it. What is being pinned is the prefix list.
+group('the /api/pages cache chokepoint covers what feeds pageData (FX-19)');
+{
+  const { env } = await boot();
+  const deleted = [];
+  const realCaches = globalThis.caches;
+  globalThis.caches = { default: {
+    async match() { return null; },
+    async put() {},
+    async delete(req) { deleted.push(typeof req === 'string' ? req : req.url); return true; },
+  }};
+  try {
+    // Each of these feeds a self-filling block, so a write under it changes
+    // what a published page renders without the page itself being touched.
+    const busts = [
+      ['/pages/x/save', 'a page'],
+      ['/menu/reorder', 'the menu'],
+      ['/partners/update/1', 'a partner'],
+      ['/values/update/acceptance', 'a core value'],
+      ['/staff/create', 'a staff member — the Staff grid block'],
+      ['/giving-tiers/add', 'a giving amount — the Amount ladder block'],
+      ['/christian-education/create', 'a Bible class — the Bible classes block'],
+      ['/sermons/new-note', 'a sermon — the Sermon library block'],
+      ['/newsitems/create', 'a news post — the News feed block'],
+      ['/market/settings', 'a market setting — the Market facts block'],
+      ['/events/new', 'an event — the Registration block'],
+    ];
+    for (const [path, what] of busts) {
+      deleted.length = 0;
+      await call(env, path, { method: 'POST', form: { x: '1' } });
+      ok(deleted.some((u) => u.includes('/api/pages')), `saving ${what} busts the edge copy`);
+    }
+
+    // ⚠ And it is a list, not "bust on every POST". A login attempt changes
+    // nothing about what a visitor is served, and rebuilding that payload
+    // means five queries and a render of every published page.
+    deleted.length = 0;
+    await call(env, '/login', { method: 'POST', form: { username: 'x', password: 'y' } });
+    ok(!deleted.length, 'a POST that cannot change the public site does not bust it');
+  } finally {
+    if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
