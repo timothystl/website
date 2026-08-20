@@ -3032,7 +3032,24 @@ export default {
       const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
+      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. Contact
+      // and Prayer POST to a screened, Turnstile-checked endpoint
+      // (/api/contact, /api/prayer) — real behavior no block on this site can
+      // express, the same reason give.timothystl.org is kept off the block
+      // editor entirely. Unlike give-landing these are still ordinary pages
+      // (they belong in `list`, in the menu, at their own address, and their
+      // Page tab — hero text, an eyebrow, whatever else — is still editable
+      // and still publishable); it is only the entry in `rendered` that is
+      // withheld, which is what makes the client and the edge injector both
+      // fall back to the hardcoded native form with no change on either side.
+      // Found live: both pages had been published with a "Signup form" block
+      // (a Google Form embed with no URL set) standing in for the real form —
+      // two spans styled to look like a field and a button, neither wired to
+      // anything. A dead form is worse than a missing one; this makes it
+      // structurally impossible for either page to ship one again.
+      const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
       for (const r of list) {
+        if (NATIVE_FORM_ONLY_PAGE_IDS.has(r.id)) continue;
         // A page that links out has no content of its own. Rendering blocks it
         // may still be carrying from before would give the visitor a flash of a
         // page that is about to redirect out from under them.

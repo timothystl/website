@@ -5304,5 +5304,41 @@ group('Push Alert composes a message for the OTHER audience, and only that one')
   eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
 }
 
+group('Contact and Prayer are never rendered from blocks, even when published');
+{
+  // Found live: both pages ship a seeded draft with a "Signup form" block in
+  // place of the real form — a Google Form embed with no URL, which the
+  // office can (and, on the real site, did) Publish without noticing it
+  // replaces a working, spam-screened, Turnstile-checked form with two dead
+  // <span>s. No block on this site can express that behavior, the same
+  // reason give.timothystl.org is kept off the block editor entirely — so
+  // these two ids must never appear in `rendered`, however their own
+  // published_blocks reads.
+  const { db, env } = await boot();
+
+  // The default seed's own draft has exactly this trap already in it —
+  // confirmed directly, not assumed: contact-2 / prayer-2 are type:'form'
+  // with url:''. Publishing is copying draft to published_blocks, so that is
+  // exactly what this does.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id IN ('contact','prayer')").run();
+  // A control page, published with a block stack of its own, proves the
+  // exclusion is scoped to these two ids and not a general regression.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id = 'about' AND blocks IS NOT NULL AND blocks != '[]'").run();
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!api.rendered.contact, 'contact is never rendered from blocks, whatever is published for it');
+  ok(!api.rendered.prayer, 'neither is prayer');
+  ok(!!api.rendered.about, 'a normal page with the same shape of publish still renders — the exclusion is scoped, not a general break');
+
+  // Still ordinary pages: addressable, in the page list, at their own slug —
+  // only the rendered HTML entry is withheld.
+  const contactEntry = api.pages.find((p) => p.id === 'contact');
+  const prayerEntry = api.pages.find((p) => p.id === 'prayer');
+  ok(!!contactEntry, 'contact still appears in the page list');
+  ok(!!prayerEntry, 'prayer still appears in the page list');
+  eq(contactEntry.slug, '/contact', 'at its own address, so the router and the menu are unaffected');
+  eq(prayerEntry.slug, '/prayer', 'same for prayer');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
