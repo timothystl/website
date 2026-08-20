@@ -63,6 +63,16 @@ import { LINKS_JS } from './admin/links.js';
 // the top of that file.
 import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
+// ⚠ THE ONE PLACE THIS SET IS DECLARED. Both /api/pages (what the public site
+// reads) and the page editor's own GET (what tells whoever is editing the
+// page that publishing here does nothing) read this same Set — two separate
+// declarations is exactly how a page could get added to one and not the
+// other, which is worse than neither: an editor that silently disagrees with
+// what it is editing. See "Contact and Prayer never render from blocks" for
+// why these two exist at all — no block on this site can express a screened,
+// Turnstile-checked POST to /api/contact or /api/prayer, so the real form
+// lives only in public/index.html's hardcoded markup and always will.
+const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
 // /christmasmarket/vendors, same shape as give-landing-seed.js and for the
 // same reason — a live payment application the generic extractor never had a
 // chance to convert, because it never had a tools/extract-pages.mjs PAGES
@@ -3032,22 +3042,19 @@ export default {
       const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
-      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. Contact
-      // and Prayer POST to a screened, Turnstile-checked endpoint
-      // (/api/contact, /api/prayer) — real behavior no block on this site can
-      // express, the same reason give.timothystl.org is kept off the block
-      // editor entirely. Unlike give-landing these are still ordinary pages
-      // (they belong in `list`, in the menu, at their own address, and their
-      // Page tab — hero text, an eyebrow, whatever else — is still editable
-      // and still publishable); it is only the entry in `rendered` that is
-      // withheld, which is what makes the client and the edge injector both
-      // fall back to the hardcoded native form with no change on either side.
-      // Found live: both pages had been published with a "Signup form" block
-      // (a Google Form embed with no URL set) standing in for the real form —
-      // two spans styled to look like a field and a button, neither wired to
-      // anything. A dead form is worse than a missing one; this makes it
-      // structurally impossible for either page to ship one again.
-      const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
+      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. See the
+      // constant's own comment near the top of the file for why. Unlike
+      // give-landing these are still ordinary pages — in `list`, in the menu,
+      // at their own address — only the entry in `rendered` is withheld,
+      // which is what makes the client and the edge injector both fall back
+      // to the hardcoded native form with no change on either side. The
+      // editor's own GET route (below, /pages/api/page/:id) sends the same
+      // flag back to whoever opens either page, so the canvas can say
+      // plainly that nothing here reaches the live site — found live without
+      // that warning: both pages had been published with a "Signup form"
+      // block (a Google Form embed with no URL set) standing in for the real
+      // form, and the editor's own preview never disagreed until a person
+      // compared it against the actual site by hand.
       for (const r of list) {
         if (NATIVE_FORM_ONLY_PAGE_IDS.has(r.id)) continue;
         // A page that links out has no content of its own. Rendering blocks it
@@ -9082,6 +9089,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // rather than worked out in the browser, so the editor never draws
             // a button that would come back "there is no redesigned layout".
             hasRedesign: !!REDESIGN_BLOCKS[row.id],
+            // The one thing publishing this page can never do. See the
+            // constant's own comment for why — read it before removing this.
+            neverLive: NATIVE_FORM_ONLY_PAGE_IDS.has(row.id),
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,

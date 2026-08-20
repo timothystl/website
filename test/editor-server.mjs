@@ -68,6 +68,7 @@ export function createEditorServer(seed = {}) {
       blocks: JSON.stringify(sanitizeBlocks(p.blocks || starterBlocks(p.title))),
       published_blocks: JSON.stringify(sanitizeBlocks(p.blocks || [])),
       change_log: '[]', updated_at: new Date().toISOString(),
+      neverLive: !!p.neverLive,
     });
   }
 
@@ -168,6 +169,15 @@ export function createEditorServer(seed = {}) {
           role: ROLE,
           editors: ROLE === 'office' ? EDITORS : [],
           config: blocksClientConfig(),
+          // ⚠ TOP LEVEL, A SIBLING OF `page` — NOT NESTED INSIDE IT. The real
+          // Worker sends it there (beside its own `hasRedesign`), and the
+          // client reads `data.neverLive`, not `data.page.neverLive`. Nesting
+          // this inside `page` is the exact shape-mismatch this comment
+          // exists to prevent: it looked like a faithful mirror and still
+          // disagreed, which is worse than sending nothing — a test written
+          // against it would have passed while proving nothing about the real
+          // response shape. Sourced from the fixture so a test can seed it.
+          neverLive: isSitePage ? !!row.neverLive : false,
           media,
           html: renderPage(blocks, Object.assign(
             { editing: true, slug, withCss: true, data: DATA }, layoutFor(slug, isSitePage))),
