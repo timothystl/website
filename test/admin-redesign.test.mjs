@@ -14,7 +14,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { churchDate, churchDatePlus } from '../admin/when.js';
 import { openCountOf } from '../admin/intake.js';
-import worker from '../tlc-admin-worker.js';
+import worker, { PAYROLL_RPC_FNS } from '../tlc-admin-worker.js';
+import { pushToAllSubscribers, pushToPublicSubscribers } from '../admin/webpush.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 // ⚠ Read from the record rather than pinned to a literal hex. These assertions
 // are about "the preview shows the site's real bar, not a color that exists
@@ -29,6 +30,7 @@ import { SCHOOL_EVENTS } from '../admin/school-calendar-seed.js';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
+const payrollPage = readFileSync(new URL('../admin/payroll.html', import.meta.url), 'utf8');
 const { hasMetadata } = await import('../admin/exif.js');
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
 const eq = (a, b, msg) => ok(a === b, `${msg} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
@@ -112,6 +114,26 @@ function signIn(db, permissions = ALL_PERMISSIONS, username = 'dinger') {
     .run(token, uid, username, JSON.stringify(permissions),
       new Date(Date.now() + 864e5).toISOString(), new Date().toISOString());
   return { cookie: `tlc_session=${token}`, uid };
+}
+
+// A real EC keypair, shaped exactly like a real VAPID pair — buildVapidAuthHeader
+// (admin/webpush.js) signs a real JWT against it, so a placeholder string like
+// 'k' throws inside crypto.subtle.importKey before a push ever gets as far as
+// fetch(). Shared by every group that actually sends a push, not regenerated
+// per assertion.
+function fakeVapidKeys() {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { VAPID_PUBLIC_KEY: ecdh.getPublicKey().toString('base64url'), VAPID_PRIVATE_KEY: ecdh.getPrivateKey().toString('base64url') };
+}
+
+// Real EC subscription key material — sendWebPush encrypts against p256dh/auth
+// before it ever reaches fetch(), so a placeholder string throws inside
+// encryptPayload and the row silently never gets that far.
+function fakeSubKeys() {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
 }
 
 // ── the schema the overhaul adds ─────────────────────────────────────────────
@@ -2623,6 +2645,239 @@ group('an approved payroll period is locked server-side');
   eq(unapprove.status, 200, 'the approval itself can still be removed');
 
   globalThis.fetch = realFetch;
+}
+
+group('the voters reports are public, and at least not indexable (FX-12)');
+{
+  // ⚠ THIS GROUP PINS A DECISION, NOT A FIX. There is no member login anywhere
+  // on timothystl.org, so /api/voters cannot be gated without building one —
+  // whether a Zoom link and a set of council reports should be behind a
+  // sign-in is the congregation's call. What IS closed is the crawler half:
+  // public/robots.txt governs timothystl.org and says nothing at all about
+  // this origin, so both were indexable the moment an address appeared
+  // anywhere crawlable.
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO voters_page (id, meeting_info, zoom_link, files_json) VALUES (1,'Annual meeting','https://zoom.example/j/1','[]')").run();
+
+  const api = await call(env, '/api/voters');
+  eq(api.status, 200, 'the voters page still gets its data with no credential');
+  has(await api.text(), 'zoom.example', 'including the meeting link');
+  has(api.headers.get('x-robots-tag') || '', 'noindex', 'but it is not something to index');
+
+  // The default R2 stub answers null for everything; the point here is the
+  // headers on a hit, so give it one object to find.
+  env.IMAGES = { ...env.IMAGES, get: async () => ({ body: 'PDF', writeHttpMetadata(h) { h.set('Content-Type', 'application/pdf'); } }) };
+  const doc = await call(env, '/docs/report.pdf');
+  eq(doc.status, 200, 'and a council report still downloads');
+  has(doc.headers.get('x-robots-tag') || '', 'noindex', 'without becoming a search result');
+}
+
+group('the renter portal carries security headers of its own (FX-06)');
+{
+  // ⚠ THIS PAGE IS AUTHENTICATED BY A BEARER TOKEN IN ITS OWN URL, which makes
+  // it a different problem from every other page in this Worker: anything that
+  // leaks the address leaks the booking history behind it.
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,access_token,active) VALUES (8,'Hoops','A','a@b.example','tok8',1)").run();
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/gym/book/tok8'), env, ctx);
+  eq(res.status, 200, 'the portal still serves');
+  const h = (k) => res.headers.get(k) || '';
+
+  // The Tithe.ly pay button opens in a new tab. Without a referrer policy the
+  // token travels to Tithe.ly in the Referer header of that navigation.
+  eq(h('referrer-policy'), 'no-referrer', 'no Referer leaves this page');
+  has(h('x-robots-tag'), 'noindex', 'a token URL pasted anywhere crawlable is not indexed');
+  has(h('cache-control'), 'no-store', 'one renter’s bookings are not left in a shared cache');
+  eq(h('x-content-type-options'), 'nosniff', 'and nothing here is sniffed into another type');
+  has(h('content-security-policy'), "frame-ancestors 'none'", 'the page with the POST actions cannot be framed');
+  has(h('content-security-policy'), "form-action 'self'", 'and its forms cannot be re-pointed');
+
+  // ⚠ rel="noopener noreferrer" is the other half of the Referer story — the
+  // header covers the request, this covers window.opener on the opened page.
+  // Asserted against the SOURCE rather than one rendered route: the pay links
+  // are on the invoice and booking views, and a test that happened to render
+  // the calendar would pass while saying nothing.
+  const gymSrc = readFileSync(new URL('../admin/gym.js', import.meta.url), 'utf8');
+  const blanks = [...gymSrc.matchAll(/<a\b[^>]*?target="_blank"[^>]*?>/g)].map((m) => m[0]);
+  ok(blanks.length >= 3, 'the portal really does open things in a new tab: ' + blanks.length);
+  for (const a of blanks) ok(/noopener/.test(a) && /noreferrer/.test(a), 'it opens safely: ' + a.slice(0, 110));
+
+  // The site's own crawler instruction, which is a different mechanism from
+  // the header and is the one Google reads before it ever requests the page.
+  const robots = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8');
+  has(robots, 'Disallow: /gym/', 'and robots.txt keeps crawlers off the portal entirely');
+}
+
+group('a newsletter that has not been sent is not public (FX-07)');
+{
+  // ⚠ IDs ARE SEQUENTIAL, so "you would have to guess the id" is not a
+  // control. The list endpoint two routes above this one has always filtered
+  // on status; the single-issue route was SELECT * with no filter at all.
+  const { db, env } = await boot();
+  const nl = (id, subject, status, note, camp, appr) => db.prepare(
+    `INSERT INTO newsletters (id,subject,status,published_at,pastor_note,brevo_campaign_id,approval_status)
+     VALUES (?,?,?,?,?,?,?)`).run(id, subject, status, '2026-08-01', note, camp, appr);
+  nl(901, 'Draft under review', 'draft', '<p>Not sent yet.</p>', 'cmp-1', 'pending');
+  nl(902, 'This week', 'published', '<p>Real issue.</p>', 'cmp-2', 'approved');
+
+  const draft = await call(env, '/api/newsletter/901');
+  eq(draft.status, 404, 'a draft is not served at all');
+  lacks(await draft.text(), 'Not sent yet', 'and none of its words leak in the refusal');
+
+  const live = await call(env, '/api/newsletter/902');
+  eq(live.status, 200, 'a published issue still is');
+  const row = JSON.parse(await live.text());
+  has(row.subject, 'This week', 'with its content');
+
+  // ⚠ AND ONLY THE PUBLIC COLUMNS. SELECT * shipped the Brevo campaign id and
+  // the approval state to anybody who asked — internal bookkeeping about how
+  // an issue was sent, on a public endpoint.
+  ok(!('brevo_campaign_id' in row), 'the Brevo campaign id stays internal');
+  ok(!('approval_status' in row), 'so does who approved it');
+}
+
+group('an upload needs a reason to be uploading (FX-08)');
+{
+  // ⚠ Nothing ever deletes an R2 object, so this is not "can they write a
+  // file" — it is "can they host a file on the church's domain forever".
+  const { db, env } = await boot();
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const upload = async (cookie, route = '/api/upload-image', type = 'image/png') => {
+    const fd = new FormData();
+    fd.append('file', new Blob([png], { type }), 'x.png');
+    return worker.fetch(new Request('https://admin.timothystl.org' + route, {
+      method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' }, body: fd,
+    }), env, ctx);
+  };
+
+  // The Bookkeeper preset is the honest case: a real account, a real job, and
+  // no business putting files on the website.
+  const money = signIn(db, ['payroll_manage', 'giving_manage'], 'book');
+  eq((await upload(money.cookie)).status, 403, 'somebody who edits no content cannot upload an image');
+  eq((await upload(money.cookie, '/api/upload-doc', 'application/pdf')).status, 403, 'nor a document');
+
+  // And the people whose screens have an image picker are unaffected — this
+  // must not become a gate the office runs into every day.
+  const leader = signIn(db, ['ministries_edit'], 'leader');
+  ok((await upload(leader.cookie)).status !== 403, 'a ministry leader still uploads');
+  const office = signIn(db, ['notices_edit'], 'office');
+  ok((await upload(office.cookie, '/api/upload-doc', 'application/pdf')).status !== 403, 'and the voters documents still upload');
+
+  // Signed out is still the first gate, not the second.
+  // Signed out is still the first gate, not the second. ⚠ The session gate
+  // answers every unauthenticated request with the login PAGE, at 200 — an API
+  // POST included — so the honest assertion is that what comes back is the
+  // login screen and not an upload result. (That the status is 200 rather than
+  // 401 on an API path is a pre-existing oddity of the gate, not of this fix.)
+  const out = await upload('');
+  const outBody = await out.text();
+  has(outBody, '<!DOCTYPE html>', 'signed out, the upload endpoint answers with the login page');
+  lacks(outBody, '"url"', 'and never with an uploaded file');
+}
+
+group('the payroll proxy no longer fingerprints its own secret (FX-09)');
+{
+  // A Worker secret is write-only from every tool that can reach this repo, so
+  // when the two sides disagreed there was genuinely no other way to see
+  // which. That mismatch is resolved, and what was left was a deliberate
+  // partial disclosure of a secret with no remaining reason.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ code: '28000', message: 'invalid secret' }), { status: 403 });
+
+  const call403 = (e) => worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
+    body: '{}',
+  }), e, ctx);
+
+  const secret = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+  const withSecret = await (await call403({ ...env, PAYROLL_PROXY_SECRET: secret })).text();
+  lacks(withSecret, secret.slice(0, 6), 'the first characters of the secret are not in the response');
+  lacks(withSecret, secret.slice(-6), 'nor the last');
+  lacks(withSecret, String(secret.length), 'nor its length');
+
+  // ⚠ The half that still helps and reveals nothing SURVIVES: whether this
+  // Worker holds the secret at all. Removing that would have made an unset
+  // secret indistinguishable from a wrong one, which is the diagnosis the
+  // fingerprint existed for in the first place.
+  const unset = await (await call403({ ...env, PAYROLL_PROXY_SECRET: '' })).text();
+  has(unset, 'PAYROLL_PROXY_SECRET is not set', 'an unset secret still says so plainly');
+  has(unset, 'wrangler', 'and names the way out');
+
+  globalThis.fetch = realFetch;
+}
+
+group('the Supabase proxy forwards thirteen RPC calls and refuses everything else (FX-11)');
+{
+  // It used to forward ANY path under /sb/ to Supabase with the caller's key —
+  // an authenticated open relay onto the whole project (AW-7). The 2026-08-12
+  // migration left `anon` with no direct grant on any payroll table, which
+  // narrows the blast radius but is not the same guarantee: that is the
+  // credential happening not to be able to do much, and it is one Supabase
+  // GRANT away from being wrong again.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+  let forwarded = [];
+  globalThis.fetch = async (input) => {
+    forwarded.push(typeof input === 'string' ? input : input.url);
+    return new Response('null', { status: 200 });
+  };
+  const H = { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' };
+  const post = (p, body = '{}') => worker.fetch(new Request('https://admin.timothystl.org' + p,
+    { method: 'POST', headers: H, body }), env, ctx);
+
+  forwarded = [];
+  const ok13 = await post('/sb/rest/v1/rpc/payroll_get_staff');
+  eq(ok13.status, 200, 'an allowlisted RPC still goes through');
+  eq(forwarded.length, 1, 'and really reached Supabase');
+
+  // ⚠ The four tables the migration closed. A 403 HERE means the request was
+  // never forwarded at all, which is a different and stronger fact than
+  // Supabase refusing it on arrival.
+  forwarded = [];
+  for (const t of ['church_staff', 'church_staff_period_entries', 'payroll_periods', 'staff_pto_entries']) {
+    eq((await post('/sb/rest/v1/' + t)).status, 403, 'the ' + t + ' table is refused at the proxy');
+  }
+  eq((await post('/sb/rest/v1/rpc/some_other_function')).status, 403, 'so is an RPC that is not one of ours');
+  eq((await post('/sb/auth/v1/token')).status, 403, 'and so is the auth endpoint');
+  eq(forwarded.length, 0, 'and not one of them reached Supabase');
+
+  // ⚠ PostgREST executes an RPC on GET too, so allowing the method would put a
+  // payroll write one address bar away from a CSRF — the Origin gate only runs
+  // on non-GET requests.
+  forwarded = [];
+  const viaGet = await worker.fetch(new Request(
+    'https://admin.timothystl.org/sb/rest/v1/rpc/payroll_save_hours', { headers: { cookie } }), env, ctx);
+  eq(viaGet.status, 403, 'a GET at an allowlisted RPC is refused too');
+  eq(forwarded.length, 0, 'and never reached Supabase');
+
+  // ⚠ THE LIST IS EXACTLY WHAT THE PAGE CALLS, in both directions — a
+  // fourteenth call added to the page without being added here would 403 in
+  // front of somebody running payroll, which is a bad way to find out.
+  const called = new Set([...payrollPage.matchAll(/sb\.rpc\('([a-z_]+)'/g)].map((m) => m[1]));
+  const allowed = new Set(PAYROLL_RPC_FNS);
+  eq(called.size, 13, 'the page calls thirteen RPC functions');
+  for (const f of called) ok(allowed.has(f), 'the proxy allows ' + f + ', which the page calls');
+  for (const f of allowed) ok(called.has(f), 'the page calls ' + f + ', which the proxy allows');
+
+  globalThis.fetch = realFetch;
+}
+
+group('the admin shell states frame-ancestors, and no longer allows eval (FX-10)');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const csp = (await call(env, '/dashboard', { cookie })).headers.get('content-security-policy') || '';
+
+  // ⚠ frame-ancestors DOES NOT INHERIT FROM default-src. Every admin screen
+  // except the page editor — which sets its own — was framable.
+  has(csp, "frame-ancestors 'none'", 'an admin screen cannot be framed');
+  has(csp, "base-uri 'none'", 'and an injected base tag cannot re-point its assets');
+  ok(!/unsafe-eval/.test(csp), "and script-src no longer allows 'unsafe-eval': " + csp);
+  // The half that was already right, pinned so a rewrite cannot lose it.
+  has(csp, "'unsafe-inline'", 'inline script is still allowed, which the shell genuinely needs');
 }
 
 group('payroll access is gated on its own permission');
@@ -5418,6 +5673,214 @@ group('the sidebar badge counts open Intake items, from the database alone');
   const afterHtml = await dashAfter.text();
   lacks(afterHtml, `${openNow} item(s) need a decision`, 'the old count is gone');
   has(afterHtml, `${openNow - 1} item(s) need a decision`, 'and it dropped by exactly the one item that was just published');
+}
+
+group('push notifications have two audiences, and the six existing triggers stay in the staff one');
+{
+  // Andrew's answer to the review's own SEC-6/FX-29 finding — not scoping the
+  // six existing triggers by permission, but a second, genuinely different
+  // audience: "all push notifications should go to admin, and then
+  // notifications from admin can go out to all users."
+  const { db, env } = await boot();
+  const cols = db.prepare('PRAGMA table_info(push_subscriptions)').all().map((r) => r.name);
+  ok(cols.includes('audience'), 'the table carries an audience column');
+
+  // A staff row from BEFORE this shipped — inserted the way the existing
+  // /api/push/subscribe route always has, naming no audience at all — has to
+  // land on 'staff' by the column's own DEFAULT, not by a backfill script.
+  const k1 = fakeSubKeys();
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, ?, ?, ?)')
+    .run('https://fcm.example/old-staff-device', k1.p256dh, k1.auth);
+  const oldRow = db.prepare("SELECT audience FROM push_subscriptions WHERE endpoint = 'https://fcm.example/old-staff-device'").get();
+  eq(oldRow.audience, 'staff', 'a pre-existing subscription is a staff one, with no migration script');
+
+  const realFetch = globalThis.fetch;
+  const reached = [];
+  globalThis.fetch = async (input) => {
+    reached.push(typeof input === 'string' ? input : input.url);
+    return new Response('', { status: 201 });
+  };
+  const k2 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (2, ?, ?, ?, 'staff')")
+    .run('https://fcm.example/staff-2', k2.p256dh, k2.auth);
+  const k3 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')")
+    .run('https://fcm.example/pew-visitor', k3.p256dh, k3.auth);
+
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+
+  reached.length = 0;
+  const staffResult = await pushToAllSubscribers(envWithVapid, { title: 'x', body: 'y' });
+  eq(staffResult.total, 2, 'the default call reaches every STAFF row — the old one and the new one');
+  ok(reached.every((u) => !u.includes('pew-visitor')), 'and never the public row: ' + JSON.stringify(reached));
+
+  reached.length = 0;
+  const publicResult = await pushToPublicSubscribers(envWithVapid, { title: 'x', body: 'y' });
+  eq(publicResult.total, 1, 'pushToPublicSubscribers reaches only the public row');
+  ok(reached.some((u) => u.includes('pew-visitor')), 'the visitor really was pushed');
+  ok(reached.every((u) => !u.includes('staff')), 'and no staff device was, from the public call');
+
+  globalThis.fetch = realFetch;
+}
+
+group('a visitor subscribes on the public site, not the admin');
+{
+  const { db, env } = await boot();
+  const fakeSub = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+    keys: { p256dh: 'BN' + 'A'.repeat(85), auth: 'B'.repeat(22) },
+  };
+  const post = (path, body) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST', headers: { origin: 'https://timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env, ctx);
+
+  // ⚠ No cookie anywhere in this group — the whole point is that a visitor
+  // has never signed into anything.
+  const sub = await post('/api/push/subscribe-public', fakeSub);
+  eq(sub.status, 200, 'the subscribe route needs no session');
+  const row = db.prepare("SELECT user_id, audience FROM push_subscriptions WHERE endpoint = ?").get(fakeSub.endpoint);
+  ok(row, 'the row was written');
+  eq(row.user_id, null, 'attributed to nobody');
+  eq(row.audience, 'public', 'and filed in the congregation’s audience, not staff’s');
+
+  // The CORS preflight a JSON cross-origin POST actually triggers in a real
+  // browser — unlike the FormData routes beside it, this one is not simple.
+  const preflight = await worker.fetch(new Request('https://admin.timothystl.org/api/push/subscribe-public', {
+    method: 'OPTIONS', headers: { origin: 'https://timothystl.org' },
+  }), env, ctx);
+  eq(preflight.status, 204, 'the preflight itself succeeds');
+  has(preflight.headers.get('access-control-allow-methods') || '', 'POST', 'and allows the real request that follows it');
+
+  // Garbage shaped nothing like a real PushManager subscription is refused,
+  // not silently stored as a dead row.
+  const bad = await post('/api/push/subscribe-public', { endpoint: 'javascript:alert(1)', keys: { p256dh: 'x', auth: 'y' } });
+  eq(bad.status, 400, 'an endpoint that is not a real push service address is refused');
+
+  const gone = await post('/api/push/unsubscribe-public', { endpoint: fakeSub.endpoint });
+  eq(gone.status, 200, 'and unsubscribing needs no session either');
+  ok(!db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ?').get(fakeSub.endpoint), 'the row is gone');
+
+  // The vapid key endpoint needs a CORS header now too — this site fetches it
+  // cross-origin, which the admin's own same-origin PWA never had to.
+  const vapid = await worker.fetch(new Request('https://admin.timothystl.org/api/push/vapid-public-key', {
+    headers: { origin: 'https://timothystl.org' },
+  }), env, ctx);
+  eq(vapid.headers.get('access-control-allow-origin'), '*', 'so a browser is allowed to read the key');
+}
+
+group('Push Alert composes a message for the OTHER audience, and only that one');
+{
+  const { db, env } = await boot();
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+  const office = signIn(db, ['notices_edit'], 'office');
+  const outsider = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'notices_edit'), 'noaccess');
+
+  eq((await call(env, '/notify', { cookie: outsider.cookie })).status, 403, 'gated the same as Notices — no separate permission invented');
+  const openPage = await call(env, '/notify', { cookie: office.cookie });
+  eq(openPage.status, 200, 'whoever can write a Notice can open this');
+  const body = await openPage.text();
+  has(body, 'Push Alert', 'the sidebar names it plainly');
+
+  // ⚠ Real, ABSOLUTE endpoint URLs — buildVapidAuthHeader's first line is
+  // `new URL(endpoint).origin`, which throws on anything else, and that
+  // throw is swallowed by the same per-row try/catch that protects one bad
+  // subscription from blocking the rest — so a bare id here would silently
+  // never be pushed, which is exactly the failure this group exists to rule out.
+  const ks = fakeSubKeys(); const kv1 = fakeSubKeys(); const kv2 = fakeSubKeys();
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (5, ?, ?, ?, ?)').run('https://fcm.example/s1', ks.p256dh, ks.auth, 'staff');
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, ?)').run('https://fcm.example/v1', kv1.p256dh, kv1.auth, 'public');
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, ?)').run('https://fcm.example/v2', kv2.p256dh, kv2.auth, 'public');
+  const countPage = await (await call(envWithVapid, '/notify', { cookie: office.cookie })).text();
+  has(countPage, '2', 'the screen counts the public audience, not the two staff plus two public');
+  lacks(countPage, 'not configured', 'and says nothing is missing once VAPID keys are present');
+
+  const realFetch = globalThis.fetch;
+  const reached = [];
+  globalThis.fetch = async (input) => {
+    reached.push(typeof input === 'string' ? input : input.url);
+    return new Response('', { status: 201 });
+  };
+  const sent = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'Worship is canceled', body: 'Ice on the lot — stay home and stay warm.', url: '/news' }).toString(),
+  }), envWithVapid, ctx);
+  eq(sent.status, 302, 'sending redirects back with a toast');
+  has(decodeURIComponent(sent.headers.get('location') || ''), 'Sent to 2 of 2', 'and the toast counts only the audience it reached');
+  eq(reached.length, 2, 'exactly the two public rows were pushed');
+  ok(reached.every((u) => u.endsWith('/v1') || u.endsWith('/v2')), 'never the staff row: ' + JSON.stringify(reached));
+
+  const audit = db.prepare("SELECT * FROM audit_log WHERE entity_type = 'push_alert' ORDER BY id DESC LIMIT 1").get();
+  ok(audit, 'the broadcast is in the audit log');
+  eq(audit.username, 'office', 'attributed to whoever sent it');
+  has(audit.entity_label, 'Worship is canceled', 'naming the title');
+
+  // ⚠ A protocol-relative address is exactly the shape safeUrl() in
+  // admin/blocks.js gets wrong (SEC-15) — this field deliberately does not
+  // reuse it, and only accepts a single leading slash.
+  globalThis.fetch = async () => new Response('', { status: 201 });
+  const openRedirect = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'x', body: 'y', url: '//evil.example' }).toString(),
+  }), envWithVapid, ctx);
+  eq(openRedirect.status, 302, 'the send itself still succeeds');
+  const lastAudit = db.prepare("SELECT after_state FROM audit_log WHERE entity_type = 'push_alert' ORDER BY id DESC LIMIT 1").get();
+  lacks(lastAudit.after_state, 'evil.example', 'but the protocol-relative address never reached the payload');
+
+  // A title or body left blank is refused rather than sending an empty push
+  // to every subscriber.
+  const blank = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: '', body: '' }).toString(),
+  }), envWithVapid, ctx);
+  eq(blank.status, 302, 'refused with a toast, not a 500');
+  has(blank.headers.get('location') || '', 'required', 'naming what is missing');
+
+  globalThis.fetch = realFetch;
+
+  // The route itself is still gated even with a valid form — a stale tab or
+  // a crafted POST cannot reach it either.
+  const forced = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: outsider.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'x', body: 'y' }).toString(),
+  }), env, ctx);
+  eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
+}
+
+group('Contact and Prayer are never rendered from blocks, even when published');
+{
+  // Found live: both pages ship a seeded draft with a "Signup form" block in
+  // place of the real form — a Google Form embed with no URL, which the
+  // office can (and, on the real site, did) Publish without noticing it
+  // replaces a working, spam-screened, Turnstile-checked form with two dead
+  // <span>s. No block on this site can express that behavior, the same
+  // reason give.timothystl.org is kept off the block editor entirely — so
+  // these two ids must never appear in `rendered`, however their own
+  // published_blocks reads.
+  const { db, env } = await boot();
+
+  // The default seed's own draft has exactly this trap already in it —
+  // confirmed directly, not assumed: contact-2 / prayer-2 are type:'form'
+  // with url:''. Publishing is copying draft to published_blocks, so that is
+  // exactly what this does.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id IN ('contact','prayer')").run();
+  // A control page, published with a block stack of its own, proves the
+  // exclusion is scoped to these two ids and not a general regression.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id = 'about' AND blocks IS NOT NULL AND blocks != '[]'").run();
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!api.rendered.contact, 'contact is never rendered from blocks, whatever is published for it');
+  ok(!api.rendered.prayer, 'neither is prayer');
+  ok(!!api.rendered.about, 'a normal page with the same shape of publish still renders — the exclusion is scoped, not a general break');
+
+  // Still ordinary pages: addressable, in the page list, at their own slug —
+  // only the rendered HTML entry is withheld.
+  const contactEntry = api.pages.find((p) => p.id === 'contact');
+  const prayerEntry = api.pages.find((p) => p.id === 'prayer');
+  ok(!!contactEntry, 'contact still appears in the page list');
+  ok(!!prayerEntry, 'prayer still appears in the page list');
+  eq(contactEntry.slug, '/contact', 'at its own address, so the router and the menu are unaffected');
+  eq(prayerEntry.slug, '/prayer', 'same for prayer');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

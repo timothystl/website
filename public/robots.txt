@@ -3,5 +3,10 @@ Allow: /
 Disallow: /manual
 Disallow: /voters
 Disallow: /how-to-give
+# The renter portal is authenticated by a token in the URL, so a link pasted
+# anywhere crawlable would otherwise become a search result. The pages
+# themselves also carry X-Robots-Tag: noindex (see PORTAL_HEADERS in
+# admin/gym.js) — this is the half that stops the crawl in the first place.
+Disallow: /gym/
 
 Sitemap: https://timothystl.org/sitemap.xml

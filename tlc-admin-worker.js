@@ -10,7 +10,7 @@ import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
          MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
-import { pushToAllSubscribers } from './admin/webpush.js';
+import { pushToAllSubscribers, pushToPublicSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -73,6 +73,16 @@ import { LINKS_JS } from './admin/links.js';
 // the top of that file.
 import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
+// ⚠ THE ONE PLACE THIS SET IS DECLARED. Both /api/pages (what the public site
+// reads) and the page editor's own GET (what tells whoever is editing the
+// page that publishing here does nothing) read this same Set — two separate
+// declarations is exactly how a page could get added to one and not the
+// other, which is worse than neither: an editor that silently disagrees with
+// what it is editing. See "Contact and Prayer never render from blocks" for
+// why these two exist at all — no block on this site can express a screened,
+// Turnstile-checked POST to /api/contact or /api/prayer, so the real form
+// lives only in public/index.html's hardcoded markup and always will.
+const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
 // /christmasmarket/vendors, same shape as give-landing-seed.js and for the
 // same reason — a live payment application the generic extractor never had a
 // chance to convert, because it never had a tools/extract-pages.mjs PAGES
@@ -245,6 +255,27 @@ function jsonResponse(obj, status = 200) {
 function cleanSlug(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
 }
+
+// The thirteen payroll RPC functions the /sb/ proxy will forward to Supabase,
+// and the only thing it will forward. See the gate in _fetch for why this is a
+// list rather than a prefix, and admin/escaping.test.mjs's sibling assertion
+// that it matches what admin/payroll.html actually calls.
+export const PAYROLL_RPC_FNS = [
+  'payroll_get_staff',
+  'payroll_get_period_entries',
+  'payroll_get_prior_pto',
+  'payroll_get_period_approval',
+  'payroll_get_mdo_staff',
+  'payroll_get_mdo_hours',
+  'payroll_get_mdo_clock_events',
+  'payroll_get_mdo_pto',
+  'payroll_approve_period',
+  'payroll_unapprove_period',
+  'payroll_save_hours',
+  'payroll_save_staff',
+  'payroll_deactivate_staff',
+];
+const PAYROLL_RPC_PATHS = new Set(PAYROLL_RPC_FNS.map((f) => '/sb/rest/v1/rpc/' + f));
 
 // The page editor is a full-viewport screen served as a static shell, so it
 // gets its own headers: never cached (a stale draft would silently undo an
@@ -855,7 +886,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply', '/api/events/register']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/push/subscribe-public', '/api/push/unsubscribe-public', '/api/market/apply', '/api/events/register']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -1488,6 +1519,30 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
         });
       }
+      // ── WHAT THIS PROXY WILL FORWARD, AND NOTHING ELSE ──
+      // It used to forward any path under /sb/ to Supabase with the caller's
+      // key — an authenticated open relay onto the whole project (AW-7 in the
+      // July 2026 review). Much reduced once the 2026-08-12 migration left
+      // `anon` with no direct grant on any payroll table, but "the credential
+      // happens not to be able to do much" is a weaker guarantee than "the
+      // request was never forwarded", and it is one Supabase grant away from
+      // failing.
+      //
+      // ⚠ THE LIST IS EXACTLY WHAT admin/payroll.html CALLS — the thirteen
+      // payroll_* RPC functions, no more. A test reads the page and asserts
+      // the two sets are identical in both directions, so adding a fourteenth
+      // call without adding it here fails rather than 403ing in front of
+      // somebody running payroll.
+      //
+      // ⚠ POST ONLY. PostgREST executes an RPC on GET too, so allowing the
+      // method would put a payroll write one address bar away from a CSRF —
+      // the Origin gate below only runs on non-GET.
+      if (!(method === 'POST' && PAYROLL_RPC_PATHS.has(path))) {
+        return new Response(JSON.stringify({ error: 'Not available.', code: 'PROXY_PATH_REFUSED' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+        });
+      }
       if (method !== 'GET' && method !== 'HEAD') {
         const origin = request.headers.get('Origin') || '';
         const referer = request.headers.get('Referer') || '';
@@ -1592,30 +1647,26 @@ export default {
       resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
       resHeaders.set('Cache-Control', 'no-store');
 
-      // ── "invalid secret" with no way to compare the two sides ──
-      // A Worker secret is write-only, by design, from every tool that can
-      // reach this repo — nothing here can read back what
-      // PAYROLL_PROXY_SECRET actually holds to compare it against Supabase's
-      // copy. So when the mismatch is exactly this error, the response is
-      // widened with a masked fingerprint of what THIS Worker is sending —
-      // length, first 6, last 6 — never the value itself. Visible only to a
-      // signed-in admin with payroll_manage, the same audience that already
-      // sees every figure on this screen and the hardcoded anon key in the
-      // page source (PY-4). Enough to see "it's empty" or "it's 71 chars,
-      // not 64" without ever putting the real secret in a response body.
       if (isPayrollRpc && supabaseRes.status === 403) {
         const bodyText = await supabaseRes.text();
-        if (/invalid secret/i.test(bodyText)) {
-          const sv = env.PAYROLL_PROXY_SECRET;
-          const fp = !sv ? 'PAYROLL_PROXY_SECRET is not set on this Worker at all'
-            : `as this Worker holds it: ${sv.length} chars, starts "${sv.slice(0, 6)}", ends "${sv.slice(-6)}"`;
-          let widened = bodyText;
-          try {
-            const parsed = JSON.parse(bodyText);
-            parsed.message = (parsed.message || '') + ` [${fp}]`;
-            widened = JSON.stringify(parsed);
-          } catch (_) { widened = bodyText + ` [${fp}]`; }
-          return new Response(widened, { status: supabaseRes.status, headers: resHeaders });
+        // ── FX-09: THE FINGERPRINT IS GONE ─────────────────────────────────
+        // This used to widen an "invalid secret" 403 with the LENGTH and the
+        // first and last six characters of PAYROLL_PROXY_SECRET. The reasoning
+        // was sound at the time and is worth keeping written down: a Worker
+        // secret is write-only from every tool that can reach this repo, so
+        // when the two sides disagreed there was no other way to see which.
+        //
+        // That mismatch is resolved — the secret is set and was verified
+        // against the live project — so what is left is a deliberate partial
+        // disclosure of a secret with no remaining reason. Twelve of
+        // sixty-four hex characters is not a practical break; it is simply not
+        // something to leave in a response body once the question it answered
+        // has been answered. What survives is the half that still helps and
+        // reveals nothing: whether this Worker holds the secret AT ALL.
+        if (/invalid secret/i.test(bodyText) && !env.PAYROLL_PROXY_SECRET) {
+          return new Response(JSON.stringify({
+            message: 'PAYROLL_PROXY_SECRET is not set on this Worker — see the Payroll section of CLAUDE.md for the wrangler command that sets it.',
+          }), { status: supabaseRes.status, headers: resHeaders });
         }
         return new Response(bodyText, { status: supabaseRes.status, headers: resHeaders });
       }
@@ -1660,9 +1711,20 @@ export default {
     // The VAPID public key the browser needs as `applicationServerKey` when
     // subscribing. Public by design — it's not a secret, only the matching
     // private key (which never leaves the Worker) can actually sign a push.
+    //
+    // ⚠ ACCESS-CONTROL-ALLOW-ORIGIN, ADDED WHEN THE PUBLIC PUSH TOGGLE ON
+    // timothystl.org STARTED FETCHING THIS CROSS-ORIGIN. The admin's own PWA
+    // has never needed it — that fetch is same-origin. Without it, a browser
+    // still makes the request but refuses to hand the JS the response body,
+    // which is a silently broken "Get browser alerts" button rather than a
+    // visible error anywhere.
     if (path === '/api/push/vapid-public-key' && method === 'GET') {
-      if (!env.VAPID_PUBLIC_KEY) return new Response('Push notifications are not configured.', { status: 501 });
-      return new Response(env.VAPID_PUBLIC_KEY, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
+      // Both branches, not just the happy one — a browser refuses to let the
+      // caller read the response body of either without the header, and this
+      // is the one case a public visitor is likely to actually hit before the
+      // office finishes the VAPID setup.
+      if (!env.VAPID_PUBLIC_KEY) return new Response('Push notifications are not configured.', { status: 501, headers: { 'Access-Control-Allow-Origin': '*' } });
+      return new Response(env.VAPID_PUBLIC_KEY, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
     }
 
     // Cross-app push relay: a shared-secret-authenticated way for OTHER Workers
@@ -1918,7 +1980,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-9'; // bumped: event_intake table, for the office's own event checklist screen
+    const SCHEMA_VERSION = '2026-08-19-10'; // bumped: event_intake table, for the office's own event checklist screen (on top of push_subscriptions.audience, merged from main)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2500,6 +2562,16 @@ export default {
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PUSH_SUBSCRIPTIONS).run(); } catch (_) {}
+    // Two audiences in one table: `staff` (the default, every existing row and
+    // every one of the six triggers that were already here) and `public` (the
+    // congregation, added so a broadcast can reach them without also ringing
+    // every staff phone — see "Push Alert" in CLAUDE.md and the comment on
+    // pushToAllSubscribers in admin/webpush.js). SQLite backfills a non-null
+    // DEFAULT onto every existing row when a column is added, so this alone —
+    // no UPDATE needed — is what makes every subscription already on file a
+    // staff one, exactly as it always behaved.
+    try { await env.DB.prepare("ALTER TABLE push_subscriptions ADD COLUMN audience TEXT NOT NULL DEFAULT 'staff'").run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_audience ON push_subscriptions(audience)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PAYROLL_READY_NOTIFIED).run(); } catch (_) {}
 
     // Performance indexes
@@ -3145,6 +3217,18 @@ export default {
     }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
+    // ⚠ THIS IS THE VOTERS ASSEMBLY'S COUNCIL REPORTS, AND IT IS PUBLIC.
+    // Nothing on timothystl.org has a member login, so the /voters page fetches
+    // /api/voters and links here with no credential of any kind — see the
+    // note on that endpoint below, and FX-12 in CLAUDE.md, which is a decision
+    // for the church rather than a bug in this code.
+    //
+    // What IS closed here is the crawler half: public/robots.txt keeps Google
+    // off timothystl.org/voters, but that file says nothing about
+    // admin.timothystl.org, so the PDFs themselves were indexable the moment
+    // one of these addresses appeared anywhere crawlable. An unlisted address
+    // is not an access control; an unlisted address in a search result is not
+    // even unlisted.
     if (path.startsWith('/docs/') && method === 'GET') {
       const key = 'docs-' + path.slice('/docs/'.length);
       const obj = await env.IMAGES.get(key);
@@ -3152,6 +3236,7 @@ export default {
       const headers = new Headers();
       obj.writeHttpMetadata(headers);
       headers.set('Cache-Control', 'public, max-age=3600');
+      headers.set('X-Robots-Tag', 'noindex, nofollow');
       return new Response(obj.body, { headers });
     }
 
@@ -3202,7 +3287,21 @@ export default {
       const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
+      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. See the
+      // constant's own comment near the top of the file for why. Unlike
+      // give-landing these are still ordinary pages — in `list`, in the menu,
+      // at their own address — only the entry in `rendered` is withheld,
+      // which is what makes the client and the edge injector both fall back
+      // to the hardcoded native form with no change on either side. The
+      // editor's own GET route (below, /pages/api/page/:id) sends the same
+      // flag back to whoever opens either page, so the canvas can say
+      // plainly that nothing here reaches the live site — found live without
+      // that warning: both pages had been published with a "Signup form"
+      // block (a Google Form embed with no URL set) standing in for the real
+      // form, and the editor's own preview never disagreed until a person
+      // compared it against the actual site by hand.
       for (const r of list) {
+        if (NATIVE_FORM_ONLY_PAGE_IDS.has(r.id)) continue;
         // A page that links out has no content of its own. Rendering blocks it
         // may still be carrying from before would give the visitor a flash of a
         // page that is about to redirect out from under them.
@@ -3642,7 +3741,26 @@ export default {
     // ── PUBLIC: single newsletter ──
     if (path.startsWith('/api/newsletter/') && method === 'GET') {
       const id = path.split('/').pop();
-      const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
+      // ── FX-07: PUBLISHED ONLY, AND NAMED COLUMNS ────────────────────────
+      // This was `SELECT *` with no status filter, answering `{...row}`. The
+      // list endpoint twenty lines above filters correctly, so the only way in
+      // was a guessed id — which is the whole surface, because ids are
+      // sequential. A draft under approval, and every internal column on it
+      // (brevo_campaign_id, approval_status, sent_count), was public.
+      //
+      // ⚠ Named columns rather than `SELECT *`: a column added later is
+      // private until somebody decides otherwise, which is the right default
+      // for a table carrying send state and approval history. This list is
+      // exactly what loadNewsletters()/loadNewsletterDetail() in
+      // public/index.html read, plus the id they link by.
+      const row = await env.DB.prepare(
+        `SELECT id, subject, pastor_note, secondary_note, wol_content, lasm_content,
+                tertiary_note, tertiary_cta_label, tertiary_cta_url,
+                ministry_content, ministry_type, published_at, format,
+                cta_url, cta_label, bible_classes, news_item_ids
+           FROM newsletters
+          WHERE id = ? AND (status IS NULL OR status = 'published')`
+      ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(id).all();
 
@@ -3921,6 +4039,86 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         return new Response(JSON.stringify({ success: true }), { headers: corsH });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
+      }
+    }
+
+    // ── PUBLIC: a visitor's own browser opts into the congregation's audience ──
+    // The mirror of /api/push/subscribe above, for the OTHER audience — see
+    // "Push Alert" in CLAUDE.md and the comment on pushToAllSubscribers in
+    // admin/webpush.js. That route requires a signed-in session because it is
+    // a staff member's own device; this one has no session to require, because
+    // the person subscribing has never signed into anything. `user_id` stays
+    // NULL and `audience` is 'public' — nothing here can reach a staff device,
+    // whatever is posted, because pushToAllSubscribers only ever reads ONE
+    // audience per call and every staff trigger still calls it with none
+    // (defaulting to 'staff').
+    //
+    // ⚠ NOT screenSubmission() — that scores a name/email/message shape this
+    // payload does not have. The real risk here is not content, it is a
+    // scripted flood of junk rows; validating the three fields are shaped like
+    // what a real PushManager.subscribe() hands back (an https endpoint, two
+    // short base64url keys) is what a scripted POST with no browser behind it
+    // cannot fake cheaply, and is proportionate to what an abused row actually
+    // costs — a wasted D1 row nobody reads, not a real notification to anybody
+    // real, since a fabricated endpoint just fails to deliver.
+    if (path === '/api/push/subscribe-public' && (method === 'POST' || method === 'OPTIONS')) {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      // ⚠ THE FIRST GENUINELY LIVE OPTIONS BRANCH IN THIS FILE'S SET OF PUBLIC
+      // CROSS-ORIGIN POSTS. Every earlier one (/api/contact, /api/prayer,
+      // /api/subscribe, /api/market/apply) posts FormData, which the CORS spec
+      // treats as a "simple request" needing no preflight — their own OPTIONS
+      // checks, where they have one, do nothing a real browser ever triggers.
+      // This route posts JSON, which is NOT simple: the browser sends a real
+      // OPTIONS preflight first and refuses the POST unless this answers it
+      // with the right Allow-Methods/Allow-Headers, whatever this route's own
+      // POST logic would have returned.
+      if (method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: {
+          ...corsH,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        }});
+      }
+      try {
+        const sub = await request.json();
+        const endpoint = String(sub?.endpoint || '');
+        const p256dh = String(sub?.keys?.p256dh || '');
+        const auth = String(sub?.keys?.auth || '');
+        const b64u = /^[A-Za-z0-9_-]+$/;
+        if (!/^https:\/\//.test(endpoint) || endpoint.length > 1024
+          || !b64u.test(p256dh) || p256dh.length > 256
+          || !b64u.test(auth) || auth.length > 256) {
+          return new Response(JSON.stringify({ error: 'Invalid subscription' }), { status: 400, headers: corsH });
+        }
+        await env.DB.prepare(
+          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')
+           ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, audience = 'public', user_id = NULL`
+        ).bind(endpoint, p256dh, auth).run();
+        return new Response(JSON.stringify({ success: true }), { headers: corsH });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Could not save subscription' }), { status: 500, headers: corsH });
+      }
+    }
+    if (path === '/api/push/unsubscribe-public' && (method === 'POST' || method === 'OPTIONS')) {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      if (method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: {
+          ...corsH,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        }});
+      }
+      try {
+        const { endpoint } = await request.json();
+        // Same boundary the staff unsubscribe route already relies on: the
+        // endpoint is a bearer value only the subscribing browser holds, handed
+        // back by its own pushManager.getSubscription() — not a guessable id.
+        if (endpoint) await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND audience = 'public'").bind(endpoint).run();
+        return new Response(JSON.stringify({ success: true }), { headers: corsH });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Could not remove subscription' }), { status: 500, headers: corsH });
       }
     }
 
@@ -4266,13 +4464,29 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     }
 
     // ── PUBLIC: voters page data ──
+    // ⚠ DELIBERATELY PUBLIC, AND NOT BECAUSE NOBODY LOOKED. The /voters page in
+    // public/index.html fetches this with no credential, and there is no member
+    // login anywhere on timothystl.org to gate it against — so "gate it" is a
+    // sign-in feature, not a header. Whether a Zoom link and a set of council
+    // reports should be behind one is the congregation's call; FX-12 in
+    // CLAUDE.md is where that decision belongs. Recorded here so the next
+    // reader knows it was weighed rather than missed.
     if (path === '/api/voters' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
       const data = row || { meeting_info: '', zoom_link: '', files_json: '[]' };
       let files = [];
       try { files = JSON.parse(data.files_json || '[]'); } catch(_) {}
       return new Response(JSON.stringify({ meeting_info: data.meeting_info || '', zoom_link: data.zoom_link || '', files }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=60',
+          // robots.txt covers timothystl.org/voters and says nothing about this
+          // origin, so without this the meeting's Zoom link is a crawlable JSON
+          // document. Keeping it out of an index is worth doing whichever way
+          // the sign-in question above is answered.
+          'X-Robots-Tag': 'noindex, nofollow',
+        }
       });
     }
 
@@ -6528,7 +6742,33 @@ ${PAYROLL_HTML}`, 'Payroll');
     }
 
     // ── IMAGE UPLOAD TO R2 ──
+    // ── FX-08: AN UPLOAD NEEDS SOMETHING TO PUT THE FILE ON ────────────────
+    // Both uploaders checked that a session existed and nothing else, so ANY
+    // account could host arbitrary images and PDFs on admin.timothystl.org,
+    // permanently — nothing ever deletes an R2 object, as the Media screen's
+    // own delete message admits. That included a Market coordinator holding
+    // `market_manage` alone and a Bookkeeper holding the money permissions,
+    // neither of whom has a screen that uploads anything.
+    //
+    // ⚠ A SET, NOT ONE PERMISSION, and derived from where the uploader is
+    // actually wired rather than from what sounds tidy: the classic TinyMCE
+    // handler (every rich field — newsletter, news, sermons, ministries,
+    // notices), the block editor's picker, the news header image, the staff
+    // photo picker, the Appearance logo, the Partners logo, and the gym's own
+    // rich editor. Anything not on this list has no screen that can reach
+    // these routes, so gating it costs nothing and closes the hole.
+    const UPLOAD_IMAGE_PERMS = ['newsletter_edit', 'news_edit', 'ministries_edit',
+      'sermons_edit', 'pages_edit', 'pages_edit_own', 'notices_edit', 'staff_edit',
+      'gym_manage'];
+    // The voter-document uploader is on one screen only, behind one permission.
+    const UPLOAD_DOC_PERMS = ['notices_edit'];
+    const canAny = (perms) => perms.some((k) => hasPermission(currentUser, k));
+
     if (path === '/api/upload-image' && method === 'POST') {
+      if (!canAny(UPLOAD_IMAGE_PERMS)) {
+        return new Response(JSON.stringify({ error: 'Your account cannot upload images.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
       const form = await request.formData();
       const file = form.get('file');
       if (!file || typeof file === 'string') {
@@ -6570,6 +6810,10 @@ ${PAYROLL_HTML}`, 'Payroll');
 
     // ── UPLOAD VOTER DOCUMENT TO R2 ──
     if (path === '/api/upload-doc' && method === 'POST') {
+      if (!canAny(UPLOAD_DOC_PERMS)) {
+        return new Response(JSON.stringify({ error: 'Your account cannot upload documents.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
       const form = await request.formData();
       const file = form.get('file');
       if (!file || typeof file === 'string') return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -9083,6 +9327,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // rather than worked out in the browser, so the editor never draws
             // a button that would come back "there is no redesigned layout".
             hasRedesign: !!REDESIGN_BLOCKS[row.id],
+            // The one thing publishing this page can never do. See the
+            // constant's own comment for why — read it before removing this.
+            neverLive: NATIVE_FORM_ONLY_PAGE_IDS.has(row.id),
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
@@ -10235,6 +10482,94 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`,
         return new Response('', { status: 302, headers: { Location: '/notices?msg=deleted' } });
       }
     } // end notices tab
+
+    // ── PUSH ALERT ─────────────────────────────────────────────
+    // Andrew's answer to the review's own question about who a push should
+    // reach (SEC-6/FX-29): not scoping the six existing staff triggers by
+    // permission, but a second, genuinely different audience — "all push
+    // notifications should go to admin, and then notifications from admin can
+    // go out to all users." The six triggers already here (held mail, a new
+    // contact/prayer message, a gym request, payroll turning ready, the
+    // cross-app relay) are UNCHANGED — every one of them still calls
+    // pushToAllSubscribers with no audience argument, which still means
+    // 'staff', exactly as before this shipped. This is the one new door: a
+    // human composing a message on purpose, for the OTHER audience.
+    //
+    // Gated on notices_edit rather than a new permission — this is a Notice
+    // that rings a phone instead of sitting in a banner, and whoever can put
+    // "Worship is canceled" on the website already has every reason to be
+    // the one who can also push it.
+    if (path.startsWith('/notify') && !hasPermission(currentUser, 'notices_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if (path.startsWith('/notify')) {
+      if (path === '/notify' && method === 'GET') {
+        const { count } = await env.DB.prepare("SELECT COUNT(*) AS count FROM push_subscriptions WHERE audience = 'public'").first();
+        const configured = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
+        const toast = url.searchParams.get('toast');
+        return html(`
+${sidebarShell('notify', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+  <div class="page-title">Push Alert</div>
+  <div class="page-sub">A message that rings a phone, for whoever has turned on browser alerts on the website — not the office's own devices, which already ring on their own for held mail, a new message, a gym request and a payroll period turning ready. This is the one door onto the other audience.</div>
+  ${!configured ? `<div class="alert alert-warn">Push notifications are not configured on this Worker yet — see the "admin is a PWA, with web push" section of CLAUDE.md for the VAPID keys this needs. Sending will do nothing until they are set.</div>` : ''}
+  <div class="card">
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">
+      <strong>${count}</strong> ${count === 1 ? 'person has' : 'people have'} turned on browser alerts on the website.
+      ${count === 0 ? ' Nobody will receive this yet.' : ''}
+    </div>
+    <form method="POST" action="/notify/send">
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" name="title" maxlength="200" required placeholder="e.g. Worship is canceled today">
+      </div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea name="body" maxlength="500" rows="3" required placeholder="A sentence or two — this is a notification, not the notice itself."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Link <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— where tapping it goes, optional</span></label>
+        <input type="text" name="url" placeholder="/news" maxlength="200">
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">A page on this site, starting with /. Left blank, it opens the homepage.</div>
+      </div>
+      <button type="submit" class="btn btn-primary">Send to ${count} ${count === 1 ? 'person' : 'people'}</button>
+    </form>
+  </div>
+</div>`, 'Push Alert');
+      }
+
+      if (path === '/notify/send' && method === 'POST') {
+        const form = await request.formData();
+        const title = (form.get('title') || '').toString().trim().slice(0, 200);
+        const body = (form.get('body') || '').toString().trim().slice(0, 500);
+        // ⚠ A site-relative path only — never a general URL. `safeUrl()`
+        // (admin/blocks.js) accepts a leading "//" as site-relative when it is
+        // actually protocol-relative to an outside host (SEC-15); rather than
+        // reuse that gap here, this field only ever accepts a single leading
+        // slash, so there is nothing to get wrong about where it points.
+        let notifyUrl = (form.get('url') || '').toString().trim().slice(0, 200);
+        if (!/^\/(?!\/)/.test(notifyUrl)) notifyUrl = '';
+        if (!title || !body) {
+          return new Response('', { status: 302, headers: { Location: '/notify?toast=' + encodeURIComponent('A title and a message are both required.') } });
+        }
+        const payload = { title, body, tag: 'push-alert' };
+        if (notifyUrl) payload.url = notifyUrl;
+        // ⚠ AWAITED, NOT ctx.waitUntil. Every other caller of pushToAllSubscribers
+        // fires it alongside an action that already succeeded on its own (a
+        // submission was stored, a hold was taken) — the push there is a
+        // courtesy that must never be allowed to block or fail that action.
+        // Here the push IS the action. The office is looking at this screen to
+        // find out it went out; a fire-and-forget confirmation would be a
+        // confirmation of nothing.
+        const result = await pushToPublicSubscribers(env, payload);
+        await logAudit(env.DB, currentUser, 'push', 'push_alert', 'public', title, null, { title, body, url: notifyUrl || null, sent: result.sent, total: result.total });
+        const goneNote = result.gone > 0 ? ` ${result.gone} had stopped listening and ${result.gone === 1 ? 'was' : 'were'} removed.` : '';
+        return new Response('', {
+          status: 302,
+          headers: { Location: '/notify?toast=' + encodeURIComponent(`Sent to ${result.sent} of ${result.total}.${goneNote}`) },
+        });
+      }
+    } // end push alert
 
     // ── STAFF TAB ──────────────────────────────────────────────
     if (path.startsWith('/staff') && !hasPermission(currentUser, 'staff_edit')) {

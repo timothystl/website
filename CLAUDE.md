@@ -399,6 +399,108 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   Andrew asked for his own copy of every report, deduped against the
   bookkeeper's address in case they're ever the same.
 
+### Push Alert: two audiences, not scoped triggers (v5.34.0, 2026-08-19)
+
+The review above (SEC-6/FX-29) found that `pushToAllSubscribers()` reads the
+whole `push_subscriptions` table and rings every device, whatever its
+permissions — the Market coordinator preset exists precisely so a volunteer
+sees only the vendor list, and it was still ringing her phone with 150
+characters of a prayer request. The proposed fix was to scope the six
+existing triggers by permission. Andrew's answer was a different shape: *"i
+think all push notifications should go to admin, and then notifications from
+admin can go out to all users. like a notice that worship is canceled,
+etc."*
+
+**Not permission-scoping — a second audience.** The six triggers that were
+already here (held mail, every delivered contact/prayer message, a new gym
+hold, payroll turning ready, and the two relayed from
+`connect.timothystl.org`) are **unchanged** — they still call
+`pushToAllSubscribers(env, payload)` with no audience argument, and that
+still means the office's own devices, exactly as before. What is new is a
+second door, for a message a human composes on purpose, aimed at people who
+were never staff to begin with: the congregation.
+
+- **`push_subscriptions.audience`** is `'staff'` or `'public'`, defaulting to
+  `'staff'`. SQLite backfills a non-null `DEFAULT` onto every existing row
+  when a column is added, so every subscription already on file — every
+  office phone that has ever tapped "Notifications" — became a staff one
+  with no migration script, no UPDATE, nothing to get wrong.
+- **`pushToAllSubscribers(env, payload, audience = 'staff')`** now filters by
+  it, and **returns counts** (`{ sent, gone, total }`) instead of nothing —
+  every existing caller still ignores the return value inside
+  `ctx.waitUntil`, exactly as before; the one new caller that fires a
+  broadcast on purpose needs to tell the office how many phones it actually
+  reached. `pushToPublicSubscribers(env, payload)` is the one door onto the
+  other audience, so nothing sending a congregation broadcast has to know
+  the column name or remember that the default would otherwise ring the
+  office instead.
+- **A visitor subscribes on the public site, not the admin.** There was no
+  such surface before this — every existing subscription came through the
+  admin's own PWA, behind a session. A small "Turn on browser alerts" link
+  sits under the newsletter sign-up form (site-wide chrome, on every page,
+  next to the other "stay connected" control) and talks to
+  `/api/push/subscribe-public` / `/api/push/unsubscribe-public` — public
+  routes, no session, `user_id` stays NULL. ⚠ **These are the first
+  genuinely cross-origin JSON POSTs in this file's set of public routes.**
+  Every earlier one (`/api/contact`, `/api/prayer`, `/api/subscribe`,
+  `/api/market/apply`) posts FormData, which the CORS spec treats as a
+  "simple request" needing no preflight — their own `OPTIONS` checks, where
+  they have one, are dead code a real browser never triggers (see DSN-6 in
+  the review above). A JSON body is not simple: the browser sends a real
+  preflight first and refuses the POST unless it gets back the right
+  `Access-Control-Allow-Methods`/`-Headers`, so both routes answer `OPTIONS`
+  for real. `/api/push/vapid-public-key` needed `Access-Control-Allow-Origin`
+  added too, on both its branches (configured and the 501) — the admin's own
+  PWA fetches it same-origin and never needed the header; this site fetches
+  it cross-origin and cannot read the response body without it.
+- **⚠ Not `screenSubmission()`.** That scores a name/email/message shape
+  this payload does not have. The real risk here is not content, it is a
+  scripted flood of junk rows, and validating the three fields are shaped
+  like what a real `PushManager.subscribe()` actually hands back — an
+  `https://` endpoint, two short base64url keys — is what a scripted POST
+  with no browser behind it cannot cheaply fake, and is proportionate to
+  what an abused row costs: one wasted D1 row nobody reads, since a
+  fabricated endpoint just fails to deliver. No IP rate limiter was built
+  for this; the existing flood-limit machinery in `admin/spam.js` is shaped
+  around a name/email/message triple and doesn't fit, and a second, weaker
+  limiter bolted on beside it would be worse than none.
+- **`/notify` is the composer**, gated on `notices_edit` — not a new
+  permission. This is a Notice that rings a phone instead of sitting in a
+  banner; whoever can already put "Worship is canceled" on the website has
+  every reason to be the one who can also push it. The screen shows the
+  live public-subscriber count before anything is sent, and the send
+  confirmation names exactly how many it reached — not a courtesy estimate,
+  the real `{sent, total}` the RFC 8291 encryption actually produced.
+- **⚠ `/notify/send` is `await`ed, not `ctx.waitUntil`ed** — the one
+  deliberate departure from every other caller. Every other trigger fires a
+  push alongside an action that has already succeeded on its own (a
+  submission was stored, a hold was taken); the push there is a courtesy
+  that must never be allowed to block or fail that action. Here the push
+  **is** the action — the office is looking at this screen specifically to
+  find out it went out, and a fire-and-forget confirmation would be a
+  confirmation of nothing.
+- **⚠ The "Link" field takes a site-relative path only, not a general
+  URL** — a single leading slash, explicitly refusing `//` (`if
+  (!/^\/(?!\/)/.test(notifyUrl)) notifyUrl = '';`). `safeUrl()` in
+  `admin/blocks.js` accepts a leading `//` as site-relative when it is
+  actually protocol-relative to an outside host (SEC-15 in the review
+  above); rather than reuse that gap in a brand-new field, this one simply
+  cannot express it.
+- **Logged to the audit log** like everything else that changes public-facing
+  state — the title, the body, the resolved link, and the actual send counts,
+  attributed to whoever pressed Send.
+
+Run: three new groups in `test/admin-redesign.test.mjs` — the audience split
+(a pre-existing staff row lands on `'staff'` with no migration, a broadcast
+never reaches a staff device and vice versa), the two public routes (no
+session needed, a fabricated endpoint refused, the real CORS preflight
+answered), and the `/notify` screen end to end (gated, counts the right
+audience, the protocol-relative address never reaches the payload, a blank
+title or body is refused). Every one of the four new checks was verified by
+reverting the fix it guards: the audience filter fails 7 assertions with
+staff and public bleeding together, the gate fails 2 with the real 200/302,
+the endpoint validation fails 1, the open-redirect guard fails 1.
+
 ### Cross-repo follow-up: scheduler and volunteer sign-up notifications (noted 2026-08-04)
 
 Andrew wants push notifications for two more events, and both now live on
@@ -8357,11 +8459,11 @@ is still a plan.
 | Phase | What it is | Codes |
 |---|---|---|
 | **0** | Green CI and honest docs — the floor everything else stands on | ~~FX-01 … FX-03~~ **DONE** |
-| **1** | Close the exposures. Small, self-contained, no decisions | ~~FX-04~~ **DONE** · FX-05 **part** · FX-06 … FX-12 |
+| **1** | Close the exposures. Small, self-contained, no decisions | ~~FX-04 · FX-06 … FX-12~~ **DONE** · FX-05 **part** |
 | **2** | The escaping sweep — one theme, done once, properly | ~~FX-13 … FX-16~~ **DONE** |
 | **3** | Loading speed — the wins that need no new design | ~~FX-17~~ **DONE** · FX-18 · ~~FX-19~~ **DONE** · FX-20 … FX-23 |
 | **4** | Correctness the office would feel | FX-24 … FX-28 |
-| **5** | Policy calls — needs a decision before code | FX-29 … FX-31 |
+| **5** | Policy calls — needs a decision before code | ~~FX-29~~ **ANSWERED** (2026-08-19) · FX-30 … FX-31 |
 | **6** | Consistency and hygiene | FX-32 … FX-38 |
 | **7** | Structural — each one its own project | FX-39 … FX-43 |
 
@@ -8430,7 +8532,7 @@ list:
 Until both are done Turnstile stays inert, which is exactly what it has been
 since 2026-07-31 — nothing regresses by waiting.
 
-**FX-06 · Give the renter portal security headers.** `portalHtml()`
+**FX-06 · Give the renter portal security headers — DONE.** See "Phase 1 — the exposures, closed" below; the `rel="noopener noreferrer"` half turned out to matter as much as the headers. The original statement follows. `portalHtml()`
 (`admin/gym.js:305`) returns a content type and nothing else. It needs a CSP,
 `frame-ancestors 'none'`, `X-Robots-Tag: noindex`, `Cache-Control: no-store`
 and `Referrer-Policy: no-referrer` — the last because the page is authenticated
@@ -8438,33 +8540,33 @@ by a **token in the URL** and the Tithe.ly pay button is `target="_blank"` with
 no `rel="noopener noreferrer"` (`:577`), which hands that token to Tithe.ly in
 the `Referer`. Add `Disallow: /gym/` to `public/robots.txt` in the same change.
 
-**FX-07 · Filter `/api/newsletter/:id`.** (`AW-3`.) `tlc-admin-worker.js:3191`
+**FX-07 · Filter `/api/newsletter/:id` — DONE**, and with named columns rather than `SELECT *`, so a column added later is private by default. (`AW-3`.) `tlc-admin-worker.js:3191`
 is `SELECT *` with no status filter and returns `{...row}`. Add
 `AND (status IS NULL OR status = 'published')` — the list endpoint twenty lines
 above already does — and return a named column list rather than the whole row.
 
-**FX-08 · Gate the uploads.** (`AW-8`.) `/api/upload-image` (`:5895`) and
+**FX-08 · Gate the uploads — DONE.** Nine content permissions for an image, `notices_edit` for a document; the test asserts the office is unaffected as well as that the bookkeeper is refused. (`AW-8`.) `/api/upload-image` (`:5895`) and
 `/api/upload-doc` (`:5936`) check only that a session exists. Require a
 content-editing permission. While in there: nothing ever deletes an R2 object,
 which the Media screen's own delete message admits.
 
-**FX-09 · Remove the payroll secret fingerprint.** (`SEC-14`.)
+**FX-09 · Remove the payroll secret fingerprint — DONE**, keeping the one half that still helps and reveals nothing: whether the secret is set at all. (`SEC-14`.)
 `tlc-admin-worker.js:1386-1399` returns the length and the first and last six
 characters of `PAYROLL_PROXY_SECRET` on a Supabase 403. The reasoning was good
 and is recorded; the mismatch it existed to diagnose is resolved.
 
-**FX-10 · `frame-ancestors` on the admin shell.** (`AW-18`.)
+**FX-10 · `frame-ancestors` on the admin shell — DONE**, and `'unsafe-eval'` went with it, verified in a real browser under the actual header rather than argued from reading. (`AW-18`.)
 `admin/helpers.js:668` has no frame guard and no `X-Frame-Options`, and
 `frame-ancestors` does **not** inherit from `default-src`. The block editor
 already sets its own correctly (`tlc-admin-worker.js:235`) — copy that.
 Consider dropping `'unsafe-eval'` at the same time and seeing what breaks.
 
-**FX-11 · Allowlist the `/sb/*` paths.** (`AW-7`.) The proxy forwards any path
+**FX-11 · Allowlist the `/sb/*` paths — DONE.** Thirteen RPC names, POST only, checked against what the page actually calls in both directions. (`AW-7`.) The proxy forwards any path
 under `/sb/` to Supabase with the caller's key. Much reduced now that `anon`
 holds no table grants, but the allowlist the July review asked for was never
 added, and it is a short list: thirteen RPC names.
 
-**FX-12 · Decide whether `/api/voters` and `/docs/*` are public.** (`AW-4`.)
+**FX-12 · Decide whether `/api/voters` and `/docs/*` are public — ANSWERED, AND IT IS THE CHURCH'S CALL.** There is no member login to gate them against, so they stay public and the reasoning is now written at both call sites; the crawler half, which was genuinely open, is closed with `X-Robots-Tag`. See the Phase 1 section below. (`AW-4`.)
 `robots.txt` disallows `/voters` on the site, which is not an access control.
 The API and the PDFs are unlisted addresses on the admin origin. Either gate
 them or write down that they are deliberately public.
@@ -8606,18 +8708,20 @@ when any occurred.
 
 ### Phase 5 — policy calls, decide before coding
 
-**FX-29 · Scope push notifications by permission.** (`SEC-6`.)
-`pushToAllSubscribers()` (`admin/webpush.js:167`) reads the whole table and
-sends to all of it. Any account with a session can subscribe. So the Market
-coordinator preset — which exists precisely so a volunteer sees only the vendor
-list — receives **prayer-request content** (150 characters, per
-`tlc-admin-worker.js:3407`) and contact-message bodies on her phone. The push
-channel is the one surface here that does not participate in the permission
-model, and that model is the most carefully argued thing in the codebase.
-⚠ Also add an ownership check to `/api/push/unsubscribe`, which today deletes
-any endpoint given to it.
-**The decision:** which permission gates which trigger, and whether a push
-should carry message content at all or only "something arrived."
+**FX-29 · Scope push notifications by permission — ANSWERED, DIFFERENT SHAPE.**
+(`SEC-6`.) Not permission-scoping the six existing triggers — Andrew's own
+words: *"i think all push notifications should go to admin, and then
+notifications from admin can go out to all users."* `push_subscriptions`
+carries an `audience` column now (`staff` default, `public` for a new
+congregation-facing broadcast), the six triggers are untouched, and `/notify`
+is the one door onto the other audience. See "Push Alert: two audiences, not
+scoped triggers" above for the whole design. ⚠ **Still genuinely open, and
+NOT touched by that work**: an ownership check on `/api/push/unsubscribe`
+(the STAFF route), which still deletes any endpoint handed to it — the same
+bearer-endpoint model the new public unsubscribe route deliberately adopted
+rather than solved, because the endpoint is unguessable and that boundary
+already held for the staff route. Worth a second look if that assumption is
+ever wrong.
 
 **FX-30 · Decide the fate of the renter self-confirm routes.** (`SEC-4`/`GY-5`.)
 `admin/gym.js:1483`, `:1533` and `:1801` let a renter holding only the group
@@ -8977,3 +9081,173 @@ survives in `admin/gym.js`, matching **chains** rather than lines so the one
 legitimate full escape is not mistaken for two halves. Plus the new
 `a gym group's own screen renders` group in `test/admin-redesign.test.mjs`.
 Every group was verified by reverting the fix and watching it fail.
+
+---
+
+## Phase 1 — the exposures, closed (FX-06 … FX-12, 2026-08-19)
+
+Seven items, and the interesting thing about them is how few were what the plan
+said. Two were bigger than their entry, one was smaller, and one turned out not
+to be a fix at all.
+
+### The renter portal had no headers of its own (FX-06)
+
+`portalHtml()` returned `{ 'Content-Type': 'text/html; charset=utf-8' }` and
+nothing else — no CSP, no cache rule, no referrer policy, no crawler
+instruction. The v4.6.0 move to the public origin was the right call and closed
+the same-origin-with-the-admin problem; it did not give the page a policy.
+
+**⚠ THIS PAGE IS AUTHENTICATED BY A BEARER TOKEN IN ITS OWN URL**, which is what
+makes it a different problem from every other page in this Worker: anything that
+leaks the address leaks the bookings behind it. Three ways it could:
+
+- **By `Referer`.** The Tithe.ly pay button is `target="_blank"`, so clicking it
+  handed `https://timothystl.org/gym/book/<token>` to Tithe.ly in the request
+  header and gave the opened page a live `window.opener`. Both halves are
+  fixed — `Referrer-Policy: no-referrer` covers the request,
+  `rel="noopener noreferrer"` covers the window — and **the test asserts it
+  against the SOURCE, not one rendered route.** The pay links are on the invoice
+  and booking views; a test that happened to render the calendar would have
+  passed while proving nothing, which is exactly what the first attempt did.
+- **By being indexed.** `X-Robots-Tag: noindex` on the page, and
+  `Disallow: /gym/` added to `public/robots.txt`. ⚠ Those are two different
+  mechanisms and both are wanted: robots.txt is read before the request is made,
+  the header only once it has been.
+- **By being cached.** `no-store`, on a page showing one renter's own history.
+
+Plus `frame-ancestors 'none'` and `form-action 'self'` — this is the page with
+the real POST actions on it — and `nosniff`.
+
+### A newsletter nobody had sent was public (FX-07)
+
+`/api/newsletter/:id` was `SELECT *` with no status filter, answering
+`{...row}`. **Ids are sequential, so "you would have to guess it" was never a
+control** — and the list endpoint twenty lines above had always filtered
+correctly, which is the tell that this was an omission rather than a decision.
+
+Two changes, and the second matters more than it looks:
+
+- `AND (status IS NULL OR status = 'published')`. A draft under approval 404s.
+- **Named columns rather than `SELECT *`.** `brevo_campaign_id`, `sent_count`
+  and `approval_status` were all being handed to anybody who asked — internal
+  bookkeeping about how an issue was sent, on a public endpoint. ⚠ The list is
+  exactly what `loadNewsletters()`/`loadNewsletterDetail()` read, so **a column
+  added to this table later is private until somebody decides otherwise**, which
+  is the right default for a table carrying send state.
+
+### An upload needed a session and nothing else (FX-08)
+
+Any account — the Market coordinator, the Bookkeeper, a ministry leader scoped
+to one page — could put arbitrary images and PDFs on `admin.timothystl.org`.
+**Nothing ever deletes an R2 object**, so this was never "can they write a file";
+it was "can they host a file on the church's domain forever."
+
+- `UPLOAD_IMAGE_PERMS` is the nine content permissions whose screens actually
+  have an image picker; `UPLOAD_DOC_PERMS` is `notices_edit`, which is the
+  voters documents and the only thing that uploads a PDF.
+- **⚠ The test asserts BOTH directions.** A gate that also refuses the office is
+  a worse bug than the one it fixes, so it signs in as a ministry leader and as
+  the notices editor and asserts they are unaffected.
+- ⚠ Found while writing it, and left alone as out of scope: **the session gate
+  answers an unauthenticated API POST with the login PAGE at 200**, not a 401 —
+  so a `fetch()` in a browser reads it as success. Pre-existing, unrelated to
+  this fix, and the test says so where it asserts the actual behavior rather
+  than the behavior one would expect.
+
+### The payroll secret stopped describing itself (FX-09)
+
+An "invalid secret" 403 was widened with the length and the first and last six
+characters of `PAYROLL_PROXY_SECRET`. **The reasoning was good and is worth
+keeping written down** — a Worker secret is write-only from every tool that can
+reach this repo, so when the two sides disagreed there was genuinely no other
+way to see which. That mismatch is resolved.
+
+**⚠ What survives is the half that still helps and reveals nothing: whether this
+Worker holds the secret AT ALL.** Removing that too would make an unset secret
+indistinguishable from a wrong one — which is the diagnosis the fingerprint was
+built for in the first place. A comment three lines above still described the
+fingerprint as if it were there; it is gone too, because a comment that
+describes code that no longer exists is worse than no comment.
+
+### The admin shell could be framed, and never needed `unsafe-eval` (FX-10)
+
+`frame-ancestors` **does not inherit from `default-src`**, so every admin screen
+except the page editor — which sets its own — was framable. Stated outright now,
+along with `base-uri 'none'`, so an injected base tag cannot re-point every
+relative script and stylesheet on the page.
+
+**And `'unsafe-eval'` is gone**, which the plan only listed as worth
+considering. Three independent things say it was never needed: the vendored
+TinyMCE contains no `eval` and no `new Function`, our own admin code contains
+neither, and **the page editor has run the same library under a CSP without it
+since the editor shipped.**
+
+- **⚠ It is verified in a real browser rather than argued.**
+  `test/tinymce-selfhost.test.mjs` now serves the page under
+  `ADMIN_CSP` — the actual exported constant, not a paraphrase — and records
+  every `securitypolicyviolation` the document raises. Everything that suite
+  already asserted (the editor opening on stored content, every plugin's
+  toolbar button, a save round-tripping) ran under that header, so a green
+  suite IS the evidence.
+- **⚠ The recorder is registered with `addInitScript`**, which runs in each new
+  document before its own scripts, so a violation raised while TinyMCE is still
+  booting is still caught. Verified non-vacuously by putting a literal
+  `eval('1+1')` in the page: it fails, naming `script-src` and `eval`.
+- `ADMIN_CSP` is exported for exactly that reason. A test that retyped the
+  header would be testing its own copy.
+
+### The Supabase proxy forwards thirteen calls and nothing else (FX-11)
+
+It forwarded **any** path under `/sb/` to Supabase with the caller's key — an
+authenticated open relay onto the whole project. The 2026-08-12 migration
+narrowed the blast radius by leaving `anon` with no direct grant on any payroll
+table, but that is *the credential happening not to be able to do much*, and it
+is one Supabase `GRANT` away from being wrong again. A 403 at the proxy is a
+different and stronger fact: the request was never forwarded.
+
+- **⚠ THE LIST IS EXACTLY WHAT `admin/payroll.html` CALLS**, and a test reads the
+  page and asserts the two sets are identical **in both directions**. A
+  fourteenth RPC added to the page without being added here fails in CI rather
+  than 403ing in front of somebody running payroll, which is a bad way to find
+  out.
+- **⚠ POST ONLY, and that is not tidiness.** PostgREST executes an RPC on GET
+  too, so allowing the method would put a payroll write one address bar away
+  from a CSRF — the Origin gate below it only runs on non-GET requests.
+- The OPTIONS preflight is deliberately still answered for any `/sb/` path. It
+  reveals nothing and refusing it would break the real calls.
+
+### The voters reports are public, and that is a decision, not a fix (FX-12)
+
+This is the one entry on the list that is not a bug. `/api/voters` is fetched by
+the `/voters` page in `public/index.html` **with no credential of any kind**, and
+there is no member login anywhere on `timothystl.org` to gate it against. So
+"gate it" is a sign-in feature, not a header — and whether a Zoom link and a set
+of council reports belong behind one is the congregation's call rather than a
+developer's.
+
+- **Written down at both call sites**, so the next reader knows it was weighed
+  rather than missed.
+- **⚠ What IS closed is the crawler half, and it was genuinely open.**
+  `public/robots.txt` governs `timothystl.org` and says nothing whatsoever about
+  `admin.timothystl.org`, so the JSON — Zoom link included — and the council PDFs
+  themselves were indexable the moment one of those addresses appeared anywhere
+  crawlable. **An unlisted address is not an access control, and an unlisted
+  address in a search result is not even unlisted.** Both carry
+  `X-Robots-Tag: noindex, nofollow` now, which is worth having whichever way the
+  sign-in question is answered.
+
+### What this pass did not do
+
+- **FX-05's Turnstile secret is still unset**, and still the highest value per
+  unit of effort anywhere on this list. The code half shipped with Phase 0's
+  group (see "Turnstile could not have been switched on safely" above); what is
+  left is creating the site key — **choosing the widget mode deliberately, since
+  the newsletter band is chrome on all 28 pages and a *Managed* key puts a
+  visible checkbox on every one of them** — and one `wrangler secret put`.
+
+Run: `node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1333 — six new groups, one per item), and in a browser
+`NODE_PATH=$(npm root -g) node test/tinymce-selfhost.test.mjs` (68). ⚠ Every
+group was verified by reverting the fix it guards and watching it fail with the
+real symptom: 19 failures across FX-06 through FX-09, 11 across FX-10 and
+FX-11, 2 for FX-12.

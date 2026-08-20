@@ -160,23 +160,54 @@ export async function sendWebPush(env, subscription, payloadObj) {
   return { ok: false, status: res.status };
 }
 
-// Delivers one payload to every stored subscription, pruning any the push
-// service reports as gone. Failures on individual sends never throw — a push
-// is a courtesy notification, never something that should block the write
-// (a held submission, a new hold request) that triggered it.
-export async function pushToAllSubscribers(env, payloadObj) {
-  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return;
+// Delivers one payload to every stored subscription in ONE audience, pruning
+// any the push service reports as gone. Failures on individual sends never
+// throw — a push is a courtesy notification, never something that should
+// block the write (a held submission, a new hold request) that triggered it.
+//
+// ── TWO AUDIENCES, ONE TABLE ──
+// `staff` is every one of the six triggers that were already here — a held
+// submission, a new gym request, a payroll period turning ready, the
+// cross-app relay — and it stays the default so none of those eight call
+// sites needed to change. `public` is the congregation, added so an office
+// account can ring "worship is canceled" out to people who asked for it
+// without also ringing the Market coordinator's phone with a prayer request
+// — see pushToPublicSubscribers below and CLAUDE.md's "Push Alert" section
+// for why staying at the row level (a column) rather than scoping the six
+// staff triggers by PERMISSION was Andrew's call: the six existing triggers
+// are unchanged, and a second, genuinely different audience is who a
+// broadcast reaches.
+//
+// Returns counts rather than nothing, because the ONE caller that fires a
+// broadcast on purpose (the /notify screen) needs to tell the office how
+// many phones it actually reached — every other caller still ignores the
+// return value inside ctx.waitUntil, exactly as before.
+export async function pushToAllSubscribers(env, payloadObj, audience = 'staff') {
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return { sent: 0, gone: 0, total: 0 };
   let rows;
   try {
-    rows = (await env.DB.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions').all()).results || [];
-  } catch (_) { return; }
+    rows = (await env.DB.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE audience = ?')
+      .bind(audience).all()).results || [];
+  } catch (_) { return { sent: 0, gone: 0, total: 0 }; }
 
+  let sent = 0, gone = 0;
   await Promise.all(rows.map(async (row) => {
     try {
       const result = await sendWebPush(env, row, payloadObj);
-      if (!result.ok && result.gone) {
+      if (result.ok) {
+        sent++;
+      } else if (result.gone) {
+        gone++;
         await env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ?').bind(row.id).run();
       }
     } catch (_) { /* one bad subscription must never block the rest */ }
   }));
+  return { sent, gone, total: rows.length };
+}
+
+// The one door onto the public audience, so nothing sending a congregation
+// broadcast has to know the column name or remember the default would
+// otherwise ring the office instead.
+export async function pushToPublicSubscribers(env, payloadObj) {
+  return pushToAllSubscribers(env, payloadObj, 'public');
 }
