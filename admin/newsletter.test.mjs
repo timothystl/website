@@ -10,6 +10,7 @@ import {
   SUBJECT_LIMIT, PREHEADER_LIMIT, isSent, canEdit, approvalState,
   issueStatus, sendSummary, parseSubscriberCsv,
   parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
+  prettyClock, eventRowFromPost, orderEventRows,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -233,6 +234,54 @@ group('extra notes');
 
   eq(JSON.parse(serializeExtras([{ title: 'A', body: '<p>b</p>' }])).length, 1, 'serializing round-trips');
   eq(serializeExtras([]), '[]', 'and empty is an empty list, not null');
+}
+
+
+// ── upcoming events, picked rather than retyped ──────────────────────────────
+group('an issue\'s event rows are built from posts, not typed');
+{
+  eq(prettyClock('19:00'), '7:00 pm', 'evening reads as a person would say it');
+  eq(prettyClock('09:05'), '9:05 am', 'and the morning keeps its minutes');
+  eq(prettyClock('12:00'), '12:00 pm', 'noon is 12 pm, not 0 pm');
+  eq(prettyClock('00:30'), '12:30 am', 'and half past midnight is 12:30 am, not 0:30');
+  // ⚠ A HALF-TYPED VALUE MUST NOT BE ECHOED. This string is printed as-is
+  // into ~600 inboxes; `19:` reaching one of them is worse than no time.
+  for (const bad of ['', null, undefined, '25:00', '7pm', 'noon', '19']) {
+    eq(prettyClock(bad), '', `${JSON.stringify(bad)} prints nothing at all`);
+  }
+
+  const row = eventRowFromPost({ id: 12, title: ' Council meeting ', summary: 'Fellowship Hall.', event_date: '2026-09-01', event_time: '19:00' });
+  eq(row.news_item_id, 12, 'the row remembers which post it came from');
+  eq(row.event_name, 'Council meeting');
+  eq(row.event_time, '7:00 pm');
+  eq(row.event_desc, 'Fellowship Hall.', "the post's own summary is the one-line description");
+
+  // ⚠ ORDER IS BY DATE, NOT BY TICK ORDER. A checkbox list posts in document
+  // order, which is already by date — but a hand-kept legacy row has no place
+  // in that sequence, and appending it would print February under March.
+  const ordered = orderEventRows([
+    { event_name: 'Later', event_date: '2026-09-20' },
+    { event_name: 'Typed', event_date: '2026-09-02' },
+    { event_name: 'Sooner', event_date: '2026-09-01' },
+  ]);
+  eq(ordered.map((r) => r.event_name).join(','), 'Sooner,Typed,Later', 'everything sorts on the date it falls on');
+  eq(ordered.map((r) => r.sort_order).join(','), '0,1,2', 'and sort_order is renumbered from scratch');
+
+  // A dateless row sits at the END rather than at the top pretending to be
+  // the next thing happening.
+  const withBlank = orderEventRows([
+    { event_name: 'Undated' },
+    { event_name: 'Dated', event_date: '2026-09-01' },
+  ]);
+  eq(withBlank[0].event_name, 'Dated');
+  eq(withBlank[1].event_name, 'Undated', 'a dateless row goes last, not first');
+
+  // Two on one day keep the order they arrived in, so the office can decide it.
+  const sameDay = orderEventRows([
+    { event_name: 'Second', event_date: '2026-09-01' },
+    { event_name: 'First', event_date: '2026-09-01' },
+  ]);
+  eq(sameDay.map((r) => r.event_name).join(','), 'Second,First', 'a tie keeps the order it was given');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

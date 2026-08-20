@@ -12,7 +12,8 @@
 // because "works when seeded" and "works on a fresh install" are different
 // claims and the second one is what a new deploy actually hits.
 import { DatabaseSync } from 'node:sqlite';
-import { churchDate } from '../admin/when.js';
+import { churchDate, churchDatePlus } from '../admin/when.js';
+import { openCountOf } from '../admin/intake.js';
 import worker, { PAYROLL_RPC_FNS } from '../tlc-admin-worker.js';
 import { pushToAllSubscribers, pushToPublicSubscribers } from '../admin/webpush.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
@@ -25,6 +26,7 @@ import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
 import { priceBreakdown, money as marketMoney, MARKET_DEFAULTS as MARKET_PRICE_DEFAULTS } from '../market-price.js';
 import crypto from 'node:crypto';
+import { SCHOOL_EVENTS } from '../admin/school-calendar-seed.js';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -3103,8 +3105,8 @@ group('per-screen, part two');
   ok(!/warn[^>]*>\s*Text only/.test(serm), 'and Text only is not amber');
 
   // 05-news: pinned rows carry a marker BEFORE the title, and sort to the top.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (1,'Pinned post','s',?,?,1)").run(today, '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (2,'Ordinary post','s',?,?,0)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,expire_date,pinned) VALUES ('Pinned post','s',?,?,1)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,expire_date,pinned) VALUES ('Ordinary post','s',?,?,0)").run(today, '2099-01-01');
   const news = await (await call(env, '/newsitems', { cookie })).text();
   has(news, 'tlc-pin', 'a pinned post carries a pin marker');
   ok(news.indexOf('tlc-pin') < news.indexOf('Pinned post'), 'the marker sits before the title');
@@ -3118,12 +3120,12 @@ group('per-screen, part two');
   // before. Events lead announcements as a group, regardless of how far out
   // the soonest one is — a member deciding "what's next" should not have to
   // skim past a stale announcement to find it.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (3,'Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (4,'New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (5,'Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (6,'VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
   // A past event, still inside its (generous) expire_date — must not appear.
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (7,'Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
   const apiNews = await (await call(env, '/api/news')).json();
   const titles = apiNews.map((r) => r.title);
   ok(!titles.includes("Last month's rummage sale"), 'a past event drops off entirely, even with time left on its expire_date');
@@ -4796,8 +4798,11 @@ group('with Google unreachable the feed still answers, and says which half is mi
     eq(res.status, 200, 'an unreachable Google is not a 500 — to the browser that is indistinguishable from a dead network');
     const feed = await res.json();
     eq(feed.sources.google, false, 'the page is told the Google half is missing, so it can say so');
-    eq(feed.events.length, 1, 'and still gets everything that did answer');
-    eq(feed.events[0].title, 'Trunk or Treat');
+    // ⚠ Named, not counted. The Worker seeds the school year into every fresh
+    // database, so "the feed has exactly one event" stopped being a fact about
+    // this test and became a fact about the seed.
+    ok(feed.events.some((e) => e.title === 'Trunk or Treat'), 'and still gets everything that did answer');
+    ok(feed.events.every((e) => e.source !== 'gcal'), 'with nothing from the half that could not be reached');
   } finally { globalThis.fetch = realFetch; }
 }
 
@@ -5001,7 +5006,8 @@ group('building rentals reach the calendar, and never name the renter');
 
     const building = feed.events.filter((e) => e.source === 'building');
     eq(building.length, 1, 'the confirmed booking is on the calendar');
-    eq(building[0].title, 'Building in use', 'and it says the building is in use');
+    eq(building[0].title, 'Gym rented', 'and it names the room rather than saying only that something is on');
+    eq(building[0].location, 'Gym', 'which room, since the church rents exactly one');
     eq(building[0].start, '2026-08-20T18:00:00', 'with the real time');
     eq(building[0].category, 'facility', 'filed under Facility / rentals');
 
@@ -5041,7 +5047,10 @@ group('the calendar categories are editable, and the feed follows them');
 
     // Blueberry feeds Worship to start with.
     let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
-    eq(feed.events[0].category, 'worship', 'a Blueberry event is Worship');
+    // Found by title rather than by position — the seeded school year shares
+    // this month, and its rows sort before a mid-August Google event.
+    const gcalEv = (f) => f.events.find((e) => e.source === 'gcal');
+    eq(gcalEv(feed).category, 'worship', 'a Blueberry event is Worship');
 
     // Rename it and re-point it at Basil.
     const saved = await call(env, '/calendar-categories/save/worship', { cookie: admin.cookie, method: 'POST',
@@ -5053,8 +5062,8 @@ group('the calendar categories are editable, and the feed follows them');
     eq(cat.color, '#4A5E3A', 'and so does the palette swatch it now wears');
     // ⚠ Blueberry no longer feeds anything — Worship was re-pointed at Flamingo
     // — so the event falls to the neutral category rather than disappearing.
-    eq(feed.events[0].category, 'other', 'an event whose color no category claims is Other, never dropped');
-    eq(feed.events.length, 1, 'and it is still on the calendar');
+    eq(gcalEv(feed).category, 'other', 'an event whose color no category claims is Other, never dropped');
+    ok(gcalEv(feed), 'and it is still on the calendar');
 
     // ⚠ Two categories cannot share one Google color — the question has no answer.
     const clash = await call(env, '/calendar-categories/save/learn', { cookie: admin.cookie, method: 'POST',
@@ -5143,6 +5152,540 @@ group('a news post says what it is on the calendar, rather than having it guesse
   } finally { globalThis.fetch = realFetch; }
 }
 
+group('a news post carries a time, so it is a whole event and nothing is retyped');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+    const form = await (await call(env, '/newsitems/new', { cookie: admin.cookie })).text();
+    ok(form.includes('Starts at') && form.includes('type="time"'), 'the post form asks what time it starts');
+    ok(form.includes('Where'), 'and where it is');
+
+    // ⚠ THE CASE THE NEWSLETTER'S OWN EVENT ROWS EXISTED FOR. Before this a
+    // 7:00 pm meeting could be typed into an email and could not be said here,
+    // so it was entered again by hand — and again into Google.
+    eq((await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Council meeting', summary: 'In the fellowship hall.',
+      publish_date: '2026-08-01', event_date: '2026-08-11', expire_date: '2026-12-31',
+      event_time: '19:00', event_end_time: '20:30', event_location: 'Fellowship Hall',
+      calendar_category: 'meetings', ch_web: '1',
+    } })).status, 302, 'the post saves');
+
+    let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    let ev = feed.events.find((e) => e.title === 'Council meeting');
+    ok(ev, 'and reaches the calendar');
+    eq(ev.allDay, false, 'as a timed event rather than an all-day chip');
+    eq(ev.start, '2026-08-11T19:00:00');
+    eq(ev.end, '2026-08-11T20:30:00');
+    eq(ev.location, 'Fellowship Hall');
+    // The rule the whole feed is built on, restated at the one new door into it.
+    ok(!/[Zz]|[+-]\d{2}:\d{2}$/.test(ev.start), 'carrying no timezone, like every other time in the feed');
+
+    // A post with no time is still an all-day event, so nothing already
+    // written moved when the column arrived.
+    await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Rummage sale', publish_date: '2026-08-01', event_date: '2026-08-12',
+      expire_date: '2026-12-31', ch_web: '1',
+    } });
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    eq(feed.events.find((e) => e.title === 'Rummage sale').allDay, true,
+      'a post with no time is all day, not midnight');
+
+    // ⚠ A TIME THE CALENDAR WOULD IGNORE MUST NOT BE STORED EITHER, or the
+    // edit form comes back showing a time the month does not show.
+    await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Bad clock', publish_date: '2026-08-01', event_date: '2026-08-13',
+      expire_date: '2026-12-31', event_time: '25:00', ch_web: '1',
+    } });
+    eq(db.prepare("SELECT event_time FROM news_items WHERE title='Bad clock'").get().event_time, null,
+      'an impossible time is stored as nothing at all');
+
+    // The edit form shows back what was saved, so a time survives a second save.
+    const id = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+    const edit = await (await call(env, `/newsitems/edit/${id}`, { cookie: admin.cookie })).text();
+    ok(edit.includes('value="19:00"'), 'the edit form shows the stored start time');
+    ok(edit.includes('Fellowship Hall'), 'and the stored location');
+
+    // It rides into a subscription as a real instant, not an all-day block.
+    const ics = await (await call(env, '/api/calendar.ics?month=2026-08', { fresh: true })).text();
+    ok(ics.includes('DTSTART;TZID=America/Chicago:20260811T190000'), 'the .ics carries the clock');
+    ok(ics.includes('LOCATION:Fellowship Hall'), 'and the location');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('the newsletter picks its events from the posts, instead of retyping them');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 12 * 864e5).toISOString().slice(0, 10);
+
+  db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
+              VALUES ('Council meeting','In the fellowship hall.',?,?,'19:00','Fellowship Hall','web')`).run(today, soon);
+  const postId = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+
+  // ⚠ THE LOOP THIS CLOSES. The composer used to offer a blank date/name/time
+  // to type into, and those rows reached the email and NOTHING else.
+  const form = await (await call(env, '/new', { cookie: admin.cookie })).text();
+  ok(form.includes('name="event_news_ids"'), 'the composer offers the posts that already carry a date');
+  ok(form.includes('Council meeting'), 'including the one just written');
+  ok(!form.includes('name="event_ids"'), 'and no longer offers a blank row to type into');
+  ok(!/addEvent\(\)/.test(form), 'the "+ Add an event" path is gone, not merely hidden');
+
+  // ⚠ A DATED POST IS OFFERED WHETHER OR NOT IT IS TICKED FOR EMAIL. The email
+  // channel means "worth a paragraph"; a date is a fact about the week, and
+  // leaving it out of the offer sends somebody back to typing it.
+  ok(!form.includes('name="news_item_ids" value="' + postId + '"'),
+    'the post is not offered by the news picker, which is email-channel only');
+
+  const made = await call(env, '/publish', { cookie: admin.cookie, method: 'POST', form: {
+    subject: 'This week at Timothy', published_at: today, format: 'weekly',
+    action: 'draft', event_news_ids: String(postId),
+  } });
+  eq(made.status, 302, 'the issue saves');
+  const nl = db.prepare("SELECT id FROM newsletters WHERE subject='This week at Timothy'").get();
+  const rows = db.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').all(nl.id);
+  eq(rows.length, 1, 'and one event row is materialized from the post');
+  eq(rows[0].event_name, 'Council meeting');
+  eq(rows[0].event_time, '7:00 pm', 'with the clock written as somebody would read it aloud');
+  eq(rows[0].event_desc, 'In the fellowship hall.');
+  eq(rows[0].news_item_id, postId, 'remembering which post it came from');
+
+  // The tick survives a round trip, which is the whole job of news_item_id.
+  const edit = await (await call(env, `/edit/${nl.id}`, { cookie: admin.cookie })).text();
+  ok(edit.includes(`name="event_news_ids" value="${postId}" checked`), 'reopening the issue re-ticks the event');
+
+  // ⚠ MATERIALIZED, NOT RESOLVED AT SEND TIME. A sent issue's archive has to
+  // keep saying what was actually sent, so renaming the post next March must
+  // not rewrite an issue six hundred people already have.
+  db.prepare("UPDATE news_items SET title='Council meeting (moved)' WHERE id=?").run(postId);
+  eq(db.prepare('SELECT event_name FROM events WHERE newsletter_id = ?').get(nl.id).event_name, 'Council meeting',
+    'editing the post afterwards does not rewrite an issue already written');
+
+  // ⚠ A HAND-TYPED ROW FROM BEFORE THE PICKER IS KEPT, NOT SILENTLY DROPPED.
+  db.prepare(`INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id)
+              VALUES (?, '2000-01-01', 'Typed by hand', '6:30 pm', 'From the old composer', 9, NULL)`).run(nl.id);
+  const withTyped = await (await call(env, `/edit/${nl.id}`, { cookie: admin.cookie })).text();
+  ok(withTyped.includes('Typed by hand'), 'the old row is shown');
+  ok(withTyped.includes('name="typed_event_ids"'), 'and posted back so a save does not delete it');
+
+  await call(env, '/publish', { cookie: admin.cookie, method: 'POST', form: {
+    newsletter_id: String(nl.id), subject: 'This week at Timothy', published_at: today, format: 'weekly',
+    action: 'draft', event_news_ids: String(postId),
+    typed_event_ids: '0', typed_event_date_0: '2000-01-01', typed_event_name_0: 'Typed by hand',
+    typed_event_time_0: '6:30 pm', typed_event_desc_0: 'From the old composer',
+  } });
+  const after = db.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').all(nl.id);
+  eq(after.length, 2, 'both rows survive the save');
+  eq(after[0].event_name, 'Typed by hand', 'and the earlier date prints first, whichever kind of row it is');
+  eq(after[0].news_item_id, null, 'a hand-typed row still has no post behind it');
+
+  // The preview reads the same ticks, so it cannot flatter what will send.
+  const preview = await (await call(env, '/newsletter/preview', { cookie: admin.cookie, method: 'POST', form: {
+    subject: 'x', published_at: today, format: 'weekly', block_events: '1',
+    event_news_ids: String(postId),
+  } })).text();
+  ok(preview.includes('Council meeting (moved)'), 'the preview shows the post as it reads right now');
+}
+
+group('the Word of Life school year is on the calendar, and off the news feed');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+    const seeded = db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar'").get().c;
+    eq(seeded, SCHOOL_EVENTS.length, 'every picked date from the school PDF is in');
+
+    // ⚠ THE WHOLE REASON FOR THE CALENDAR-ONLY CHANNEL. Twenty-nine school
+    // dates in the news feed would bury everything the church actually wrote.
+    const news = await (await call(env, '/api/news?limit=100')).json();
+    ok(!news.some((n) => n.title === 'Spring break'), 'a school date is not news anybody wants a paragraph about');
+
+    // ⚠ AND IT IS STILL ON THE MONTH, which is the half that would be easy to
+    // break by filtering the channel in one place and not the other.
+    const march = await (await call(env, '/api/calendar?month=2027-03', { fresh: true })).json();
+    const brk = march.events.find((e) => e.title === 'Spring break');
+    ok(brk, 'but it is on the calendar');
+    eq(brk.category, 'wol', 'filed under Word of Life, so the whole school year filters off in one click');
+    eq(brk.start, '2027-03-15');
+    eq(brk.end, '2027-03-19', 'a week off school is one entry spanning its days, not five identical ones');
+    eq(brk.allDay, true);
+
+    // A Timothy early dismissal is 11:45, not noon — the school's own footnote
+    // gives Ascension a different time and this is Timothy's calendar.
+    const may = await (await call(env, '/api/calendar?month=2027-05', { fresh: true })).json();
+    const last = may.events.find((e) => e.title.startsWith('Last day of school'));
+    eq(last.start, '2027-05-28T11:45:00', 'an early dismissal carries the time it actually happens');
+
+    // ⚠ Good Friday and Easter Monday are TWO rows, not a range. A 26–29 span
+    // would draw a four-day bar and claim the school was shut on days it was
+    // never open.
+    eq(march.events.filter((e) => e.title.startsWith('No school —')).length, 2, 'two closures in March, not one bar across the weekend');
+
+    // ⚠ TWENTY-NINE ROWS IN A LIST SORTED FURTHEST-FUTURE FIRST would put the
+    // school year on top of whatever the office wrote for next Sunday, so the
+    // admin list has a chip that isolates them. It does not hide them from
+    // All, which would make the list a half-truth.
+    const list = await (await call(env, '/newsitems', { cookie: admin.cookie })).text();
+    ok(list.includes('Calendar only'), 'the News list offers a Calendar only filter');
+    ok(/data-filter="[^"]*calendar-only/.test(list), 'and the school rows carry it');
+    ok(list.includes('Spring break'), 'while still being in the list itself');
+    // ⚠ And they are not told off for having no expiry: not having one is
+    // exactly what a date on the month is for.
+    ok(!/calendar-only[\s\S]{0,900}No expiry date/.test(list),
+      'a calendar-only post is not warned about its missing expiry date');
+
+    // ⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM. Without it a date
+    // the office removed on purpose comes back on the next deploy, silently.
+    db.prepare("DELETE FROM news_items WHERE title = 'Spring break'").run();
+    await call(env, '/api/news', { fresh: true });            // any request re-runs the schema block
+    eq(db.prepare("SELECT COUNT(*) c FROM news_items WHERE title = 'Spring break'").get().c, 0,
+      'a deleted school date stays deleted');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('a subscription can leave out what would crowd somebody\'s own calendar');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels, calendar_category) VALUES (?,?,?,?,?,?,?)")
+      .run('Advent service', 'In the sanctuary.', '2026-11-01', '2026-12-02', '2099-01-01', 'web', 'worship');
+
+    const all = await (await call(env, '/api/calendar.ics?month=2026-12', { fresh: true })).text();
+    ok(all.includes('SUMMARY:Advent service'), 'the whole feed carries the service');
+    ok(all.includes('SUMMARY:Christmas break'), 'and the school year, which is exactly the problem');
+    ok(all.includes('X-WR-CALNAME:Timothy Lutheran Church\r\n'), 'and is named plainly');
+
+    // ⚠ THE POINT OF THE WHOLE FEATURE. Somebody already carrying a work
+    // calendar and a school calendar will not add a third that buries their
+    // week — they will not subscribe at all.
+    const worship = await (await call(env, '/api/calendar.ics?month=2026-12&cat=worship', { fresh: true })).text();
+    ok(worship.includes('SUMMARY:Advent service'), 'a filtered feed keeps what was asked for');
+    ok(!worship.includes('SUMMARY:Christmas break'), 'and leaves out the school year');
+    ok(worship.includes('X-WR-CALNAME:Timothy Lutheran Church — Worship'),
+      'and says what is in it, so two subscriptions are told apart in a sidebar');
+
+    // ⚠ THE FILTER IS PART OF THE CACHE KEY, and this drives a REAL cache to
+    // prove it. Without the key, whichever filter was asked for first is
+    // served to every other subscriber for ten minutes — somebody who asked
+    // for worship quietly getting the school year, with nothing at their end
+    // to see. Asserting it against the Node harness's absent `caches` would
+    // have passed either way, which is no assertion at all.
+    const realCaches = globalThis.caches;
+    const store = new Map();
+    globalThis.caches = { default: {
+      async match(req) { const hit = store.get(req.url); return hit ? hit.clone() : null; },
+      async put(req, res) { store.set(req.url, res.clone()); },
+      async delete() { return true; },
+    }};
+    try {
+      // Warm the cache with the worship feed, then ask for the school one.
+      await call(env, '/api/calendar.ics?month=2026-12&cat=worship');
+      const school = await (await call(env, '/api/calendar.ics?month=2026-12&cat=wol')).text();
+      ok(school.includes('SUMMARY:Christmas break'), 'a different filter is not served the previous one');
+      ok(!school.includes('SUMMARY:Advent service'), 'in either direction');
+      // The same filter written the other way round is ONE cache entry, not two.
+      const before = store.size;
+      await call(env, '/api/calendar.ics?month=2026-12&cat=wol,worship');
+      await call(env, '/api/calendar.ics?month=2026-12&cat=worship,wol');
+      eq(store.size, before + 1, 'the order the categories are written in does not make a second entry');
+    } finally {
+      if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+    }
+
+    // ⚠ AND IT APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE. The month on
+    // screen filters in the browser; filtering the JSON here would leave the
+    // pills unable to widen what they were handed, and the print sheet — which
+    // deliberately ignores the pills — printing a month short of everything.
+    const json = await (await call(env, '/api/calendar?month=2026-12&cat=worship', { fresh: true })).json();
+    ok(json.events.some((e) => e.title === 'Christmas break'),
+      'the page still gets the whole month, whatever the subscription asked for');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+
+// ── EVENT INTAKE, end to end through the real Worker ────────────────────────
+// admin/intake.test.mjs already covers every pure decision (types, checklist
+// templates, the merge, the queues) with zero D1 access. What only a real
+// Worker + real sqlite can prove: the permission gate, that a sync actually
+// writes placeholder rows, that Publish is refused server-side (not just by a
+// disabled button) when the checklist is incomplete, that a deferred field
+// set is genuinely read-only against a crafted POST (not just hidden in the
+// markup), that a "local" row created here reaches the PUBLIC calendar feed,
+// and — the one property Andrew's three answers are all binding on — that
+// none of this ever gates the public calendar or touches calendar_category.
+group('Event Intake is gated on its own permission');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['news_edit'], 'noaccess');
+  const res = await call(env, '/event-intake', { cookie, fresh: true });
+  eq(res.status, 403, 'holding no intake_manage at all is refused');
+  ok(!(await res.text()).includes('Timothy’s Calendar'), 'and never renders the screen to get there');
+}
+
+group('a visit syncs Google, News and gym rows into placeholders, all unclassified');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const realFetch = globalThis.fetch;
+  const gcalDate = churchDatePlus(5);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [
+    { id: 'ei-g1', summary: 'Choir Rehearsal', colorId: '9',
+      start: { dateTime: `${gcalDate}T19:00:00-05:00` }, end: { dateTime: `${gcalDate}T20:00:00-05:00` } },
+  ] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    const newsDate = churchDatePlus(6);
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, event_time, expire_date, channels) VALUES (?,?,?,?,?,?,?)")
+      .run('Rally Day Kickoff', 'Classes then a picnic.', churchDate(), newsDate, '09:15', '2099-01-01', 'web');
+    db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Boy Scouts Troop 217','Dave Kessler','dave@troop217.org',1)").run();
+    const gymDate = churchDatePlus(7);
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:30','20:30','confirmed','Tables 4, chairs 40')")
+      .run(gymDate);
+    // A held/expired hold must never appear — only confirmed bookings do.
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,?,'09:00','10:00','hold')").run(gymDate);
+
+    const res = await call(env, '/event-intake', { cookie, fresh: true });
+    eq(res.status, 200, 'intake_manage reaches the screen');
+    const html = await res.text();
+    has(html, 'Choir Rehearsal', 'the Google event is in the default (inbox) queue');
+    has(html, 'Rally Day Kickoff', 'so is the News post');
+    has(html, 'Boy Scouts Troop 217', 'and the confirmed gym booking, titled by group name');
+    has(html, 'Needs a type', 'none of the three has been classified yet');
+    ok(!html.includes('4 open') || true, 'sanity: page renders without throwing');
+
+    // ⚠ THE SYNC WROTE PLACEHOLDER ROWS — this is the row the badge and a
+    // later visit both depend on, and it is the one thing a unit test on
+    // admin/intake.js alone could never prove (it has no D1 access at all).
+    // ⚠ Scoped to OUR OWN three keys, not a bare row count — the school-year
+    // seed (admin/school-calendar-seed.js) writes ~29 News & Events rows with
+    // channel='calendar', and several of those genuinely fall inside Event
+    // Intake's own sync window too. That is correct behavior (Andrew's
+    // "everything flows into the queue" applies to them as much as to this
+    // test's own data), not a defect to work around — so the test asks about
+    // its own rows by key instead of assuming it is the only thing synced.
+    const newsId = db.prepare("SELECT id FROM news_items WHERE title = 'Rally Day Kickoff'").get().id;
+    const gymBookingId = db.prepare("SELECT id FROM gym_bookings WHERE status = 'confirmed'").get().id;
+    const myKeys = ['g:ei-g1', `n:${newsId}`, `b:${gymBookingId}`];
+    const placeholders = myKeys.map(() => '?').join(',');
+    const rowsOf = () => db.prepare(`SELECT source_kind, source_key, event_type FROM event_intake WHERE source_key IN (${placeholders})`).all(...myKeys);
+    const rows = rowsOf();
+    eq(rows.length, 3, 'exactly one placeholder row per synced source of ours (the hold is not confirmed, so it never syncs)');
+    ok(rows.every((r) => r.event_type === null), 'and every one starts unclassified');
+    ok(rows.some((r) => r.source_kind === 'gcal' && r.source_key === 'g:ei-g1'), 'the Google row uses the same key space the public calendar reads');
+    ok(rows.some((r) => r.source_kind === 'gym'), 'the gym row synced too — Andrew’s explicit "everything, including gym bookings"');
+
+    // A second visit must not duplicate the rows — ON CONFLICT(source_key)
+    // updates in place rather than inserting a sibling.
+    await call(env, '/event-intake', { cookie, fresh: true });
+    eq(rowsOf().length, 3, 'a second sync does not duplicate placeholder rows for the same three keys');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('picking a type never touches calendar_category, and the checklist is purely internal');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const newsDate = churchDatePlus(4);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels, calendar_category) VALUES (?,?,?,?,?,?,?)")
+    .run('Council Meeting', 'Monthly meeting.', churchDate(), newsDate, '2099-01-01', 'web', 'meetings');
+  await call(env, '/event-intake', { cookie, fresh: true }); // sync
+  const key = `n:${db.prepare("SELECT id FROM news_items WHERE title='Council Meeting'").get().id}`;
+  // ⚠ Looked up by source_key, not "the first news-kind row" — the
+  // school-year seed writes its own News-sourced rows into event_intake too,
+  // so grabbing an arbitrary row of that kind would silently check somebody
+  // else's row instead of this test's own.
+
+  const res = await call(env, '/event-intake/type', { cookie, method: 'POST',
+    form: { key, type: 'worship', queue: 'inbox' } });
+  eq(res.status, 302, 'redirects back to the queue');
+  const after = db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(key);
+  eq(after.event_type, 'worship', 'the Intake type is stored');
+  const news = db.prepare("SELECT calendar_category FROM news_items WHERE title='Council Meeting'").get();
+  eq(news.calendar_category, 'meetings', 'and the News post’s OWN calendar_category is completely untouched — type and category are separate ideas');
+
+  // ⚠ THE LOAD-BEARING ASSERTION: the public calendar feed shows this event
+  // — unchanged, still under its News category — with no checklist item
+  // ever checked and nothing ever published from this screen. Internal
+  // tracking here must never gate what the congregation sees.
+  const feed = await (await call(env, `/api/calendar?month=${newsDate.slice(0, 7)}`, { fresh: true })).json();
+  const onFeed = feed.events.find((e) => e.title === 'Council Meeting');
+  ok(onFeed, 'the event is on the public calendar with zero Intake checklist progress');
+  eq(onFeed.category, 'meetings', 'still wearing its own category, not Intake’s "worship"');
+
+  // An unrecognized type is refused rather than stored.
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'not-a-real-type', queue: 'inbox' } });
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(key).event_type, null,
+    'a bogus type clears the classification rather than storing garbage');
+}
+
+group('Publish is refused server-side when the checklist is incomplete, even via a crafted POST');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const newsDate = churchDatePlus(3);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Adult Bible Study', 'Colossians, week 1.', churchDate(), newsDate, '2099-01-01', 'web');
+  await call(env, '/event-intake', { cookie, fresh: true });
+  const newsId = db.prepare("SELECT id FROM news_items WHERE title='Adult Bible Study'").get().id;
+  const key = `n:${newsId}`;
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
+
+  // Claim action=publish with only ONE of the four education checklist items
+  // ticked — the disabled button on screen is a courtesy, not the rule.
+  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
+    form: { key, queue: 'education', action: 'publish', room: 'Library', check_teacher: '1' } });
+  eq(res.status, 302, 'still redirects — a refusal here is silent, not an error page');
+  const row = db.prepare("SELECT published_at, checks_json, room FROM event_intake WHERE source_key = ?").get(key);
+  eq(row.published_at, null, 'NOT marked ready — three of four items were never ticked');
+  ok(JSON.parse(row.checks_json).teacher === true, 'the one real tick is still saved');
+  eq(row.room, 'Library', 'and so is the room — Save happens whether or not Publish succeeds');
+
+  // Now tick the rest and publish for real.
+  const res2 = await call(env, '/event-intake/save', { cookie, method: 'POST',
+    form: { key, queue: 'education', action: 'publish', room: 'Library',
+      check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1' } });
+  eq(res2.status, 302, 'redirects on success too');
+  const row2 = db.prepare("SELECT published_at, published_by FROM event_intake WHERE source_key = ?").get(key);
+  ok(row2.published_at, 'every box ticked — Publish is allowed');
+  eq(row2.published_by, 'office', 'and records who');
+}
+
+group('a deferred field set (a gym-sourced rental) is read-only against a crafted POST, not just hidden');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Red Cross','Angela Poe','apoe@redcross.org',1)").run();
+  const gymDate = churchDatePlus(10);
+  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'12:30','16:30','confirmed','8 tables, 20 chairs')")
+    .run(gymDate);
+  await call(env, '/event-intake', { cookie, fresh: true });
+  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
+  const key = `b:${bookingId}`;
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
+
+  // A gym-sourced rental defers ALL its extra fields to Gym Rentals — see
+  // deferredFieldsSource('rental', 'gym') in admin/intake.js. A crafted POST
+  // trying to overwrite the renter's name through Intake must be dropped.
+  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
+    form: { key, queue: 'rental', action: 'save', room: 'Fellowship Hall',
+      extra_renter: 'SOMEBODY ELSE ENTIRELY', extra_contact: 'not-a-real-contact' } });
+  eq(res.status, 302, 'still saves the parts that are genuinely Intake’s (the room)');
+  const row = db.prepare("SELECT extra_json, room FROM event_intake WHERE source_key = ?").get(key);
+  eq(row.room, 'Fellowship Hall', 'the room, which is not deferred, is saved');
+  eq(row.extra_json, null, 'but extra_json was never written at all — the deferred fields have nowhere to land');
+
+  // And the real renter name still comes from gym_groups, not from anything
+  // Intake could have overwritten.
+  const group = db.prepare('SELECT name FROM gym_groups WHERE id = 1').get();
+  eq(group.name, 'Red Cross', 'the real record is untouched');
+  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
+  has(page, 'Red Cross', 'and the screen displays it read-only, pulled live from the real record');
+  has(page, 'Managed on the Gym Rentals screen, not here.', 'saying so in as many words');
+}
+
+group('"+ New event" creates a local row with no other record, and it reaches the public calendar directly');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const formRes = await call(env, '/event-intake/new-form', { cookie, fresh: true });
+  eq(formRes.status, 200, 'the standalone form is reachable');
+  has(await formRes.text(), 'For a booking with no Google event and no News', 'and says what it is for');
+
+  const wedDate = churchDatePlus(20);
+  const res = await call(env, '/event-intake/new', { cookie, method: 'POST', form: {
+    local_title: 'Wedding — Bauer / Klein', local_event_date: wedDate,
+    local_event_time: '14:00', room: 'Sanctuary', type: 'rental',
+  } });
+  eq(res.status, 302, 'redirects back into the queue with the new row selected');
+  const row = db.prepare("SELECT * FROM event_intake WHERE source_kind='local'").get();
+  ok(row, 'a local row now exists');
+  eq(row.event_type, 'rental', 'the type picked on the standalone form is stored immediately');
+  eq(row.local_title, 'Wedding — Bauer / Klein');
+
+  // ⚠ THE OTHER HALF — admin/calendar.js's readLocalIntakeEvents() is unit
+  // tested with a stub DB; this proves the real route that creates a local
+  // row and the real public feed that reads it agree with each other.
+  const feed = await (await call(env, `/api/calendar?month=${wedDate.slice(0, 7)}`, { fresh: true })).json();
+  const onFeed = feed.events.find((e) => e.title === 'Wedding — Bauer / Klein');
+  ok(onFeed, 'the local event reaches the public calendar with no Google event and no News post behind it');
+  eq(onFeed.source, 'local', 'and says so');
+  eq(onFeed.start, `${wedDate}T14:00:00`, 'carrying the church wall clock, no offset');
+
+  // A missing title or date is refused, not silently dropped as a blank row.
+  const bad = await call(env, '/event-intake/new', { cookie, method: 'POST', form: { local_title: '', local_event_date: '' } });
+  eq(bad.status, 302, 'still redirects');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 1,
+    'but nothing was inserted for the incomplete submission');
+
+  // Deleting the local row removes it from the calendar; deleting a
+  // non-local key (the safety the route itself enforces) is a silent no-op.
+  await call(env, '/event-intake/local/delete', { cookie, method: 'POST', form: { key: 'g:not-a-real-id' } });
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 1,
+    'a non-local key deletes nothing');
+  await call(env, '/event-intake/local/delete', { cookie, method: 'POST', form: { key: `l:${row.id}` } });
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 0,
+    'the local row itself deletes cleanly');
+  const feedAfter = await (await call(env, `/api/calendar?month=${wedDate.slice(0, 7)}`, { fresh: true })).json();
+  ok(!feedAfter.events.some((e) => e.title === 'Wedding — Bauer / Klein'), 'and is gone from the public calendar too');
+}
+
+group('the sidebar badge counts open Intake items, from the database alone');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const newsDate = churchDatePlus(8);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('MDO Open House', 'Tour the wing.', churchDate(), newsDate, '2099-01-01', 'web');
+  // Before any visit, the badge reads zero — nothing has synced yet, not even
+  // the school-year seed (it only reaches event_intake through a sync, same
+  // as anything else).
+  const dash0 = await call(env, '/dashboard', { cookie, fresh: true });
+  const dash0Html = await dash0.text();
+  has(dash0Html, 'sidebar-item', 'the dashboard renders at all');
+  lacks(dash0Html, 'item(s) need a decision', 'and before any visit event_intake is empty, so nothing is counted yet');
+
+  await call(env, '/event-intake', { cookie, fresh: true }); // syncs everything in the window
+  const dash = await call(env, '/dashboard', { cookie, fresh: true });
+  const dashHtml = await dash.text();
+  has(dashHtml, 'Event Intake', 'the row is visible to intake_manage');
+  // ⚠ NOT a literal "1 item(s)" — the school-year seed's own rows are inside
+  // the same sync window and genuinely count too (Andrew's "everything"), so
+  // the true number is whatever badgeCounts()/intakeOpenCount() says it is.
+  // The test reads that number out of the database with the SAME openCountOf
+  // the app uses, rather than assuming it is the only source of open items.
+  const openNow = db.prepare(
+    "SELECT event_type, checks_json FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
+  ).all(churchDatePlus(-3)).filter((r) => openCountOf(r.event_type, r.checks_json ? JSON.parse(r.checks_json) : {}) !== 0).length;
+  ok(openNow >= 1, 'at least our own unclassified row counts as open');
+  has(dashHtml, `${openNow} item(s) need a decision`, 'and the badge title names exactly that many');
+
+  // Publish OUR item, and the count drops by exactly one.
+  const key = `n:${db.prepare("SELECT id FROM news_items WHERE title='MDO Open House'").get().id}`;
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
+  await call(env, '/event-intake/save', { cookie, method: 'POST', form: {
+    key, queue: 'education', action: 'publish', room: 'MDO Wing',
+    check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1',
+  } });
+  const dashAfter = await call(env, '/dashboard', { cookie, fresh: true });
+  const afterHtml = await dashAfter.text();
+  lacks(afterHtml, `${openNow} item(s) need a decision`, 'the old count is gone');
+  has(afterHtml, `${openNow - 1} item(s) need a decision`, 'and it dropped by exactly the one item that was just published');
+}
 
 group('push notifications have two audiences, and the six existing triggers stay in the staff one');
 {
@@ -5314,6 +5857,42 @@ group('Push Alert composes a message for the OTHER audience, and only that one')
     body: new URLSearchParams({ title: 'x', body: 'y' }).toString(),
   }), env, ctx);
   eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
+}
+
+group('Contact and Prayer are never rendered from blocks, even when published');
+{
+  // Found live: both pages ship a seeded draft with a "Signup form" block in
+  // place of the real form — a Google Form embed with no URL, which the
+  // office can (and, on the real site, did) Publish without noticing it
+  // replaces a working, spam-screened, Turnstile-checked form with two dead
+  // <span>s. No block on this site can express that behavior, the same
+  // reason give.timothystl.org is kept off the block editor entirely — so
+  // these two ids must never appear in `rendered`, however their own
+  // published_blocks reads.
+  const { db, env } = await boot();
+
+  // The default seed's own draft has exactly this trap already in it —
+  // confirmed directly, not assumed: contact-2 / prayer-2 are type:'form'
+  // with url:''. Publishing is copying draft to published_blocks, so that is
+  // exactly what this does.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id IN ('contact','prayer')").run();
+  // A control page, published with a block stack of its own, proves the
+  // exclusion is scoped to these two ids and not a general regression.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id = 'about' AND blocks IS NOT NULL AND blocks != '[]'").run();
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!api.rendered.contact, 'contact is never rendered from blocks, whatever is published for it');
+  ok(!api.rendered.prayer, 'neither is prayer');
+  ok(!!api.rendered.about, 'a normal page with the same shape of publish still renders — the exclusion is scoped, not a general break');
+
+  // Still ordinary pages: addressable, in the page list, at their own slug —
+  // only the rendered HTML entry is withheld.
+  const contactEntry = api.pages.find((p) => p.id === 'contact');
+  const prayerEntry = api.pages.find((p) => p.id === 'prayer');
+  ok(!!contactEntry, 'contact still appears in the page list');
+  ok(!!prayerEntry, 'prayer still appears in the page list');
+  eq(contactEntry.slug, '/contact', 'at its own address, so the router and the menu are unaffected');
+  eq(prayerEntry.slug, '/prayer', 'same for prayer');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

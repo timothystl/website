@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, MARKET_CSS, MARKET_JS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.35.0'; // minor: three more editor tools — Countdown, Documents, and Embed with a real host allowlist
+export const VERSION = 'v5.36.0'; // minor: three more editor tools — Countdown, Documents, and Embed with a real host allowlist
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -833,6 +833,13 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   // its pages with no way to get to them. The badge still needs market_manage,
   // because an unpaid-application count is the coordinator's own business.
   const eventItems = [
+    // The triage inbox, ahead of the market/gym/events rows below it — it is
+    // where "what needs me before Sunday" actually gets answered, across
+    // Google, News & Events and confirmed gym rentals at once. The badge is
+    // a DB count, not a live Google poll — see the note above the route in
+    // tlc-admin-worker.js for why.
+    hp('intake_manage')
+      ? navItem('/event-intake', 'Event Intake', activeTab === 'intake', badge(b.intake, hp('intake_manage'), `${b.intake} item(s) need a decision`)) : '',
     // The index — every event the church runs, not only the market. Gated on
     // events_manage (creating/administering the section) OR any one event's
     // own coordinator key, so a VBS coordinator holding only that key can
@@ -946,6 +953,7 @@ const TRAIL = {
   subscribers: { group: GROUPS.email, section: 'Subscribers' },
   filtered: { group: GROUPS.email, section: 'Filtered mail' },
   giving: { group: GROUPS.money, section: 'Giving' },
+  intake: { group: GROUPS.events, section: 'Event Intake', waits: 'intake' },
   market: { group: GROUPS.events, section: 'Christmas Market vendors', waits: 'market' },
   gym: { group: GROUPS.events, section: 'Gym rentals', waits: 'gym' },
   payroll: { group: GROUPS.money, section: 'Payroll' },

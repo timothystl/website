@@ -3679,12 +3679,35 @@ function tlcCalDow(ymd) {
 
 function tlcCalTime(ev) {
   if (ev.allDay) return 'All day';
-  var m = /T(\d{2}):(\d{2})/.exec(ev.start || '');
+  return tlcCalClock(ev.start);
+}
+function tlcCalClock(iso) {
+  var m = /T(\d{2}):(\d{2})/.exec(iso || '');
   if (!m) return '';
   var h = +m[1], mn = m[2];
   var ap = h < 12 ? 'AM' : 'PM';
   h = h % 12; if (h === 0) h = 12;
   return h + ':' + mn + ' ' + ap;
+}
+// The block of time something occupies, where there is room to print it — the
+// list view and the detail panel. A gym rental in particular is only useful as
+// a block: "is the gym free at two" is the question somebody is asking.
+//
+// ⚠ ONLY WHEN THE END IS GENUINELY KNOWN. An end equal to the start means
+// nobody said when it finishes (see normalizeNewsItem — the +1 hour that
+// `.ics` needs is derived at that boundary and never on the event), so this
+// falls back to the start alone rather than printing a duration nobody stated.
+// ⚠ And only within one day. A multi-day event's end belongs to another date
+// entirely, and "9:00 AM – 11:59 PM" said of a five-day camp is nonsense.
+function tlcCalSpan(ev) {
+  if (ev.allDay) return 'All day';
+  var a = String(ev.start || ''), b = String(ev.end || '');
+  if (!b || b <= a || b.slice(0, 10) !== a.slice(0, 10)) return tlcCalClock(a);
+  // One meridiem when both halves share it: "1:00 – 3:00 PM", not
+  // "1:00 PM – 3:00 PM", which is how a printed bulletin would set it.
+  var sa = tlcCalClock(a), sb = tlcCalClock(b);
+  var ma = sa.slice(-2), mb = sb.slice(-2);
+  return (ma === mb ? sa.slice(0, -3) : sa) + ' \u2013 ' + sb;
 }
 // The print sheet gets a 112px-tall cell for the whole day, so the time is a
 // short prefix rather than a column: "8a", "10:45a", "12p".
@@ -3787,6 +3810,13 @@ function tlcCalMountEl(host, opts) {
     host: host, id: host.id || '',
     y: +today.slice(0, 4), m: +today.slice(5, 7),
     filter: 'all', src: 'all', view: 'month', sel: null,
+    // ⚠ The Subscribe panel keeps its OWN selection, deliberately not the
+    // month's filter pills. A pill is what somebody is looking at for a
+    // moment; a subscription is what appears in their calendar every day for
+    // years, and coupling the two would silently change one when they touched
+    // the other. `null` means everything — the state before anybody has
+    // chosen, which is also the right default.
+    subOpen: false, subCats: null,
     events: [], cats: [], sources: {}, status: 'loading',
     compact: !!(opts && opts.compact),
   };
@@ -3852,6 +3882,44 @@ function tlcCalClick(st, e) {
   if (act === 'print') { window.print(); return; }
   if (act === 'event') { st.sel = (st.sel === val ? null : val); tlcCalRender(st); return; }
   if (act === 'closedetail') { st.sel = null; tlcCalRender(st); return; }
+  if (act === 'subscribe') { st.subOpen = !st.subOpen; tlcCalRender(st); return; }
+  if (act === 'subcat') {
+    // The first tick is what turns "everything" into a list. Starting from the
+    // full set means unticking one leaves the other ten rather than leaving
+    // nothing, which is what a bare toggle over a null would do.
+    var all = st.cats.map(function (c) { return c.key; });
+    if (st.subCats === null) st.subCats = all.slice();
+    var at = st.subCats.indexOf(val);
+    if (at >= 0) st.subCats.splice(at, 1); else st.subCats.push(val);
+    // Back to everything rather than to an explicit list of everything, so the
+    // address stays the short one somebody can read.
+    if (st.subCats.length === all.length) st.subCats = null;
+    tlcCalRender(st); return;
+  }
+  if (act === 'subcopy') {
+    var box = st.host.querySelector('.tlc-cal-suburl');
+    if (!box) return;
+    box.select();
+    // ⚠ Two paths, because the modern one needs a secure context and the
+    // office has been known to open this over plain http on the church wifi.
+    var done = function () {
+      var b = st.host.querySelector('[data-cal="subcopy"]');
+      if (b) { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(box.value).then(done, function () { try { document.execCommand('copy'); done(); } catch (_) {} });
+    } else { try { document.execCommand('copy'); done(); } catch (_) {} }
+    return;
+  }
+}
+
+// The address a subscription actually lives at. `webcal:` is what hands the URL
+// to a calendar app rather than downloading it — see the panel below.
+function tlcCalSubUrl(st, scheme) {
+  var q = [];
+  if (st.subCats && st.subCats.length) q.push('cat=' + encodeURIComponent(st.subCats.join(',')));
+  var base = TLC_CAL_API + '.ics' + (q.length ? '?' + q.join('&') : '');
+  return scheme === 'webcal' ? base.replace(/^https?:/, 'webcal:') : base;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
@@ -3867,6 +3935,7 @@ function tlcCalRender(st) {
   st.host.innerHTML =
     '<div class="tlc-cal" data-noprint="1">' +
       tlcCalBar(st, monthName) +
+      tlcCalSubPanel(st) +
       tlcCalNote(st) +
       tlcCalSourceBand(st) +
       tlcCalCatBand(st) +
@@ -3895,10 +3964,53 @@ function tlcCalBar(st, monthName) {
       // Subscribe is the thing Google's embed buries, so it stays on the bar.
       // The window is a year from last month, not the month on screen — a
       // subscription that emptied when the month turned would be worthless.
-      '<a class="tlc-cal-sub" href="' + TLC_CAL_API + '.ics?month=' + tlcCalKey(st.y, st.m) + '" ' +
-        'title="Add the church calendar to your own calendar app">Subscribe</a>' +
+      '<button class="tlc-cal-sub" data-cal="subscribe" aria-expanded="' + (st.subOpen ? 'true' : 'false') + '" ' +
+        'title="Add the church calendar to your own calendar app">Subscribe</button>' +
       '<button class="tlc-cal-print" data-cal="print">' + printer + 'Print month</button>' +
     '</div>' +
+  '</div>';
+}
+
+// ── SUBSCRIBING ─────────────────────────────────────────────────────────────
+// ⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION, AND THAT IS THE WHOLE REASON
+// THIS PANEL EXISTS. Clicking one in a browser downloads a snapshot; the events
+// land in somebody's calendar once and never update again, which looks like it
+// worked and quietly stops being true the following week. `webcal:` is the
+// scheme that hands the address to the calendar app instead, and the https one
+// is here to be pasted into "Add by URL" for anything that ignores it.
+//
+// ⚠ AND IT OFFERS A CHOICE OF WHAT IS IN IT, which is the point. Somebody
+// already subscribed to a school calendar and a work calendar will not add a
+// third that buries their week in building rentals and school closures — they
+// will not subscribe at all, and go back to being told things by hand.
+function tlcCalSubPanel(st) {
+  if (!st.subOpen || st.status !== 'ready') return '';
+  var all = st.cats.map(function (c) { return c.key; });
+  var on = st.subCats === null ? all : st.subCats;
+  var boxes = st.cats.map(function (c) {
+    var checked = on.indexOf(c.key) >= 0;
+    return '<label class="tlc-cal-subcat">' +
+      '<input type="checkbox" data-cal="subcat" data-val="' + tlcCalEsc(c.key) + '"' + (checked ? ' checked' : '') + '>' +
+      '<span class="tlc-cal-swatch" style="background:' + tlcCalEsc(c.color) + '"></span>' +
+      tlcCalEsc(c.name) + '</label>';
+  }).join('');
+  // ⚠ Nothing ticked is refused rather than served as an empty file. A
+  // subscription that returns no events is indistinguishable, from inside a
+  // calendar app, from one that has broken.
+  var none = on.length === 0;
+  return '<div class="tlc-cal-subpanel" data-noprint="1">' +
+    '<p class="tlc-cal-subintro">Adds the church calendar to your own, and keeps it up to date on its own. Pick what you want in it — you can leave out anything that would crowd your week.</p>' +
+    '<div class="tlc-cal-subcats">' + boxes + '</div>' +
+    (none
+      ? '<p class="tlc-cal-subwarn">Choose at least one kind of event.</p>'
+      : '<div class="tlc-cal-subgo">' +
+          '<a class="tlc-cal-subbtn" href="' + tlcCalEsc(tlcCalSubUrl(st, "webcal")) + '">Add to my calendar</a>' +
+          '<span class="tlc-cal-subor">or paste this address into your calendar app</span>' +
+        '</div>' +
+        '<div class="tlc-cal-subcopy">' +
+          '<input class="tlc-cal-suburl" type="text" readonly value="' + tlcCalEsc(tlcCalSubUrl(st, "https")) + '" aria-label="Calendar address">' +
+          '<button class="tlc-cal-subcopybtn" data-cal="subcopy">Copy</button>' +
+        '</div>') +
   '</div>';
 }
 
@@ -3935,13 +4047,14 @@ function tlcCalSourceBand(st) {
     if (e.source === 'both') { has.gcal = true; has.news = true; } else { has[e.source] = true; }
   });
   var pills = [tlcCalPill('src', 'all', st.src === 'all', 'All sources')];
-  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use']].forEach(function (p) {
+  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use'], ['local', 'Entered here']].forEach(function (p) {
     if (has[p[0]] || st.src === p[0]) pills.push(tlcCalPill('src', p[0], st.src === p[0], p[1]));
   });
   var keys = [];
   if (has.gcal)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.gcal + '"></span>Google</span>');
   if (has.news)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.news + '"></span>News &amp; Events</span>');
   if (has.building) keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.building + '"></span>Building use</span>');
+  if (has.local)    keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.local + '"></span>Entered here</span>');
   if (pills.length <= 1) return '';
   return '<div class="tlc-cal-src">' +
     '<span class="tlc-cal-eyebrow">Source</span>' +
@@ -3968,8 +4081,8 @@ function tlcCalCatBand(st) {
   return '<div class="tlc-cal-cats">' + pills.join('') + '</div>';
 }
 
-var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', building: '#7D7972', both: '#4A5E3A' };
-var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', building: 'Building use', both: 'In more than one' };
+var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', building: '#7D7972', local: '#7A8B5F', both: '#4A5E3A' };
+var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', building: 'Building use', local: 'Entered here', both: 'In more than one' };
 
 // The six weeks the grid draws: back to the Sunday on or before the 1st, then
 // 42 days. Six rows always, so the calendar does not change height as the
@@ -4057,7 +4170,7 @@ function tlcCalList(st, visible) {
         var continued = d !== String(ev.start).slice(0, 10);
         return '<button class="tlc-cal-listev" data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
           '<span class="ltime" style="color:' + tlcCalEsc(c.color) + '">' +
-            tlcCalEsc(continued ? 'Continues' : tlcCalTime(ev)) + '</span>' +
+            tlcCalEsc(continued ? 'Continues' : tlcCalSpan(ev)) + '</span>' +
           '<span><span class="lt">' + tlcCalEsc(ev.title) + '</span>' +
           (ev.location ? '<span class="lw">' + tlcCalEsc(ev.location) + '</span>'
                        : '<span class="lw">' + tlcCalEsc(c.name) + '</span>') + '</span>' +
@@ -4095,7 +4208,7 @@ function tlcCalDetail(st) {
   var c = tlcCalCat(st, ev.category);
   var d = String(ev.start).slice(0, 10);
   var when = TLC_CAL_DOWS[tlcCalDow(d)] + ', ' + TLC_CAL_MONTHS[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)) +
-    (ev.allDay ? '' : ' · ' + tlcCalTime(ev));
+    (ev.allDay ? '' : ' · ' + tlcCalSpan(ev));
   return '<div class="tlc-cal-detail" role="region" aria-label="Event details">' +
     '<span class="meta" style="color:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(c.name) + ' · ' + tlcCalEsc(when) + '</span>' +
     '<h3>' + tlcCalEsc(ev.title) + '</h3>' +

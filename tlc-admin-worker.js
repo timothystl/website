@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES,
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
          DB_INIT_CALENDAR_CATEGORIES, DB_INIT_CALENDAR_CATEGORIES_COLOR,
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
@@ -41,10 +41,20 @@ import { hashPassword, verifyPassword, createSession, getSession, deleteSession,
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
+import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
-         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY } from './admin/calendar.js';
+         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY, normalizeClock,
+         parseFilterList, filterEvents, feedName } from './admin/calendar.js';
+// ⚠ Only openCountOf is needed here — for the sidebar/dashboard badge count
+// in intakeOpenCount() below, which deliberately reads event_intake directly
+// rather than fetching Google. Every other Event Intake decision (types,
+// checklists, the merge, the queues) and all the D1 I/O and rendering live in
+// admin/intake-page.js, imported below — see its own header comment for why
+// this screen is its own module rather than another few hundred lines here.
+import { openCountOf } from './admin/intake.js';
+import { handleIntakeRoutes } from './admin/intake-page.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
@@ -63,6 +73,16 @@ import { LINKS_JS } from './admin/links.js';
 // the top of that file.
 import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
+// ⚠ THE ONE PLACE THIS SET IS DECLARED. Both /api/pages (what the public site
+// reads) and the page editor's own GET (what tells whoever is editing the
+// page that publishing here does nothing) read this same Set — two separate
+// declarations is exactly how a page could get added to one and not the
+// other, which is worse than neither: an editor that silently disagrees with
+// what it is editing. See "Contact and Prayer never render from blocks" for
+// why these two exist at all — no block on this site can express a screened,
+// Turnstile-checked POST to /api/contact or /api/prayer, so the real form
+// lives only in public/index.html's hardcoded markup and always will.
+const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
 // /christmasmarket/vendors, same shape as give-landing-seed.js and for the
 // same reason — a live payment application the generic extractor never had a
 // chance to convert, because it never had a tools/extract-pages.mjs PAGES
@@ -112,7 +132,8 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          blockOn, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
          issueStatus, sendSummary, parseSubscriberCsv,
-         parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
+         parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
+         prettyClock, eventRowFromPost, orderEventRows } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -502,7 +523,8 @@ async function badgeCounts(env, user) {
   const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
   const canApprove = hasPermission(user, 'newsletter_approve');
   const canMarket = hasPermission(user, 'market_manage');
-  const [gym, pages, newsletter, market, eventPerms] = await Promise.all([
+  const canIntake = hasPermission(user, 'intake_manage');
+  const [gym, pages, newsletter, market, eventPerms, intake] = await Promise.all([
     canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
     // A page counts as needing attention when its draft differs from what is
     // live, or when it has never been published at all. Same rule as the Pages
@@ -517,8 +539,35 @@ async function badgeCounts(env, user) {
     // row to a coordinator holding one of them without also holding
     // events_manage — see the eventItems row in sidebarShell().
     eventCoordinatorPermissions(env).catch(() => ({})),
+    // ⚠ A DB COUNT, NOT A LIVE GOOGLE POLL. badgeCounts() runs on nearly every
+    // admin request, and Event Intake's real list requires fetching Google —
+    // adding that fetch here would slow down every page for anyone holding
+    // intake_manage. Instead this reads event_intake as of the last time
+    // somebody opened the screen (which is when new rows are synced in — see
+    // GET /event-intake), and reads TRUE if that has never happened. It is
+    // therefore honest about being a day or two stale rather than a live
+    // count, the same tradeoff Filtered Mail's badge already makes.
+    canIntake ? intakeOpenCount(env) : 0,
   ]);
-  return { gym, pages, newsletter, market, eventPerms };
+  return { gym, pages, newsletter, market, eventPerms, intake };
+}
+
+// The one-line answer badgeCounts() needs: how many synced intake rows are
+// not yet ready. Bounded to roughly "upcoming" by the row's own event_date —
+// a row nobody has looked at in months should age out of the badge, not
+// inflate it forever. Uses the SAME openCountOf() the real screen uses, so
+// the two can never disagree about what "not yet ready" means.
+async function intakeOpenCount(env) {
+  try {
+    const from = churchDatePlus(-3);
+    const rows = (await env.DB.prepare(
+      "SELECT event_type, checks_json FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
+    ).bind(from).all()).results || [];
+    return rows.filter((r) => {
+      const checks = r.checks_json ? (JSON.parse(r.checks_json) || {}) : {};
+      return openCountOf(r.event_type, checks) !== 0;
+    }).length;
+  } catch (_) { return 0; }
 }
 
 // One sort rule, shared by /api/news and pageData()'s self-filling news
@@ -529,6 +578,25 @@ async function badgeCounts(env, user) {
 const NEWS_ORDER_SQL = `ORDER BY pinned DESC,
   CASE WHEN event_date IS NOT NULL THEN 0 ELSE 1 END ASC,
   event_date ASC, publish_date DESC, id DESC`;
+
+// ⚠ AND ONE `WHERE`, WHICH THE COMMENT ABOVE HAS CLAIMED FOR A YEAR AND WHICH
+// DID NOT EXIST (COR-1). Only the ORDER BY was ever extracted; the two WHERE
+// clauses were written separately and had drifted three ways — pageData()
+// compared against UTC `date('now')` rather than church time, never checked
+// `publish_date`, and never filtered the channel at all. So a post scheduled
+// for a future date was ALREADY LIVE on every block-rendered page, as was one
+// the office had marked email-only.
+//
+// It takes the date as a bind so both callers pass churchDate() and neither
+// can quietly go back to asking SQLite what day it is in UTC.
+//
+// ⚠ `calendar` is a channel the CALENDAR reads and this does not. A school
+// break or a week of testing belongs on the month and is not something anybody
+// wants a paragraph about on /news.
+const NEWS_WHERE_SQL = `WHERE publish_date <= ?
+  AND (expire_date IS NULL OR expire_date >= ?)
+  AND (event_date IS NULL OR event_date >= ?)
+  AND (channels IS NULL OR channels LIKE '%web%')`;
 
 // An uploaded image is stored as a root-relative /images/… path, which only
 // resolves on this Worker's own origin. Every rendered page is consumed
@@ -595,9 +663,7 @@ async function pageData(env, reqKey) {
       // date) shows the same expandable image/summary/body cards the /news
       // page used to hand-roll. Both blocks read this one list.
       q(`SELECT id, title, summary, body, image_url, publish_date, event_date, pinned FROM news_items
-         WHERE (expire_date IS NULL OR expire_date >= date('now'))
-           AND (event_date IS NULL OR event_date >= date('now'))
-         ${NEWS_ORDER_SQL} LIMIT 30`),
+         ${NEWS_WHERE_SQL} ${NEWS_ORDER_SQL} LIMIT 30`, churchDate(), churchDate(), churchDate()),
       // ⚠ The Staff grid block shows EVERY row this returns, so this limit is
       // the only thing that can cut somebody off the About page. It was 12,
       // which a church that hires two more people would quietly cross with
@@ -869,6 +935,137 @@ async function buildNewsletterEmailPayload(env, id) {
 
   const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes));
   return { row, emailHtml };
+}
+
+// ── THE NEWSLETTER'S UPCOMING EVENTS ────────────────────────────────────────
+// See the long note at the foot of admin/newsletter.js for why the `events`
+// table stays and is still materialized. These three are the composer's half:
+// which posts are offered, what the card looks like, and what a save reads.
+
+// Every post carrying a date from today onward — the same records the church
+// calendar and the printed month are drawn from, which is the whole point.
+//
+// ⚠ NOT filtered to the email channel, unlike the news picker above it. That
+// tick means "this is worth writing about in the letter"; an event's date is a
+// fact about the week whether or not anybody wanted a paragraph on it, and
+// leaving a dated post out of the offer would send somebody back to typing it.
+async function upcomingEventPosts(env) {
+  const today = churchDate();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, title, summary, event_date, event_time, event_location FROM news_items
+        WHERE event_date IS NOT NULL AND event_date >= ?
+        ORDER BY event_date ASC, id ASC LIMIT 60`
+    ).bind(today).all();
+    return rows.results || [];
+  } catch (_) { return []; }
+}
+
+// The rows an issue already carries, split into the two kinds. Anything with a
+// news_item_id is a tick; anything without is a row somebody typed before the
+// picker existed and is carried through untouched.
+async function newsletterEventRows(env, id) {
+  if (!id) return { picked: [], typed: [] };
+  try {
+    const rows = (await env.DB.prepare(
+      'SELECT news_item_id, event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
+    ).bind(id).all()).results || [];
+    return {
+      picked: rows.filter((r) => r.news_item_id != null).map((r) => String(r.news_item_id)),
+      typed: rows.filter((r) => r.news_item_id == null),
+    };
+  } catch (_) { return { picked: [], typed: [] }; }
+}
+
+// ⚠ DELEGATED off the container, not bound per button. There is no rebuild
+// here today, but the picker is server-rendered into two different forms and a
+// handler on each button is the shape that silently stops working the first
+// time either of them redraws.
+const TYPED_EVENT_JS = `<script>
+(function(){
+  var c = document.getElementById('events-container');
+  if (!c) return;
+  c.addEventListener('click', function(e){
+    var b = e.target.closest('[data-typed]');
+    if (!b) return;
+    e.preventDefault();
+    var row = document.getElementById('typed-event-' + b.getAttribute('data-typed'));
+    if (row) row.remove();
+  });
+})();
+</script>`;
+
+function eventPickerHtml(posts, picked = [], typed = []) {
+  const chosen = new Set((picked || []).map(String));
+  // ⚠ ANCHORED AT NOON, the same way admin/email.js and admin/blocks.js already
+  // print a picked date. `new Date('2026-09-01')` is parsed as UTC midnight,
+  // which renders as August 31 for a reader in Central — so the label under a
+  // checkbox would name the day BEFORE the one the event is on, on a screen
+  // whose whole job is getting the date right once.
+  const when = (p) => {
+    const d = p.event_date
+      ? new Date(String(p.event_date) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      : '';
+    const t = prettyClock(p.event_time);
+    return [d, t].filter(Boolean).join(' · ');
+  };
+  const list = posts.length === 0
+    ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No upcoming events yet. Add a News &amp; Events post with an event date and it will appear here — and on the calendar and the printed month, without being typed again.</div>`
+    : posts.map((p) => `
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+          <input type="checkbox" name="event_news_ids" value="${p.id}"${chosen.has(String(p.id)) ? ' checked' : ''} style="margin-top:3px;flex-shrink:0;">
+          <span style="flex:1;min-width:0;">
+            <span style="display:block;font-weight:600;">${escapeHtml(p.title || '')}</span>
+            <span style="display:block;font-size:12px;color:var(--gray);">${escapeHtml(when(p))}${p.event_location ? ' · ' + escapeHtml(p.event_location) : ''}</span>
+          </span>
+        </label>`).join('');
+
+  // ⚠ A HAND-TYPED ROW IS KEPT, SHOWN AND REMOVABLE — and there is no way to
+  // add another. Dropping them on the next save would silently delete work out
+  // of somebody's draft; offering a "+ Add an event" beside them would reopen
+  // the very loop this closes.
+  const legacy = (typed || []).length === 0 ? '' : `
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Typed into this issue by hand, before events could be picked. They will print exactly as they are. Remove one and add the event as a post instead, and it will reach the calendar too.</div>
+      ${typed.map((t, i) => `
+        <div class="event-block" id="typed-event-${i}" style="position:relative;">
+          <button type="button" class="remove-event" data-typed="${i}">×</button>
+          <div style="font-weight:600;">${escapeHtml(t.event_name || '(untitled)')}</div>
+          <div style="font-size:12px;color:var(--gray);">${escapeHtml([t.event_date, t.event_time].filter(Boolean).join(' · '))}${t.event_desc ? ' — ' + escapeHtml(t.event_desc) : ''}</div>
+          <input type="hidden" name="typed_event_ids" value="${i}">
+          <input type="hidden" name="typed_event_date_${i}" value="${escapeHtml(t.event_date || '')}">
+          <input type="hidden" name="typed_event_name_${i}" value="${escapeHtml(t.event_name || '')}">
+          <input type="hidden" name="typed_event_time_${i}" value="${escapeHtml(t.event_time || '')}">
+          <input type="hidden" name="typed_event_desc_${i}" value="${escapeHtml(t.event_desc || '')}">
+        </div>`).join('')}
+    </div>`;
+
+  return `<div id="events-container">${list}${legacy}</div>${typed && typed.length ? TYPED_EVENT_JS : ''}`;
+}
+
+// What a save reads back. The picked posts are re-read from the database
+// rather than taken from the form, so what is printed is what the record
+// actually says — a stale tab cannot post a title of its own.
+async function newsletterEventsFromForm(env, form) {
+  const ids = form.getAll('event_news_ids').map((v) => String(v).trim()).filter(Boolean);
+  let picked = [];
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    try {
+      const rows = (await env.DB.prepare(
+        `SELECT id, title, summary, event_date, event_time FROM news_items WHERE id IN (${ph})`
+      ).bind(...ids).all()).results || [];
+      picked = rows.map(eventRowFromPost);
+    } catch (_) { picked = []; }
+  }
+  const typed = form.getAll('typed_event_ids').map((i) => ({
+    news_item_id: null,
+    event_date: form.get(`typed_event_date_${i}`) || '',
+    event_name: form.get(`typed_event_name_${i}`) || '',
+    event_time: form.get(`typed_event_time_${i}`) || '',
+    event_desc: form.get(`typed_event_desc_${i}`) || '',
+  })).filter((e) => e.event_name || e.event_date);
+  return orderEventRows(picked.concat(typed));
 }
 
 // Reject anything that isn't an http(s) URL — guards Link Card saves against
@@ -1783,7 +1980,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-6'; // bumped: push_subscriptions.audience, so a broadcast can reach the congregation without also ringing every staff device
+    const SCHEMA_VERSION = '2026-08-19-10'; // bumped: event_intake table, for the office's own event checklist screen (on top of push_subscriptions.audience, merged from main)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1798,6 +1995,7 @@ export default {
     // Init DB
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_EVENT_INTAKE).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_YOUTH_PAGES).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_POSTS).run(); } catch (e) {}
@@ -2395,6 +2593,25 @@ export default {
     // it silently became "Special events". Blank still means "work it out from
     // the value tag", so nothing already written changes.
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN calendar_category TEXT').run(); } catch (_) {}
+    // ⚠ THE CLOCK A NEWS POST NEVER HAD, and the reason the newsletter kept a
+    // second set of event rows of its own. A record could say WHICH DAY and
+    // nothing more, so "Council meeting, 7:00 pm" could be typed into an email
+    // and could not be said here at all — which is what made somebody type it
+    // again into Google. All three are nullable: blank `event_time` is a
+    // genuinely all-day event, not midnight.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_time TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_time TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_location TEXT').run(); } catch (_) {}
+    // A run of days — a break, a camp, an assessment week. One row rather than
+    // five, so a week off school is one chip a reader takes in at a glance.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_date TEXT').run(); } catch (_) {}
+    // ⚠ WHICH POST AN ISSUE'S EVENT ROW CAME FROM. The rows themselves stay
+    // materialized — a sent issue's archive has to keep saying what was
+    // actually sent — and this is only what lets the composer tick the right
+    // boxes again on a later edit. NULL means somebody typed the row by hand
+    // before the picker existed: still shown, still printed, and there is no
+    // longer any way to create another one.
+    try { await env.DB.prepare('ALTER TABLE events ADD COLUMN news_item_id INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
     // Menu visibility, separate from published state. Taking a ministry out of
     // the header must not unpublish it — the page stays live at its address,
@@ -2609,6 +2826,44 @@ export default {
           .bind(s.title, s.description, s.icon_emoji, s.icon_color, s.sort_order).run();
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SIGNUP_CARD_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: THE WORD OF LIFE SCHOOL YEAR (2026-08-19) ──
+    // Word of Life publishes a PDF once a year and keeps no Google calendar,
+    // so there is nothing to subscribe to and nothing to merge — somebody has
+    // to read the sheet. admin/school-calendar-seed.js is that reading; this
+    // puts it in once.
+    //
+    // ⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM. The schema block
+    // re-runs on every SCHEMA_VERSION bump, so without it a date the office
+    // deleted on purpose — the school moved it, or it was never wanted — would
+    // come back on the next deploy, silently, for as long as this code exists.
+    //
+    // ⚠ AND IT IS KEYED ON THE SCHOOL YEAR. Next year's sheet is a new list
+    // and a new marker (`school_cal_2027-2028`), not an edit to this one:
+    // changing a title here would do nothing to a database that has already
+    // run it, which is exactly the trap that would make somebody think the
+    // list was wrong.
+    const SCHOOL_CAL_MARKER = `school_cal_${SCHOOL_YEAR}`;
+    const schoolCalSeeded = markersOk || markers.get(SCHOOL_CAL_MARKER) === 'done';
+    if (!schoolCalSeeded) {
+      try {
+        // ⚠ Guarded on the TITLE AND THE DATE together, not on the title alone.
+        // "No school — Good Friday" is a title the school will use again next
+        // year on a different day, and matching the title alone would silently
+        // skip it.
+        for (const r of schoolEventRows(churchDate())) {
+          const dup = await env.DB.prepare(
+            'SELECT id FROM news_items WHERE title = ? AND event_date = ?'
+          ).bind(r.title, r.event_date).first();
+          if (dup) continue;
+          await env.DB.prepare(
+            'INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SCHOOL_CAL_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -3032,7 +3287,21 @@ export default {
       const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
+      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. See the
+      // constant's own comment near the top of the file for why. Unlike
+      // give-landing these are still ordinary pages — in `list`, in the menu,
+      // at their own address — only the entry in `rendered` is withheld,
+      // which is what makes the client and the edge injector both fall back
+      // to the hardcoded native form with no change on either side. The
+      // editor's own GET route (below, /pages/api/page/:id) sends the same
+      // flag back to whoever opens either page, so the canvas can say
+      // plainly that nothing here reaches the live site — found live without
+      // that warning: both pages had been published with a "Signup form"
+      // block (a Google Form embed with no URL set) standing in for the real
+      // form, and the editor's own preview never disagreed until a person
+      // compared it against the actual site by hand.
       for (const r of list) {
+        if (NATIVE_FORM_ONLY_PAGE_IDS.has(r.id)) continue;
         // A page that links out has no content of its own. Rendering blocks it
         // may still be carrying from before would give the visitor a flash of a
         // page that is about to redirect out from under them.
@@ -3222,8 +3491,28 @@ export default {
       let catV = 0;
       for (let i = 0; i < catStamp.length; i++) catV = ((catV * 31) + catStamp.charCodeAt(i)) | 0;
 
+      // ⚠ THE SAME TRICK, FOR A LOCAL EVENT INTAKE ROW. Without it, a wedding
+      // typed in through Event Intake would sit behind the same ten-minute
+      // window a category rename would otherwise sit behind — and unlike a
+      // rename, "I just added this and it isn't on the calendar" is the exact
+      // complaint the whole feature exists to end. One cheap indexed count,
+      // the same shape as the category fingerprint above.
+      const localStamp = await env.DB.prepare(
+        "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS t FROM event_intake WHERE source_kind = 'local'"
+      ).first().catch(() => null);
+      const localV = localStamp ? `${localStamp.n}-${localStamp.t}` : '0-';
+
+      // ⚠ THE FILTER IS PART OF THE CACHE KEY. Without it whichever filter was
+      // asked for first would be served to every other subscriber for ten
+      // minutes — somebody who asked for worship getting the school year, and
+      // no way to tell from their end that it had happened. Sorted, so
+      // `?cat=worship,music` and `?cat=music,worship` are one entry.
+      const wantCats = parseFilterList(url.searchParams.get('cat')).sort();
+      const wantSources = parseFilterList(url.searchParams.get('src')).sort();
+      const filterKey = `${wantCats.join('.')}|${wantSources.join('.')}`;
+
       const cache = edgeCache();
-      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}&v=${catV >>> 0}`);
+      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}&v=${catV >>> 0}&f=${encodeURIComponent(filterKey)}&lv=${encodeURIComponent(localV)}`);
       if (cache) {
         const hit = await cache.match(cacheKey).catch(() => null);
         if (hit) return hit;
@@ -3244,8 +3533,15 @@ export default {
         feed = { from, to, events: [], categories: activeCategories(cats), sources: { google: false, news: false, building: false, googleReason: 'error' } };
       }
 
+      // ⚠ THE FILTER APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE. The month on
+      // screen has its own pills and applies them in the browser, so filtering
+      // the JSON here would leave those pills unable to widen what they were
+      // handed — and the print sheet, which deliberately ignores the pills,
+      // printing a month quietly short of everything but one category.
+      const icsEvents = filterEvents(feed.events, { cats: wantCats, sources: wantSources });
+
       const out = wantsIcs
-        ? new Response(buildIcs(feed.events, { cats }), {
+        ? new Response(buildIcs(icsEvents, { cats, name: feedName(wantCats, cats) }), {
             headers: { 'Content-Type': 'text/calendar; charset=utf-8',
                        'Content-Disposition': 'inline; filename="timothy-lutheran.ics"',
                        'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' },
@@ -3264,9 +3560,7 @@ export default {
       const rows = await env.DB.prepare(
         `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
-         WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
-           AND (event_date IS NULL OR event_date >= ?)
-           AND (channels IS NULL OR channels LIKE '%web%')
+         ${NEWS_WHERE_SQL}
          ${NEWS_ORDER_SQL}
          LIMIT ?`
       ).bind(today, today, today, limit).all();
@@ -6394,6 +6688,16 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (r) return r;
     }
 
+    // ── EVENT INTAKE (auth + intake_manage) ─────────────────────
+    // The office's own triage queue over Google, News & Events and confirmed
+    // gym rentals at once — see admin/intake-page.js's own header comment for
+    // the design and the three explicit decisions it is built on.
+    {
+      const r = await handleIntakeRoutes(request, env, path, method, currentUser, url,
+        (path === '/event-intake' || path.startsWith('/event-intake/')) ? await pageBadges() : {});
+      if (r) return r;
+    }
+
     // ── CHRISTMAS MARKET VENDORS (auth + market_manage) ────────
     // The coordinator's list — what the 2024 spreadsheet was for. Unchanged
     // and unmoved: the market keeps its own screen, its own permission, and
@@ -7008,6 +7312,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
            AND (channels IS NULL OR channels LIKE '%email%')
          ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today, today).all();
+      const eventPicker = eventPickerHtml(await upcomingEventPosts(env));
       const newsPickerHtml = emailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
         : emailItems.results.map(item => `
@@ -7089,9 +7394,9 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
       </div>
 
       <div class="card">
-        <div class="card-title">Upcoming events</div>
-        <div id="events-container"></div>
-        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+        <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
+        ${eventPicker}
       </div>
 
       <div class="card">
@@ -7190,40 +7495,6 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
 </div>
 
 <script>
-let eventCount = 0;
-function addEvent() {
-  const c = document.getElementById('events-container');
-  const id = ++eventCount;
-  const div = document.createElement('div');
-  div.className = 'event-block';
-  div.id = 'event-'+id;
-  div.innerHTML = \`
-    <button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-    <div class="event-grid">
-      <div class="form-group" style="margin:0;">
-        <label>Date</label>
-        <input type="date" name="event_date_\${id}">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Time</label>
-        <input type="text" name="event_time_\${id}" placeholder="e.g. 6:30 pm">
-      </div>
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-      <label>Event name</label>
-      <input type="text" name="event_name_\${id}" placeholder="e.g. Wednesday Lenten Service">
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-      <label>Short description <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(optional)</span></label>
-      <input type="text" name="event_desc_\${id}" placeholder="One line — location, special note, etc.">
-    </div>
-    <input type="hidden" name="event_ids" value="\${id}">
-  \`;
-  c.appendChild(div);
-}
-function removeEvent(id) {
-  document.getElementById('event-'+id).remove();
-}
 let classCount = 0;
 function addBibleClass(date, topic, location, leader) {
   const c = document.getElementById('classes-container');
@@ -7262,8 +7533,6 @@ function pickFormat(fmt) {
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
-// Add one event by default for weekly
-addEvent();
 </script>`, 'New Newsletter', TINYMCE_HEAD);
     }
 
@@ -7360,22 +7629,11 @@ addEvent();
       // Combine for storage: quick announcements store message in pastor_note
       const savedNote = fmt === 'quick' ? quickBody : pastorNote;
 
-      // Collect events (weekly only)
-      const eventIds = form.getAll('event_ids');
-      const events = [];
-      if (fmt === 'weekly') {
-        for (const id of eventIds) {
-          const name = form.get(`event_name_${id}`);
-          if (!name) continue;
-          events.push({
-            event_date: form.get(`event_date_${id}`) || '',
-            event_name: name,
-            event_time: form.get(`event_time_${id}`) || '',
-            event_desc: form.get(`event_desc_${id}`) || '',
-            sort_order: events.length
-          });
-        }
-      }
+      // The upcoming events, picked from the posts rather than typed here.
+      // Materialized into `events` at save time — see the note at the foot of
+      // admin/newsletter.js for why a sent issue's rows must be frozen copies
+      // rather than a lookup resolved when the email is built.
+      const events = fmt === 'weekly' ? await newsletterEventsFromForm(env, form) : [];
 
       // Collect bible classes (weekly only)
       const classIds = form.getAll('class_ids');
@@ -7429,8 +7687,8 @@ addEvent();
       // Save events
       for (const e of events) {
         await env.DB.prepare(
-          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
+          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order, e.news_item_id ?? null).run();
       }
 
       // Approval workflow: editors without newsletter_approve submit for approval
@@ -7672,7 +7930,6 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const editId = path.split('/').pop();
       const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(editId).first();
       if (!row) return new Response('Not found', { status: 404 });
-      const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(editId).all();
       const fmt = row.format || 'weekly';
       const today2 = churchDate();
       const savedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -7682,6 +7939,8 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
            AND (channels IS NULL OR channels LIKE '%email%')
          ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today2, today2).all();
+      const editEventState = await newsletterEventRows(env, editId);
+      const editEventPicker = eventPickerHtml(await upcomingEventPosts(env), editEventState.picked, editEventState.typed);
       const editNewsPickerHtml = editEmailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
         : editEmailItems.results.map(item => `
@@ -7712,24 +7971,6 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
             <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
           </div>
         </div>`).join('') : '';
-
-      // Build prefilled events JS
-      const eventsJs = eventsRows.results.map((e, i) => `
-        (function(){
-          const id = ++eventCount;
-          const div = document.createElement('div');
-          div.className = 'event-block'; div.id = 'event-'+id;
-          div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-            <div class="event-grid">
-              <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}" value="${e.event_date||''}"></div>
-              <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" value="${(e.event_time||'').replace(/"/g,'&quot;')}" placeholder="e.g. 6:30 pm"></div>
-            </div>
-            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" value="${(e.event_name||'').replace(/"/g,'&quot;')}"></div>
-            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" value="${(e.event_desc||'').replace(/"/g,'&quot;')}"></div>
-            <input type="hidden" name="event_ids" value="\${id}">\`;
-          document.getElementById('events-container').appendChild(div);
-        })();
-      `).join('');
 
       const existingClasses = JSON.parse(row.bible_classes || '[]');
       const classesJs = existingClasses.map(c => c.template_id ? `
@@ -7884,9 +8125,9 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
         ${editNewsPickerHtml}
       </div>
       <div class="card">
-        <div class="card-title">Upcoming events</div>
-        <div id="events-container"></div>
-        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+        <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
+        ${editEventPicker}
       </div>
       <div class="card">
         <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
@@ -8070,23 +8311,6 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
   refresh();
 })();</script>
 <script>
-let eventCount = 0;
-function addEvent() {
-  const c = document.getElementById('events-container');
-  const id = ++eventCount;
-  const div = document.createElement('div');
-  div.className = 'event-block'; div.id = 'event-'+id;
-  div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
-    <div class="event-grid">
-      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}"></div>
-      <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" placeholder="e.g. 6:30 pm"></div>
-    </div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" placeholder="e.g. Wednesday Lenten Service"></div>
-    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" placeholder="One line"></div>
-    <input type="hidden" name="event_ids" value="\${id}">\`;
-  c.appendChild(div);
-}
-function removeEvent(id) { document.getElementById('event-'+id).remove(); }
 let classCount = 0;
 function addBibleClass(date, topic, location, leader) {
   const c = document.getElementById('classes-container');
@@ -8124,7 +8348,6 @@ function pickFormat(fmt) {
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
-${eventsJs}
 ${classesJs}
 </script>`, 'Edit Newsletter', TINYMCE_HEAD);
     }
@@ -8266,15 +8489,11 @@ ${classesJs}
       const fmt = f.get('format') || 'weekly';
       const on = (key) => f.get('block_' + key) === '1';
 
-      // Events come from the form as they are being edited, so the preview
-      // shows unsaved changes rather than what is in the database.
-      const evIds = f.getAll('event_ids');
-      const events = on('events') ? evIds.map((eid) => ({
-        event_date: f.get(`event_date_${eid}`) || '',
-        event_name: f.get(`event_name_${eid}`) || '',
-        event_time: f.get(`event_time_${eid}`) || '',
-        event_desc: f.get(`event_desc_${eid}`) || '',
-      })).filter((e) => e.event_name || e.event_date) : [];
+      // Events come from the form as it is being edited, so the preview shows
+      // unsaved ticks rather than what is in the database — read through the
+      // SAME collector the save uses, or the preview would flatter what will
+      // actually send.
+      const events = on('events') ? await newsletterEventsFromForm(env, f) : [];
 
       let newsItems = [];
       const newsIds = on('news') ? f.getAll('news_item_ids').filter(Boolean) : [];
@@ -8348,8 +8567,8 @@ ${classesJs}
       const newId = result.meta.last_row_id;
       for (const e of eventsRows.results) {
         await env.DB.prepare(
-          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(newId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
+          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(newId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order, e.news_item_id ?? null).run();
       }
       return new Response('', { status: 302, headers: { Location: `/edit/${newId}?copied=1` } });
     }
@@ -8378,6 +8597,10 @@ ${classesJs}
         if (item.publish_date && item.publish_date > today) state = 'scheduled';
         else if (item.expire_date && item.expire_date < today) state = 'expired';
         const expiringSoon = state === 'live' && item.expire_date && item.expire_date <= soon;
+        // A post that goes on the month and deliberately not into the news
+        // feed — a school break, a week of testing. `channels` is a list, so a
+        // post ticked for the calendar AND the website is not one of these.
+        const calOnly = String(item.channels || '').split(',').map((c) => c.trim()).filter(Boolean).join(',') === 'calendar';
 
         const status = state === 'scheduled' ? statusPill('auto', 'Scheduled')
           : state === 'expired' ? statusPill('plain', 'Expired')
@@ -8390,11 +8613,18 @@ ${classesJs}
         // called out rather than left blank.
         const expires = item.expire_date
           ? escapeHtml(item.expire_date)
-          : `<span style="color:#7A5B18;">Never</span>`;
+          : calOnly
+            ? `<span style="color:#6A6858;">On the calendar</span>`
+            : `<span style="color:#7A5B18;">Never</span>`;
 
         return {
           href: `/newsitems/edit/${item.id}`,
-          filter: [state, item.value || ''].filter(Boolean),
+          // ⚠ A CALENDAR-ONLY POST IS ITS OWN FILTER, because there are
+          // twenty-nine of them and this list sorts furthest-future first —
+          // so the school year sits on top of whatever the office wrote for
+          // next Sunday. The chip isolates them; it does not hide them from
+          // All, which would make the list a half-truth.
+          filter: [state, item.value || '', calOnly ? 'calendar-only' : ''].filter(Boolean),
           search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
           cells: [
             // The pin marker sits BEFORE the title, where the eye starts —
@@ -8412,10 +8642,10 @@ ${classesJs}
             expires,
             status,
           ],
-          warn: !item.expire_date
+          warn: (!item.expire_date && !calOnly)
             ? 'No expiry date, so this post stays on the site until somebody removes it by hand.'
             : '',
-          warnCta: !item.expire_date ? { label: 'Set one', href: `/newsitems/edit/${item.id}` } : null,
+          warnCta: (!item.expire_date && !calOnly) ? { label: 'Set one', href: `/newsitems/edit/${item.id}` } : null,
         };
       });
 
@@ -8500,11 +8730,25 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
           { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
             options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
           { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
-            <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
-            <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them.</p></div>` },
+            <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
+            <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them. A dated post is on the calendar either way \u2014 tick <strong>Church calendar only</strong> for a date that belongs on the month but is not news anybody wants to read a paragraph about.</p></div>` },
           { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
           { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
-            hint: 'Optional. A post with one sorts by the event rather than by when it was written.' },
+            hint: 'Optional. A post with one sorts by the event rather than by when it was written \u2014 and appears on the church calendar, the printed month and the weekly email, without being entered anywhere else.' },
+          // ⚠ THE FIELD THAT ENDS THE RETYPING. Without a time, a post could
+          // only ever be an all-day chip, so a 7:00 pm meeting had to be typed
+          // into the newsletter by hand and into Google by hand. Leaving it
+          // blank is still a real answer — an all-day event — which is why
+          // there is no default and no placeholder time.
+          { kind: 'date', name: 'event_end_date', label: 'Through', value: item ? (item.event_end_date || '') : '',
+            hint: 'Optional. For something that runs several days \u2014 a break, a camp, a week of testing. One entry rather than five.' },
+          { kind: 'text', type: 'time', name: 'event_time', label: 'Starts at', value: item ? (item.event_time || '') : '',
+            hint: 'Leave blank for something that runs all day. Church time, always.' },
+          { kind: 'text', type: 'time', name: 'event_end_time', label: 'Ends at', value: item ? (item.event_end_time || '') : '',
+            hint: 'Optional. The calendar page shows only the start; this is what a subscribed phone uses to draw how long it runs.' },
+          { kind: 'text', name: 'event_location', label: 'Where', value: item ? (item.event_location || '') : '',
+            placeholder: 'e.g. Fellowship Hall',
+            hint: 'Optional. Shown on the event and carried into a subscribed calendar.' },
           { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
             hint: 'The post hides itself after this date. Clear it only for something genuinely permanent.' },
           { kind: 'toggle', name: 'pinned', label: 'Pin to the top', value: item ? !!item.pinned : false,
@@ -8532,6 +8776,10 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || churchDate();
       const event_date = form.get('event_date') || '';
+      const event_end_date = form.get('event_end_date') || '';
+      const event_time = normalizeClock(form.get('event_time'));
+      const event_end_time = normalizeClock(form.get('event_end_time'));
+      const event_location = String(form.get('event_location') || '').trim();
       const expire_date = form.get('expire_date') || '';
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
@@ -8541,12 +8789,17 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const channels = [
         form.get('ch_web') === '1' && 'web',
         form.get('ch_email') === '1' && 'email',
+        // ⚠ A CHANNEL THE CALENDAR READS AND /news DOES NOT. A school break or
+        // a testing week belongs on the month and is not something anybody
+        // wants a paragraph about; without this the only way to keep it off
+        // the news feed was to keep it off the calendar too.
+        form.get('ch_calendar') === '1' && 'calendar',
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const newItemResult = await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_end_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
       await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -8575,6 +8828,10 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || '';
       const event_date = form.get('event_date') || '';
+      const event_end_date = form.get('event_end_date') || '';
+      const event_time = normalizeClock(form.get('event_time'));
+      const event_end_time = normalizeClock(form.get('event_end_time'));
+      const event_location = String(form.get('event_location') || '').trim();
       const expire_date = form.get('expire_date') || '';
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
@@ -8584,13 +8841,18 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const channels = [
         form.get('ch_web') === '1' && 'web',
         form.get('ch_email') === '1' && 'email',
+        // ⚠ A CHANNEL THE CALENDAR READS AND /news DOES NOT. A school break or
+        // a testing week belongs on the month and is not something anybody
+        // wants a paragraph about; without this the only way to keep it off
+        // the news feed was to keep it off the calendar too.
+        form.get('ch_calendar') === '1' && 'calendar',
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, event_end_date=?, event_time=?, event_end_time=?, event_location=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
       await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -9069,6 +9331,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // rather than worked out in the browser, so the editor never draws
             // a button that would come back "there is no redesigned layout".
             hasRedesign: !!REDESIGN_BLOCKS[row.id],
+            // The one thing publishing this page can never do. See the
+            // constant's own comment for why — read it before removing this.
+            neverLive: NATIVE_FORM_ONLY_PAGE_IDS.has(row.id),
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,

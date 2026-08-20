@@ -264,21 +264,104 @@ export function plainText(html) {
     .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// A News & Events record becomes an all-day entry on its event date. It has no
-// time column and no location column, and inventing either would be worse than
-// the honest all-day chip: "sometime that day" is exactly what the record says.
+// A News & Events record becomes an entry on its event date.
+//
+// It used to be all-day always, because the record genuinely had no time
+// column — and that was the reason the newsletter kept its own separate event
+// rows: a 7:00 pm council meeting could be typed into an email and could not
+// be said here at all. `event_time` is that column, so a post entered once is
+// now a complete event and the newsletter has nothing left to retype.
+//
+// ⚠ THE TIME IS A CHURCH WALL CLOCK, like every other time in this file, and
+// it is assembled by CONCATENATION rather than by any date arithmetic. The
+// column holds exactly what an <input type="time"> posts — `19:00` — so the
+// event starts at 19:00 in St. Louis whoever is reading it.
+//
+// ⚠ A BLANK TIME IS STILL ALL DAY, not midnight. `19:00` and `` are different
+// facts, and reading the second as `00:00` would put every dateless-but-timed
+// announcement at the top of the day looking deliberate.
 export function normalizeNewsItem(row, cats) {
   if (!row || !isYmd(row.event_date)) return null;
   const title = String(row.title || '').trim();
   if (!title) return null;
-  return {
+  const start = clockOnDay(row.event_date, row.event_time);
+  // A run of days — a break, a camp, an assessment week. Anything earlier than
+  // the start, or not a date at all, is ignored rather than honored: an end
+  // BEFORE a beginning is a typo, and drawing it would take the event off the
+  // month entirely, which is the one failure this feed must not have.
+  const lastDay = isYmd(row.event_end_date) && row.event_end_date > row.event_date
+    ? row.event_end_date : row.event_date;
+  const base = {
     id: `n:${row.id}`,
-    start: row.event_date, end: row.event_date, allDay: true,
-    title, location: '',
+    title, location: String(row.event_location || '').trim(),
     description: plainText(row.summary || row.body || ''),
     category: categoryForNews(row, cats), source: 'news',
     url: '/news',
   };
+  if (!start) return { ...base, start: row.event_date, end: lastDay, allDay: true };
+  // ⚠ AN END NOBODY TYPED IS LEFT EQUAL TO THE START, not derived here. The
+  // page shows a time RANGE wherever it has room, so a derived end would print
+  // a duration nobody stated — "7:00 – 8:00 pm" on a meeting whose length
+  // nobody knows. `.ics` still needs a number and derives one at that boundary
+  // instead (see icsEnd), which is the only place it is genuinely required.
+  return { ...base, start, end: newsEnd(row.event_date, lastDay, start, row.event_end_time), allDay: false };
+}
+
+// `HH:MM` on a date, as a wall clock. Anything that is not a real time of day
+// — blank, `25:00`, whatever a stale form posts — is no time at all rather
+// than a guess, which is what sends the record back to being all-day.
+export function clockOnDay(ymd, hm) {
+  const t = normalizeClock(hm);
+  return t ? `${ymd}T${t}:00` : null;
+}
+
+// `HH:MM`, or null. Exported because the save path needs the same answer the
+// renderer does — a value the calendar would ignore must not be STORED either,
+// or the form comes back showing a time the month does not show.
+export function normalizeClock(hm) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(String(hm || '').trim());
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+// ⚠ AN END TIME IS OPTIONAL AND A DERIVED ONE IS NEVER SHOWN.
+//
+// The screen prints the START and nothing else — `tlcCalTime()` reads
+// `ev.start` and has no branch for an end — so a derived end cannot make the
+// page claim a duration nobody entered. But `.ics` has no way to express "it
+// starts at 7 and we did not say when it stops": DTEND equal to DTSTART is a
+// zero-length event, which a calendar app draws as a hairline somebody's eye
+// slides straight past. So an unstated end becomes one hour, the same
+// assumption every calendar app makes when you type a start and stop.
+//
+// ⚠ AND IT IS CLAMPED TO THE SAME DAY. `tlcCalDates()` walks from the start
+// date to the END date inclusive, so a 11:30 pm event given a naive +1 hour
+// would be drawn on two days — tomorrow's grid growing an event that finished
+// before anybody woke up.
+export function newsEnd(ymd, lastDay, start, endTime) {
+  const stated = clockOnDay(lastDay, endTime);
+  if (stated && stated > start) return stated;
+  // A run of days with a start time but no end time finishes at the end of its
+  // last day, rather than an hour after it began on the first one.
+  if (lastDay !== ymd) return `${lastDay}T23:59:00`;
+  // Nothing was said, so nothing is claimed. `icsEnd()` is where a number
+  // finally has to exist.
+  return start;
+}
+
+// ⚠ `.ics` HAS NO WAY TO SAY "starts at 7, we did not say when it stops".
+// DTEND equal to DTSTART is a zero-length event, which a calendar app draws as
+// a hairline somebody's eye slides straight past. So an unstated end becomes
+// one hour HERE — at the one boundary that requires a number — rather than on
+// the event itself, where the page would print it as a duration nobody stated.
+// Clamped to the same day, or an 11:30 pm event lands on tomorrow's grid.
+export function icsEnd(ev) {
+  const end = ev.end || ev.start;
+  if (end > ev.start) return end;
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(ev.start || ''));
+  if (!m) return end;
+  const h = Number(m[2]);
+  if (h >= 23) return `${m[1]}T23:59:00`;
+  return `${m[1]}T${String(h + 1).padStart(2, '0')}:${m[3]}:00`;
 }
 
 // ── DE-DUPE ─────────────────────────────────────────────────────────────────
@@ -403,7 +486,7 @@ export function buildIcs(events, { name = 'Timothy Lutheran Church', tz = 'Ameri
       lines.push(`DTEND;VALUE=DATE:${stamp(addDays(ev.end, 1))}`);
     } else {
       lines.push(`DTSTART;TZID=${tz}:${stamp(ev.start)}`);
-      lines.push(`DTEND;TZID=${tz}:${stamp(ev.end || ev.start)}`);
+      lines.push(`DTEND;TZID=${tz}:${stamp(icsEnd(ev))}`);
     }
     lines.push(`SUMMARY:${icsEsc(ev.title)}`);
     if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
@@ -413,6 +496,46 @@ export function buildIcs(events, { name = 'Timothy Lutheran Church', tz = 'Ameri
   }
   lines.push('END:VCALENDAR');
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+
+// ── SUBSCRIBING TO PART OF IT ───────────────────────────────────────────────
+// ⚠ THE WHOLE POINT OF THE FILTER IS THAT A SUBSCRIPTION IS NOT A PAGE. A
+// visitor clicking a pill is looking at one thing for a moment; somebody
+// subscribing is deciding what appears in their own calendar every day for
+// years. A hundred school dates and every building rental crowding out a
+// personal calendar is exactly what stops people subscribing at all — and
+// then they go back to being told things by hand, which is the problem the
+// whole calendar exists to solve.
+//
+// ⚠ AN ABSENT FILTER MEANS EVERYTHING, and an unrecognized one is dropped
+// rather than treated as a category nothing matches. A subscription that
+// silently returns an empty file because a category was renamed is one
+// somebody's calendar quietly stops updating from, with nothing to see.
+export function parseFilterList(raw) {
+  return String(raw || '').split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+export function filterEvents(events, { cats: wantCats, sources: wantSources } = {}) {
+  const c = (wantCats || []).length ? new Set(wantCats) : null;
+  const s = (wantSources || []).length ? new Set(wantSources) : null;
+  return events.filter((ev) => {
+    if (c && !c.has(ev.category)) return false;
+    // `both` is one happening that is in two places, not a third source, so it
+    // answers to either of the sources it came from rather than falling out of
+    // each — the same rule the page's own source pills follow.
+    if (s && !(s.has(ev.source) || (ev.source === 'both' && (s.has('gcal') || s.has('news'))))) return false;
+    return true;
+  });
+}
+
+// What a calendar app will call it in somebody's sidebar. A filtered feed says
+// what is in it, because "Timothy Lutheran Church" appearing twice with
+// different contents is the thing that makes people unsubscribe from both.
+export function feedName(wantCats, cats, base = 'Timothy Lutheran Church') {
+  const list = wantCats || [];
+  if (!list.length || list.length >= activeCategories(cats).length) return base;
+  const names = list.map((k) => categoryRecord(k, cats).name);
+  return `${base} — ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`;
 }
 
 // ── WHICH CALENDARS ─────────────────────────────────────────────────────────
@@ -494,12 +617,13 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats }) 
 // ── THE FEED ────────────────────────────────────────────────────────────────
 // Everything above, assembled. Returns the payload /api/calendar serves.
 export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, cats }) {
-  const [google, news, building] = await Promise.all([
+  const [google, news, building, local] = await Promise.all([
     fetchGoogleEvents(env, { ids: calendarIds, from, to, getToken, cats }),
     readNewsEvents(env, from, to, cats),
     readGymBookings(env, from, to),
+    readLocalIntakeEvents(env, from, to, cats),
   ]);
-  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news, building))));
+  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news, building, local))));
   // Trimmed to the requested window AFTER the merge, so an event that reaches
   // into the window from outside it is kept while one that only touched the
   // padding is not.
@@ -519,15 +643,67 @@ export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, 
 export async function readNewsEvents(env, from, to, cats) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, title, summary, body, event_date, publish_date, theme, value, calendar_category
+      `SELECT id, title, summary, body, event_date, event_end_date, event_time, event_end_time,
+              event_location, publish_date, theme, value, calendar_category
          FROM news_items
         WHERE event_date IS NOT NULL AND event_date >= ? AND event_date <= ?
-          AND (channels IS NULL OR channels LIKE '%web%')
+          AND (channels IS NULL OR channels LIKE '%web%' OR channels LIKE '%calendar%')
         ORDER BY event_date ASC
         LIMIT 300`
     ).bind(addDays(from, -1), addDays(to, 1)).all();
     return (rows.results || []).map((r) => normalizeNewsItem(r, cats)).filter(Boolean);
   } catch (_) { return []; }
+}
+
+// ── EVENT INTAKE'S OWN "LOCAL" ROWS ─────────────────────────────────────────
+// A room booking typed straight into Event Intake, with no Google event and
+// no News & Events post behind it — a private wedding, a one-off outside
+// group, anything the office wants on the calendar without either of the
+// site's other two doors. See admin/intake.js and the `event_intake` table.
+//
+// ⚠ THE TYPE-TO-CATEGORY MAPPING IS ONE-WAY AND COMPUTED HERE, NEVER STORED.
+// Event Intake's own `type` (worship/education/rental/news — see the note at
+// the top of admin/intake.js on why that is a separate question from a
+// calendar category) still has to draw SOME color on the public month, so it
+// is mapped onto the nearest calendar_categories key at render time. Nothing
+// writes this back onto the event_intake row — re-pointing a category's own
+// color in the admin still repaints every local event that maps to it, the
+// same as it repaints everything else.
+const INTAKE_TYPE_TO_CATEGORY = { worship: 'worship', education: 'learn', rental: 'facility', news: 'special' };
+
+export async function readLocalIntakeEvents(env, from, to, cats) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, event_type, local_title, local_event_date, local_end_date,
+              local_event_time, local_end_time, room
+         FROM event_intake
+        WHERE source_kind = 'local' AND local_event_date IS NOT NULL
+          AND local_event_date >= ? AND local_event_date <= ?
+        ORDER BY local_event_date ASC
+        LIMIT 300`
+    ).bind(addDays(from, -1), addDays(to, 1)).all();
+    return (rows.results || []).map((r) => normalizeLocalIntakeEvent(r, cats)).filter(Boolean);
+  } catch (_) { return []; }
+}
+
+// Deliberately mirrors normalizeNewsItem()'s own shape — a run of days as one
+// entry, a blank time as genuinely all day, an unstated end left equal to the
+// start rather than guessed at. See the notes on normalizeNewsItem() for why
+// each of those is built the way it is; they hold here for the same reasons.
+export function normalizeLocalIntakeEvent(row, cats) {
+  if (!row || !isYmd(row.local_event_date)) return null;
+  const title = String(row.local_title || '').trim();
+  if (!title) return null;
+  const start = clockOnDay(row.local_event_date, row.local_event_time);
+  const lastDay = isYmd(row.local_end_date) && row.local_end_date > row.local_event_date
+    ? row.local_end_date : row.local_event_date;
+  const category = INTAKE_TYPE_TO_CATEGORY[row.event_type] || categoryForNews({}, cats);
+  const base = {
+    id: `l:${row.id}`, title, location: String(row.room || '').trim(),
+    description: '', category, source: 'local',
+  };
+  if (!start) return { ...base, start: row.local_event_date, end: lastDay, allDay: true };
+  return { ...base, start, end: newsEnd(row.local_event_date, lastDay, start, row.local_end_time), allDay: false };
 }
 
 // ── BUILDING RENTALS ────────────────────────────────────────────────────────
@@ -547,7 +723,13 @@ export async function readNewsEvents(env, from, to, cats) {
 // ⚠ AND `notes` IS NEVER READ EITHER. It is typed by the renter, and it is the
 // field the July 2026 review found being rendered unescaped into staff email
 // (GY-2). It has no business on a public calendar at all.
-export const BUILDING_IN_USE = 'Building in use';
+// ⚠ THE RENTER IS STILL NEVER NAMED, and that has not moved. What changed is
+// that "Building in use" told a visitor almost nothing: it did not say WHICH
+// space, and the church has exactly one it rents out. Naming the room is not a
+// privacy question — the renter is, and `gym_groups` is still not joined and
+// `notes` is still not read.
+export const BUILDING_IN_USE = 'Gym rented';
+export const BUILDING_ROOM = 'Gym';
 
 export async function readGymBookings(env, from, to) {
   try {
@@ -579,7 +761,7 @@ export function normalizeGymBooking(row) {
     end: `${row.booking_date}T${end}:00`,
     allDay: false,
     title: BUILDING_IN_USE,
-    location: '', description: '',
+    location: BUILDING_ROOM, description: '',
     category: 'facility',
     source: 'building',
   };

@@ -237,6 +237,20 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
   background:#F7F9FC;color:#4A5568;}
 .ed-linkwarn{font-size:11.5px;line-height:1.45;color:#8C3A28;}
 .ed-linkwarn:empty{display:none;}
+/* The Problem tone (Foundations palette), not a left-accent stripe — this
+   repo's own rule is a tinted card, no colored bar. No `display` is set
+   here on purpose: this div is a plain block by default, so the `hidden`
+   attribute JS toggles is never fighting a competing author declaration
+   for it — the exact trap (VUX15/MOB1/the sidebar hamburger, three times)
+   this codebase has hit before from a `display` rule silently outranking
+   `[hidden]`. The extra [hidden] rule below is redundant today and stays
+   anyway, because the day someone adds `display:flex` here for layout is
+   exactly the day this needs it.
+*/
+.ed-neverlive{margin:14px 14px 0;padding:12px 14px;border-radius:9px;
+  background:#F7E4DE;color:#8C3A28;font-size:12.5px;line-height:1.55;}
+.ed-neverlive[hidden]{display:none;}
+.ed-neverlive a{color:#8C3A28;text-decoration:underline;font-weight:600;}
 .ed-grip{cursor:grab;color:#A8A69A;font-size:12px;line-height:1;flex:none;user-select:none;}
 .ed-grip:active{cursor:grabbing;}
 .ed-move{color:#4A5568!important;font-size:12px!important;line-height:1;padding:2px 4px;border-radius:5px;flex:none;}
@@ -576,6 +590,7 @@ function shellHtml() {
         '<div class="ed-rail-f">Drag to reorder · Alt + ↑ ↓ with a row focused</div>' +
       '</aside>' +
       '<main class="ed-mid">' +
+        '<div class="ed-neverlive" id="edNeverLive" hidden>This page never reaches the live site. Contact and Prayer keep a real, spam-screened form built into the site\u2019s own code \u2014 nothing published here, ever, replaces it. Edit the words below if you want, but check them against <a href="#" id="edNeverLiveViewLive" target="_blank" rel="noopener">the live page</a> rather than this preview, which can no longer agree with it.</div>' +
         '<div class="ed-canvas" id="edCanvas"><div class="ed-paper" id="edPaper"></div></div>' +
         '<div class="ed-pal">' +
           '<div class="ed-pal-h">' +
@@ -616,7 +631,7 @@ function shellHtml() {
 
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edRedo', 'edPublish', 'edHint', 'edHintX', 'edRail',
-   'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
+   'edCanvas', 'edPaper', 'edNeverLive', 'edNeverLiveViewLive', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edMTabs',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
    'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
@@ -701,6 +716,11 @@ function renderTop() {
   el.edRedo.disabled = S.future.length === 0;
   el.edPublish.disabled = false;
   el.edView.href = 'https://timothystl.org' + S.path;
+  // S.neverLive is only ever sent by /pages/api, so this stays hidden on the
+  // ministries mount without needing to know which shell it is — the banner
+  // element itself is in the one shared markup both mounts render.
+  el.edNeverLive.hidden = !S.neverLive;
+  if (S.neverLive) el.edNeverLiveViewLive.href = 'https://timothystl.org' + S.path;
 }
 
 // Which row (top/bottom of a pair) each half belongs to, walked the same way
@@ -3971,6 +3991,10 @@ async function boot() {
     // Worker rather than worked out here, so the editor never offers a button
     // that would come back "there is no redesigned layout for this page".
     S.hasRedesign = !!data.hasRedesign;
+    // Never true for a ministry page — /ministries/api sends no such field,
+    // and !!undefined is false. See tlc-admin-worker.js's own comment on
+    // NATIVE_FORM_ONLY_PAGE_IDS for why Contact and Prayer carry this.
+    S.neverLive = !!data.neverLive;
     S.media = data.media || [];
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';
