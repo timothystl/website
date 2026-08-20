@@ -1986,6 +1986,32 @@ function inspectorSections(b, d) {
     }
   }
 
+  // Which News & Events post a countdown targets. Same shape as the Fund
+  // picker above — a select rather than chips, because the list is however
+  // many dated posts News & Events holds. Unlike Fund, an empty list is not
+  // an error to report: it just means nobody has dated anything yet.
+  if (d.newsRef) {
+    var dated = S.config.upcomingNews || [];
+    if (!dated.length) {
+      out += '<div class="ed-sec"><span class="ed-lab">Counting down to</span>' +
+        '<span class="ed-note">Nothing in News &amp; Events has a date yet, so this block will not appear on the page. It will pick up the next dated post automatically once one exists.</span></div>';
+    } else {
+      var cdPicked = dated.filter(function (n) { return Number(n.id) === Number(b.newsId); })[0];
+      out += '<div class="ed-sec"><label class="ed-lab" for="edCdNews">Counting down to</label>' +
+        '<select class="ed-field" id="edCdNews" data-in="newsId" data-k="newsId">' +
+        '<option value=""' + (cdPicked ? '' : ' selected') + '>The next upcoming post, automatically</option>' +
+        dated.map(function (n) {
+          return '<option value="' + esc(String(n.id)) + '"' +
+            (cdPicked && Number(cdPicked.id) === Number(n.id) ? ' selected' : '') + '>' +
+            esc(n.title + ' — ' + n.date) + '</option>';
+        }).join('') +
+        '</select><span class="ed-note">' + (cdPicked
+          ? 'Counts down to this post specifically, and disappears from the page once it has passed.'
+          : 'Counts down to whichever dated post in News &amp; Events is soonest, and moves on by itself as each one passes.') +
+        '</span></div>';
+    }
+  }
+
   // Who a contact block writes to. Blank is the normal case and the note says
   // so — the point of the church-details record is that changing the address
   // once changes it everywhere, and an address typed here opts this one block
@@ -2077,10 +2103,18 @@ function inspectorSections(b, d) {
     // plain box they always had. Only a type whose URL is somewhere a visitor
     // is SENT gets the picker.
     var isDest = b.type === 'alert' || b.type === 'give' || b.type === 'download';
+    // ⚠ Said BEFORE anything is saved, not after. An address off this list is
+    // dropped silently at the sanitizer — by the time a rejected paste would
+    // reach the page it is already gone, so there is no error to show once
+    // it has round-tripped. This is the one place that can still say why.
+    var embedNote = d.embedGate
+      ? '<span class="ed-note">Only these can be embedded here: ' + (S.config.embedHosts || []).join(', ') + '. Anything else is dropped when this saves.</span>'
+      : '';
     out += '<div class="ed-sec"><label class="ed-lab" for="edUrl">' + esc(d.urlLabel || 'Link') + '</label>' +
       (isDest
         ? linkField('url', b.url, '/where-it-goes', 'edUrl')
         : '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…">') +
+      embedNote +
       '</div>';
   }
 
@@ -2247,6 +2281,15 @@ function isImageField(d, field) {
   return (d.itemImageFields || []).indexOf(field) > -1;
 }
 
+// A third category, beside link and image: a field that names a FILE a
+// visitor downloads. Declared on the type (`itemFileFields`), checked before
+// isLinkField in the loop below — the Documents block's own `url` would
+// otherwise be claimed by isLinkField's blanket "field === 'url'" rule and
+// get the page-picker treatment a file address has no use for.
+function isFileField(d, field) {
+  return (d.itemFileFields || []).indexOf(field) > -1;
+}
+
 // A picture field: the thumbnail you can see, a place to drop a photograph off
 // the desktop, the library behind the same button, and the address box that was
 // always here. The box stays because not every picture on the site is one of
@@ -2260,6 +2303,29 @@ function imageField(spec, value, placeholder, label) {
         (value ? '' : '▣') + '</span>' +
       '<span class="ed-media-b"><span class="ed-media-n">' + esc(name || 'No picture yet') + '</span>' +
       '<span class="ed-media-c">Drop a photo here, or choose from the library</span></span></button>' +
+    '<input class="ed-field" data-in="' + esc(spec) + '" data-k="' + esc(spec) + '"' +
+      ' value="' + esc(value || '') + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(label) + '">' +
+    '</div>';
+}
+
+// The document version of imageField — same wrapper class (.ed-img is
+// generic layout, nothing image-specific in it), no thumbnail preview
+// because a PDF has none to show, and a native file picker instead of the
+// media library's picker modal: there is no shared library of documents to
+// choose from the way there is for photos, only ever a fresh upload or a
+// pasted address.
+//
+// ⚠ A <label> wrapping a hidden file input opens the OS picker on click with
+// no JavaScript click-forwarding at all — standard label-for-input behavior.
+function docField(spec, value, placeholder, label) {
+  var name = value ? String(value).split('/').pop() : '';
+  return '<div class="ed-img" data-docdrop="' + esc(spec) + '">' +
+    '<label class="ed-media">' +
+      '<span class="ed-media-thumb">⤓</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(name || 'No file yet') + '</span>' +
+      '<span class="ed-media-c">Drop a PDF here, or click to choose one</span></span>' +
+      '<input type="file" accept="application/pdf" data-docupload="' + esc(spec) + '" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">' +
+    '</label>' +
     '<input class="ed-field" data-in="' + esc(spec) + '" data-k="' + esc(spec) + '"' +
       ' value="' + esc(value || '') + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(label) + '">' +
     '</div>';
@@ -2315,6 +2381,9 @@ function itemsSection(b, d) {
   var rows = list.map(function (it, i) {
     var fields = inputFields.map(function (f) {
       var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
+      if (isFileField(d, f)) {
+        return docField('item:' + i + ':' + f, it[f], ph, d.itemLabel + ' ' + (i + 1) + ' file');
+      }
       if (isLinkField(d, f)) return linkField('item:' + i + ':' + f, it[f], ph);
       if (isImageField(d, f)) {
         return imageField('item:' + i + ':' + f, it[f], ph, d.itemLabel + ' ' + (i + 1) + ' picture');
@@ -2620,6 +2689,13 @@ function inspectorInput(target) {
     // at render time, so the Worker redraws rather than the editor patching a
     // custom property nothing reads.
     patch(b.id, { giveFund: Number(value) || 0 }, 'Changed the fund', 'rerender');
+    return;
+  }
+  if (spec === 'newsId') {
+    // Structural, same reasoning as giveFund: the target's own title and its
+    // countdown instant both come from the pick, so the canvas has nothing to
+    // patch in place — it has to ask the Worker to redraw.
+    patch(b.id, { newsId: Number(value) || 0 }, 'Changed what the countdown targets', 'rerender');
     return;
   }
   if (spec === 'url') b.url = value;
@@ -3180,6 +3256,40 @@ function bindDragAndDrop() {
     });
   });
 
+  // A document field's own drop target — same delegated shape as the
+  // picture one above, a distinct attribute so the two never claim the same
+  // drop. Kept separate rather than folded into the loop above: the two
+  // check different file types and hand off to different upload functions,
+  // and one combined branch would need its own type-switch either way.
+  ['dragover', 'dragleave', 'drop'].forEach(function (type) {
+    el.edInspBody.addEventListener(type, function (e) {
+      if (S.rowDrag) return;
+      var zone = e.target.closest ? e.target.closest('[data-docdrop]') : null;
+      if (!zone || !draggingFiles(e)) return;
+      e.preventDefault();
+      if (type === 'dragleave') {
+        if (zone.contains(e.relatedTarget)) return;
+        zone.classList.remove('is-over');
+        return;
+      }
+      if (type === 'dragover') { zone.classList.add('is-over'); return; }
+      zone.classList.remove('is-over');
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) uploadDoc(zone, file);
+    });
+  });
+  // The hidden file input's own change event — the click that opens the OS
+  // picker needs no JavaScript at all (a <label> wrapping the input), only
+  // the choice that comes back from it does.
+  el.edInspBody.addEventListener('change', function (e) {
+    var input = e.target.closest ? e.target.closest('[data-docupload]') : null;
+    if (!input) return;
+    var zone = input.closest('[data-docdrop]');
+    var file = input.files && input.files[0];
+    if (zone && file) uploadDoc(zone, file);
+    input.value = '';
+  });
+
   // palette chips
   el.edPalChips.addEventListener('dragstart', function (e) {
     var c = e.target.closest('.ed-chip');
@@ -3579,6 +3689,46 @@ async function postImage(blob, filename) {
   return j.url;
 }
 
+// ⚠ NO CLIENT-SIDE RESIZE, UNLIKE uploadPhoto ABOVE. Shrinking a photo before
+// upload works because a photo can lose pixels and still be the same photo; a
+// PDF cannot be "shrunk" the same way without a real re-encode this admin has
+// no library for. The 10MB cap is enforced server-side, in /api/upload-doc.
+async function postDoc(file) {
+  var fd = new FormData();
+  fd.append('file', file);
+  var res = await fetch('/api/upload-doc', { method: 'POST', body: fd, credentials: 'same-origin' });
+  var j = await res.json().catch(function () { return {}; });
+  if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
+  return { url: j.url, name: j.name || file.name || 'document.pdf' };
+}
+
+async function uploadDoc(zone, file) {
+  if (file.type !== 'application/pdf') {
+    toast('That is not a PDF — for another file type, paste its address in the box below');
+    return;
+  }
+  var spec = zone.dataset.docdrop;
+  var id = S.selectedId;
+  if (!findBlock(id)) return;
+  var line = zone.querySelector('.ed-media-c');
+  var was = line ? line.textContent : '';
+  zone.classList.add('is-busy');
+  if (line) line.textContent = 'Adding ' + file.name + '…';
+  try {
+    var up = await postDoc(file);
+    // ⚠ Re-read the block: the upload is a round trip, and the inspector may
+    // have been redrawn or another block selected while it was in flight —
+    // the same trap setImageSpec's own caller guards against.
+    if (!findBlock(id)) { toast('File uploaded'); return; }
+    setImageSpec(id, spec, up.url, up.name, 'file');
+    toast('File added');
+  } catch (err) {
+    zone.classList.remove('is-busy');
+    if (line) line.textContent = was;
+    toast(String((err && err.message) || err) || 'Could not add that file');
+  }
+}
+
 function prettyBytes(n) {
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
@@ -3609,7 +3759,7 @@ async function uploadPhoto(file) {
 // rather than a share of inspectorInput(): that one is the debounced keystroke
 // handler, and choosing a photo is a finished decision — it saves and redraws
 // now rather than 700ms after the last thing somebody typed.
-function setImageSpec(id, spec, url, name) {
+function setImageSpec(id, spec, url, name, noun) {
   var b = findBlock(id);
   if (!b) return;
   if (spec === 'photo') {
@@ -3622,7 +3772,7 @@ function setImageSpec(id, spec, url, name) {
   var items = (b.items || []).map(function (it) { return Object.assign({}, it); });
   if (!items[i]) return;
   items[i][parts[2]] = url;
-  patch(id, { items: items }, 'Changed picture · ' + name, 'rerender');
+  patch(id, { items: items }, 'Changed ' + (noun || 'picture') + ' · ' + name, 'rerender');
 }
 
 // ⚠ ON dragover THE FILE LIST IS EMPTY. Every browser withholds the files

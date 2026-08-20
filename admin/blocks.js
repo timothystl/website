@@ -702,7 +702,12 @@ export const BLOCK_DEFS = {
     label: 'Calendar', glyph: '▩',
     align: true,
     defaults: { title: 'Calendar', spaceAbove: 24, spaceBelow: 24, url: '', embedHeight: 'm', subscribe: true },
-    url: true, urlLabel: 'Google Calendar embed URL', richBody: true,
+    // ⚠ embedGate: this field also takes a Google Form and other embeds (see
+    // the render branch below), and until now NOTHING checked which sites
+    // those "other embeds" were allowed to be — any https address rendered
+    // straight into an iframe. Gated on the same allowlist the Embed block
+    // uses, below.
+    url: true, urlLabel: 'Google Calendar embed URL', richBody: true, embedGate: true,
     choices: [
       { key: 'embedHeight', label: 'How tall', def: 'm', options: EMBED_HEIGHTS,
         // ⚠ Says which case it applies to, because for the common one it
@@ -720,6 +725,19 @@ export const BLOCK_DEFS = {
     align: true,
     defaults: { title: 'A document to download', body: 'PDF', spaceAbove: 16, spaceBelow: 16 },
     url: true, urlLabel: 'File URL',
+  },
+
+  // A list of files, where `download` is one. A confirmation packet, a set of
+  // forms, a year of council minutes — several documents that belong together
+  // rather than one line each competing for its own block.
+  documents: {
+    label: 'Documents', glyph: '▧',
+    align: true,
+    defaults: { title: 'Downloads', spaceAbove: 24, spaceBelow: 24 },
+    items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemFileFields: ['url'],
+    itemLabel: 'File',
+    itemPlaceholders: { title: 'What the file is', url: 'PDF, or a link — Google Drive, etc.' },
+    defaultItems: [{ title: 'A document', url: '' }],
   },
   callout: {
     label: 'Callout box', glyph: '❢',
@@ -767,7 +785,27 @@ export const BLOCK_DEFS = {
   form: {
     label: 'Signup form', glyph: '◉',
     defaults: { title: 'Sign up', body: 'Fill this in and the office will be in touch.', spaceAbove: 24, spaceBelow: 24, url: '' },
-    url: true, urlLabel: 'Google Form embed URL', richBody: true, align: true,
+    // ⚠ embedGate: this had the same gap Calendar's "other embed" fallback
+    // did — an arbitrary https address, iframed with no check on where it
+    // pointed. The field only ever asked for a Google Form, which is on the
+    // allowlist, so this closes it with no change to the documented use.
+    url: true, urlLabel: 'Google Form embed URL', richBody: true, align: true, embedGate: true,
+  },
+  // A handful of other services the office pastes in, and nothing else —
+  // see EMBED_HOSTS above the sanitizer for the full list and why it exists.
+  // Distinct from Calendar and Signup form, which are typed for one Google
+  // product each; this is the block for the rest of them (a Drive folder, a
+  // Tithe.ly or Square checkout, a podcast player, one of the church's own
+  // other apps at connect./serve./mdo.timothystl.org).
+  embed: {
+    label: 'Embed', glyph: '⧉',
+    align: true,
+    defaults: { title: '', spaceAbove: 24, spaceBelow: 24, url: '', embedHeight: 'm' },
+    url: true, urlLabel: 'Paste the embed code, or just the address', richBody: true, embedGate: true,
+    choices: [
+      { key: 'embedHeight', label: 'How tall', def: 'm', options: EMBED_HEIGHTS,
+        note: 'A tall page like a Google Form usually wants Tall; a short player like a podcast episode usually wants Short.' },
+    ],
   },
   newsletter: {
     label: 'Newsletter', glyph: '✉',
@@ -1149,6 +1187,24 @@ export const BLOCK_DEFS = {
     autoNote: 'The next few dated events from News & Events, shown as one line of pills. Nothing to update by hand, and the strip disappears entirely when there is nothing coming up.',
   },
 
+  // The Photo banner's countdown switch, as its own block \u2014 for a page that
+  // wants a countdown without a full-bleed photograph over it. Same
+  // mechanism (COUNTDOWN_SCRIPT, churchInstant), a second place to reach it.
+  countdown: {
+    label: 'Countdown', glyph: '\u23F1',
+    align: true,
+    defaults: { eyebrow: 'Coming up', spaceAbove: 24, spaceBelow: 24, newsId: '', pulse: true },
+    // Which post to count down to. Blank \u2014 the default \u2014 means the next
+    // upcoming one, the same rule `giveFund` and `contactEmail` already use:
+    // the common case needs nothing picked. See the render branch and
+    // sanitizeBlock's `newsRef` handling.
+    newsRef: true,
+    switches: [
+      { key: 'pulse', label: 'Pulsing dot', def: true,
+        note: 'The small gold dot beside the label. It holds still for anyone whose device asks for reduced motion.' },
+    ],
+  },
+
   // The archive as a band rather than a column: this week's letter argued for
   // on the left, everything else listed on the right. Same data as Newsletter
   // archive, a different shape — the same relationship News highlights and
@@ -1238,7 +1294,10 @@ export const APPEARABLE_TYPES = new Set(
 // test walks every type, renders it, and asserts this set is exactly the set
 // whose markup contains a .tlcb-btn, so adding a button to a type without
 // adding it here fails rather than shipping a dead control.
-export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
+// ⚠ Not 'form' — its button markup is now editor-only (see the render branch
+// below), so it never reaches the public page and needs no public-facing
+// Button color control.
+export const BTN_TYPES = new Set(['slideshow', 'download', 'documents', 'buttons', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
 
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
@@ -1249,7 +1308,7 @@ export const GROUPS = [
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
   // and one of them draws a map.
-  { name: 'Dates',     types: ['servicetimes', 'tiles', 'chips', 'map', 'contact', 'events', 'times', 'download', 'calendar'] },
+  { name: 'Dates',     types: ['servicetimes', 'tiles', 'chips', 'countdown', 'map', 'contact', 'events', 'times', 'download', 'documents', 'calendar', 'embed'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
@@ -1304,6 +1363,42 @@ export function safeUrl(u) {
   if (/^[/#]/.test(s)) return s;
   if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(s)) return 'https://' + s; // bare domain typed by staff
   return '';
+}
+
+// ── EMBEDDING SOMEBODY ELSE'S PAGE ──────────────────────────────────────────
+// An iframe has no same-origin restriction of its own — accepting an
+// arbitrary address here would let a page editor put literally any site
+// inside timothystl.org, phishing page included. So this is an allowlist of
+// the handful of services the office actually has reason to paste in, not a
+// general embed-anything box.
+export const EMBED_HOSTS = [
+  'docs.google.com', 'forms.gle', 'drive.google.com', 'calendar.google.com',
+  'tithe.ly', 'squareup.com', 'open.spotify.com', 'podcasts.apple.com',
+  'connect.timothystl.org', 'serve.timothystl.org', 'mdo.timothystl.org',
+];
+
+// Takes either a bare address or a pasted <iframe ...> snippet — the shape
+// most of these services actually hand somebody to copy — and returns a safe
+// src to embed, or '' if it is not one of the hosts above. Shared by the
+// Embed block and the Calendar block's own non-calendar-address fallback, so
+// there is one gate for what may go in an iframe, not two that could come to
+// disagree about it.
+//
+// ⚠ THE HOST CHECK NEEDS A REAL PARSED URL, NOT A REGEX ON THE STRING. A
+// regex anchored on "starts with https://docs.google.com" is exactly the
+// shape of check a crafted address like "https://docs.google.com.evil.com/"
+// or "https://evil.com/?=docs.google.com" walks straight through. `new URL()`
+// is what actually answers "what host does a browser send this request to."
+export function allowedEmbedSrc(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  const tagMatch = raw.match(/<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+  const candidate = tagMatch ? tagMatch[1] : raw;
+  const safe = safeUrl(candidate);
+  if (!safe) return '';
+  let host;
+  try { host = new URL(safe).hostname.toLowerCase(); } catch (_) { return ''; }
+  return EMBED_HOSTS.includes(host) ? safe : '';
 }
 
 const RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li',
@@ -1628,7 +1723,11 @@ export function sanitizeBlock(b) {
     // first one is one new render branch away from failing. Every type that
     // reads b.url declares url:true (alert, download, calendar, form, give),
     // so nothing loses a link it was using.
-    url: def.url ? safeUrl(b.url).slice(0, 600) : '',
+    // ⚠ `embedGate` types (Embed, Calendar) run through the host allowlist
+    // instead of plain safeUrl — an iframe has no origin restriction of its
+    // own, so what may reach one is a much narrower question than what may
+    // reach an href. See allowedEmbedSrc() for why.
+    url: def.url ? (def.embedGate ? allowedEmbedSrc(b.url) : safeUrl(b.url)).slice(0, 600) : '',
     spaceAbove: snapSpace(b.spaceAbove),
     spaceBelow: snapSpace(b.spaceBelow),
     gap: snapSpace(b.gap == null ? 32 : b.gap),
@@ -1762,6 +1861,15 @@ export function sanitizeBlock(b) {
   if (def.giveFund) {
     const id = Math.floor(Number(b.giveFund));
     if (Number.isFinite(id) && id > 0) out.giveFund = id;
+  }
+
+  // Which News & Events post a countdown targets, by id — the identical
+  // shape `giveFund` is for `give_funds`. Stored only when set; blank is the
+  // common case and means "the next upcoming one", so it must not land in
+  // every generated seed as a value that means nothing.
+  if (def.newsRef) {
+    const id = Math.floor(Number(b.newsId));
+    if (Number.isFinite(id) && id > 0) out.newsId = id;
   }
 
   // Which event a `registration` block belongs to — an ID reference into
@@ -3113,6 +3221,14 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-pulse{width:9px;height:9px;border-radius:50%;background:#E4A93C;display:inline-block;flex:none;
   animation:tlcb-pulse 1.8s ease-in-out infinite;}
 @keyframes tlcb-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* The standalone Countdown block's own label and number. The banner's
+   countdown is white-on-photo and cannot be reused as-is; these read the
+   block's own ink and eyebrow colors so they work on any of the ten
+   backgrounds, not just a dark photo field. */
+.tlcb-cd-l{font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#C9973A);}
+.tlcb-cd-v{font-family:var(--tlcb-serif);font-weight:700;font-size:28px;line-height:1;
+  color:var(--tlcb-head-ink,#1E2D4A);font-variant-numeric:tabular-nums;}
 @media(prefers-reduced-motion:reduce){
   .tlcb-pulse{animation:none;}
   .tlcb-stamp--pulse{animation:none;}
@@ -3236,12 +3352,13 @@ export function blocksClientConfig(data) {
       items: !!d.items, itemFields: d.itemFields || [], itemLabel: d.itemLabel || 'Row',
       auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
-      itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [],
+      itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [], itemFileFields: d.itemFileFields || [],
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund, eventRef: !!d.eventRef,
+      newsRef: !!d.newsRef,
       shade: SHADEABLE_TYPES.has(key), appear: APPEARABLE_TYPES.has(key), btn: BTN_TYPES.has(key),
-      partnerSource: !!d.partnerSource,
+      partnerSource: !!d.partnerSource, embedGate: !!d.embedGate,
       choices: d.choices || [], switches: d.switches || [],
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
@@ -3263,8 +3380,23 @@ export function blocksClientConfig(data) {
     // that event actually costs or asks for is resolved server-side at
     // render time, never here.
     events: ((data && data.eventsById) ? Object.values(data.eventsById) : []).map((e) => ({ id: e.id, name: e.name })),
+    // Every dated News & Events post, soonest first — what the Countdown
+    // block's picker offers. Same shape as `events` above: id and a label
+    // only, nothing the render branch does not already read from ctx.data
+    // itself. Sorted here so the picker and the block's own "automatic"
+    // fallback (upcoming()[0] in renderInner) agree about which one is next.
+    upcomingNews: ((data && data.news) || [])
+      .filter((n) => n.event_date)
+      .slice()
+      .sort((a, b2) => String(a.event_date).localeCompare(String(b2.event_date)))
+      .map((n) => ({ id: n.id, title: n.title, date: fmtNewsDate(n.event_date, true) })),
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
-    stamps: STAMP_PRESETS, stampSizes: STAMP_SIZES, step: SPACE_STEP, max: SPACE_MAX };
+    stamps: STAMP_PRESETS, stampSizes: STAMP_SIZES, step: SPACE_STEP, max: SPACE_MAX,
+    // The allowlist itself, so the inspector can name what is and is not
+    // embeddable BEFORE somebody saves and finds out the address was
+    // dropped — one list, read by the sanitizer and shown on the screen,
+    // rather than a second copy typed into the editor that could drift.
+    embedHosts: EMBED_HOSTS };
 }
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
@@ -4298,6 +4430,42 @@ function renderInner(b, opts) {
       <div class="tlcb-chip-row">${pills}</div></div>`;
   }
 
+  if (t === 'countdown') {
+    // Blank means automatic — the same next-upcoming-post `upcoming()[0]`
+    // already computes for the banner switch and the Coming-up strip. A
+    // picked id that no longer has a date (the post was edited, or deleted)
+    // is treated exactly like nothing picked at all, never as an error.
+    const auto = !b.newsId;
+    const target = auto
+      ? upcoming()[0]
+      : (data.news || []).find((n) => Number(n.id) === Number(b.newsId) && n.event_date);
+    // ⚠ RENDERS NOTHING WHEN THERE IS NOTHING TO COUNT DOWN TO — the same rule
+    // the Coming-up strip follows, for the same reason: a countdown block that
+    // shows a dash forever, or a sentence explaining its own emptiness, is
+    // worse than the block simply not being there. The editor says why,
+    // because a block that vanishes from the canvas is one somebody thinks
+    // they broke.
+    if (!target) {
+      return opts.editing
+        ? `<div class="tlcb-stack">${renderEyebrow(opts, b)}<span class="tlcb-note">${auto
+            ? 'Nothing dated is coming up in News & Events, so this block will not appear on the page.'
+            : 'That post no longer has a date, so this block will not appear on the page. Pick another in the panel on the right.'}</span></div>`
+        : '';
+    }
+    const dot = b.pulse ? '<span class="tlcb-pulse"></span>' : '';
+    // Church time, not the visitor's and not the Worker's — same reasoning as
+    // the banner's own countdown, restated here because this is a second
+    // place the arithmetic has to be right.
+    const at = churchInstant(target.event_date, '09:00');
+    return `<div class="tlcb-stack">
+      <div class="tlcb-inline">${dot}${field(opts, b, 'eyebrow', 'span', 'tlcb-eyebrow', esc(b.eyebrow || ''), ' data-ph="Coming up"')}</div>
+      <div class="tlcb-head">${esc(target.title || '')}</div>
+      <div class="tlcb-inline"><span class="tlcb-cd-l">Starts in</span>
+        <span class="tlcb-cd-v" data-countdown="${esc(at)}">—</span></div>
+      ${COUNTDOWN_SCRIPT}
+    </div>`;
+  }
+
   if (t === 'letter') {
     const issues = data.newsletters || [];
     const newest = issues[0];
@@ -4995,8 +5163,31 @@ function renderInner(b, opts) {
     </div>`;
   }
 
+  if (t === 'documents') {
+    // The single-file version of the row above, reused per row: same
+    // .tlcb-dl markup, so a list of documents and one File download block
+    // never come to look like two different ideas of what a file link is.
+    const rows = (b.items || []).map((it, i) => {
+      const href = safeUrl(it.url);
+      const dl = href && !opts.editing
+        ? `<a class="tlcb-btn tlcb-btn--ghost" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Download</a>`
+        : `<span class="tlcb-btn tlcb-btn--ghost">Download</span>`;
+      return `<div class="tlcb-dl">
+        <span class="tlcb-dl-i">${href && /\.pdf($|\?)/i.test(href) ? 'PDF' : 'FILE'}</span>
+        <span class="tlcb-dl-b">${itemField(opts, i, 'title', 'span', 'tlcb-dl-t', esc(it.title || ''), ' data-ph="What the file is"')}
+          <span class="tlcb-dl-m">${href ? esc(href.split('/').pop().slice(0, 60)) : 'No file chosen yet'}</span></span>
+        ${dl}
+      </div>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b, 'Downloads')}<div class="tlcb-rows">${rows}</div></div>`;
+  }
+
   if (t === 'calendar') {
-    const src = safeUrl(b.url);
+    // ⚠ Gated here too, not only in sanitizeBlock — a block saved before the
+    // host allowlist existed still has whatever https address was posted at
+    // it back then, and render is the one place that data is guaranteed to
+    // pass through this before ever reaching an iframe.
+    const src = allowedEmbedSrc(b.url);
     // ⚠ THE CONTROL WAS DEAD. "How tall" has been on this block's inspector
     // since it shipped, stored on every save, and read by nothing — the height
     // was hardcoded at 520px. Somebody choosing Tall watched nothing happen,
@@ -5037,7 +5228,9 @@ function renderInner(b, opts) {
   }
 
   if (t === 'form') {
-    const src = safeUrl(b.url);
+    // ⚠ Gated here too, same reasoning as Calendar above — a block saved
+    // before the allowlist existed still has whatever was posted at it then.
+    const src = allowedEmbedSrc(b.url);
     // ⚠ A VISITOR NEVER SEES A FAKE FIELD OR A FAKE BUTTON. The editing-mode
     // mockup (two blank boxes, a "Sign up" pill) exists so whoever is
     // configuring this block can see roughly what it will look like once a
@@ -5060,6 +5253,24 @@ function renderInner(b, opts) {
       inner = '';
     }
     return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
+  }
+
+  if (t === 'embed') {
+    // ⚠ THERE IS NO THIRD STATE HERE, ONLY TWO. An address off the allowlist
+    // is dropped at the sanitizer (see sanitizeBlock, above) — never stored —
+    // so by the time a block reaches render, "nothing pasted yet" and
+    // "something was pasted and refused" are the same fact: b.url is blank
+    // either way. Telling those apart would mean keeping the rejected value
+    // around just to explain itself, which is the thing this allowlist
+    // exists to stop doing. The inspector's own standing note (not this
+    // render branch) is where "that address isn't on the list" belongs,
+    // said before anything is ever saved.
+    const src = allowedEmbedSrc(b.url);
+    const px = (EMBED_HEIGHTS.find((h) => h.key === b.embedHeight) || EMBED_HEIGHTS[1]).px;
+    const inner = src && !opts.editing
+      ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Embed')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
+      : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">${src ? 'Embed' : 'Paste an embed code, or the address it points to, in the panel on the right.'}</div>`;
+    return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
   }
 
   if (t === 'newsletter') {

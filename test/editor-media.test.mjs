@@ -22,7 +22,7 @@ grid.items = [
   { img: '', eyebrow: '', title: 'Food Pantry', body: '<p>Open monthly.</p>', linkLabel: 'Learn more', url: '/foodpantry' },
   { img: '', eyebrow: '', title: '', body: '<p>Not named yet.</p>', linkLabel: '', url: '' },
 ];
-const seed = sanitizeBlocks([newBlock('hero'), newBlock('textphoto'), newBlock('video'), newBlock('gallery'), grid]);
+const seed = sanitizeBlocks([newBlock('hero'), newBlock('textphoto'), newBlock('video'), newBlock('gallery'), grid, newBlock('documents')]);
 const harness = createEditorServer({ pages: [{ slug: 'music', title: 'Music Ministry', blocks: seed }] });
 await new Promise((r) => harness.server.listen(0, r));
 const base = 'http://localhost:' + harness.server.address().port;
@@ -301,6 +301,58 @@ await page.evaluate(() => document.querySelector(
 await page.waitForTimeout(2200);
 const after = saved().find((b) => b.type === 'cardgrid').items.map((i) => i.title);
 eq(JSON.stringify(after), JSON.stringify(['', 'Food Pantry']), 'both headings survive the move');
+
+// ── the Documents block: a native file picker, not the photo library ────────
+// No shared library of PDFs exists the way ministry_media is a library of
+// photos, so this field never opens that modal — a <label>-wrapped hidden
+// file input, plus the same drag-and-drop shape the picture fields use.
+await resetPage();
+
+group('a document field is a file picker, not a picture field');
+await page.click('.ed-paper .tlcb--documents');
+await page.waitForSelector('.ed-insp [data-rows="item"]');
+eq(await page.locator('.ed-img[data-docdrop="item:0:url"]').count(), 1, 'the file gets its own drop zone');
+eq(await page.locator('.ed-img[data-imgdrop="item:0:url"]').count(), 0, 'never the picture one — the two predicates do not collide');
+ok((await page.textContent('.ed-img[data-docdrop="item:0:url"]')).includes('Drop a PDF here'),
+  'and it says a PDF can be dropped on it');
+eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[type="file"][data-docupload="item:0:url"]').count(), 1,
+  'a real hidden file input opens the OS picker');
+eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[data-in="item:0:url"]').count(), 1,
+  'the address box stays too — a document is often hosted elsewhere, a Google Drive link');
+eq(await page.locator('.ed-modal').count(), 0, 'clicking the field never opens the photo library modal');
+
+group('uploading a PDF onto a document field');
+const docsBefore = harness.docUploads.length;
+await dropFile('.ed-img[data-docdrop="item:0:url"]', 'council-minutes.pdf', 'application/pdf', 'fake-pdf-bytes');
+await page.waitForTimeout(500);
+eq(harness.docUploads.length, docsBefore + 1, 'the file reaches /api/upload-doc');
+// ⚠ Unlike a photo (which is resized/re-encoded client-side), a PDF is
+// posted untouched — so the real filename survives, not a synthesized one.
+ok(await page.locator('.ed-paper .tlcb--documents').textContent().then((t) => t.includes('council-minutes')),
+  'the real filename lands on the block, not a generated one');
+ok((await page.textContent('#edChanges')).includes('Changed file · council-minutes.pdf'),
+  'logged as a file change, not a "picture" change — setImageSpec takes the noun');
+await page.waitForTimeout(1900);
+eq(saved().find((b) => b.type === 'documents').items[0].url, '/docs/1-council-minutes.pdf', 'saved to the draft');
+
+group('a non-PDF is refused, and nothing is uploaded');
+const docsBefore2 = harness.docUploads.length;
+await dropFile('.ed-img[data-docdrop="item:0:url"]', 'flyer.jpg', 'image/jpeg', 'not-a-pdf');
+await page.waitForTimeout(400);
+eq(harness.docUploads.length, docsBefore2, 'no request was made for the wrong file type');
+ok((await page.textContent('#edToast')).toLowerCase().includes('pdf'), 'and it says a PDF is wanted');
+
+group('typing a link still works, for a document hosted elsewhere');
+// Waits for the actual save request rather than guessing at the two
+// chained debounces (inspectorInput's own 700ms, then scheduleSave's
+// 1500ms) — #edSaved only has minute resolution, so it cannot reliably
+// tell "the old save" from "the new one" the way this response can.
+const draftSaved = page.waitForResponse((res) =>
+  res.url().includes('/draft') && res.request().method() === 'POST', { timeout: 8000 });
+await page.fill('.ed-img[data-docdrop="item:0:url"] input[data-in="item:0:url"]', 'https://drive.google.com/file/d/xyz/view');
+await draftSaved;
+eq(saved().find((b) => b.type === 'documents').items[0].url, 'https://drive.google.com/file/d/xyz/view',
+  'a typed address is saved just like the upload was');
 
 eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 

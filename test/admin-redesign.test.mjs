@@ -2763,6 +2763,18 @@ group('an upload needs a reason to be uploading (FX-08)');
   const office = signIn(db, ['notices_edit'], 'office');
   ok((await upload(office.cookie, '/api/upload-doc', 'application/pdf')).status !== 403, 'and the voters documents still upload');
 
+  // ⚠ /api/upload-doc was scoped to notices_edit alone, built for the Voters
+  // screen's own file list. The Documents block puts a PDF uploader on any
+  // page a pages_edit or pages_edit_own holder can reach, so the gate widened
+  // to match — a page editor who cannot reach Voters must still be able to
+  // attach a file to their own page.
+  const pageEditor = signIn(db, ['pages_edit'], 'editor');
+  ok((await upload(pageEditor.cookie, '/api/upload-doc', 'application/pdf')).status !== 403,
+    'and so does a page editor, for the Documents block');
+  const ownPageEditor = signIn(db, ['pages_edit_own'], 'ownEditor');
+  ok((await upload(ownPageEditor.cookie, '/api/upload-doc', 'application/pdf')).status !== 403,
+    'a ministry leader scoped to their own pages too');
+
   // Signed out is still the first gate, not the second.
   // Signed out is still the first gate, not the second. ⚠ The session gate
   // answers every unauthenticated request with the login PAGE, at 200 — an API

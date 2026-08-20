@@ -496,6 +496,44 @@ group('spacing steppers on a half block re-render the pair');
   eq(await below(), start + 8, 'stepping a half block moves the pair wrapper the page actually renders');
 }
 
+group('the embed block explains its own allowlist');
+// ⚠ Posted directly to the draft rather than appended to the shared
+// seedBlocks — several groups above this one (duplicate/delete/undo, redo)
+// count blocks against the ORIGINAL five-block seed, so growing it here
+// would silently break every one of them for a reason that has nothing to
+// do with what they test. This is the same scoped-setup shape "spacing
+// steppers on a half block" above uses for the same reason.
+await flushSave();
+await fetch(base + '/ministries/api/page/music/draft', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ blocks: sanitizeBlocks([...seedBlocks, newBlock('embed')]), changes: [] }),
+});
+await reload();
+await page.click('.ed-paper .tlcb--embed');
+await page.waitForSelector('#edUrl');
+// ⚠ Said BEFORE anything is saved — a rejected address is dropped silently
+// at the sanitizer, so by the time it has round-tripped there is no error
+// left to show. This standing note is the one place that explains why.
+const noteText = await page.locator('.ed-sec:has(#edUrl) .ed-note').textContent();
+ok(/tithe\.ly/.test(noteText), 'the standing note names a real allowed host');
+ok(/docs\.google\.com/.test(noteText), 'and another');
+ok(!/embed\.example|evil\.example/.test(noteText), 'not something invented for a test — the real list');
+
+// An allowed address saves exactly as typed.
+let draftSaved = page.waitForResponse((res) => res.url().includes('/draft') && res.request().method() === 'POST', { timeout: 8000 });
+await page.fill('#edUrl', 'https://open.spotify.com/embed/episode/abc');
+await draftSaved;
+eq(savedBlocks().find((b) => b.type === 'embed').url, 'https://open.spotify.com/embed/episode/abc',
+  'an allowed address saves normally');
+
+// One off the list is dropped the moment it reaches the server — the
+// canvas cannot know that until the redraw comes back, so this checks the
+// saved DRAFT, which is the fact that actually matters.
+draftSaved = page.waitForResponse((res) => res.url().includes('/draft') && res.request().method() === 'POST', { timeout: 8000 });
+await page.fill('#edUrl', 'https://evil.example/phish');
+await draftSaved;
+eq(savedBlocks().find((b) => b.type === 'embed').url, '', 'an address off the allowlist never reaches the saved draft');
+
 group('server rejects what the client would never send');
 const bad = await (await fetch(base + '/ministries/api/render', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },

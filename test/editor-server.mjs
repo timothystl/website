@@ -30,6 +30,7 @@ export function createEditorServer(seed = {}) {
   ];
   let mediaSeq = media.length;
   const uploads = [];
+  const docUploads = [];
   const revisions = [];
   const sections = [];
   let sectionSeq = 0;
@@ -396,9 +397,26 @@ export function createEditorServer(seed = {}) {
       return json(res, { url, location: url });
     }
 
+    // Stand-in for /api/upload-doc. Unlike the image path above, the real
+    // route never re-encodes a PDF, so the served name is the POSTED
+    // filename (sanitized) rather than a synthesized one — this reads it
+    // out of the multipart body the same way the Worker reads `file.name`,
+    // so a test can assert the real filename-preserving behavior.
+    if (p === '/api/upload-doc' && req.method === 'POST') {
+      const chunks = [];
+      await new Promise((resolve) => { req.on('data', (c) => chunks.push(c)); req.on('end', resolve); });
+      const body = Buffer.concat(chunks);
+      const m = body.toString('latin1').match(/filename="([^"]*)"/);
+      const safeName = (m ? m[1] : 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+      docUploads.push({ bytes: body.length, name: safeName });
+      const key = 'docs-' + docUploads.length + '-' + safeName;
+      const url = '/docs/' + key.slice('docs-'.length);
+      return json(res, { url, name: safeName, key });
+    }
+
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
   });
 
-  return { server, pages, media, revisions, uploads, sections };
+  return { server, pages, media, revisions, uploads, docUploads, sections };
 }
