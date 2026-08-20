@@ -23,6 +23,7 @@ import {
   normalizeClock, clockOnDay, newsEnd, icsEnd, parseFilterList, filterEvents, feedName,
   normalizeGymBooking, BUILDING_IN_USE, BUILDING_ROOM,
   readLocalIntakeEvents, normalizeLocalIntakeEvent,
+  CALENDAR_PALETTE,
 } from './calendar.js';
 
 let pass = 0;
@@ -661,6 +662,91 @@ test('a local event joins the merged feed and files under its own source', async
     assert.ok(ev, 'the local event is in the merged feed');
     assert.equal(ev.source, 'local');
   } finally { globalThis.fetch = realFetch; }
+});
+
+// ── COLOR MATHS ──────────────────────────────────────────────────────────
+// The comment above CALENDAR_PALETTE in calendar.js has claimed since it was
+// written that "admin/calendar.test.mjs measures the contrast of every one
+// of them" — and until 2026-08-20 that was not true. Nothing here ever
+// imported CALENDAR_PALETTE at all, so seven of the twelve pairs shipped
+// below WCAG AA's 4.5:1 with nothing to catch it. This group is what makes
+// the comment true. Same shape as admin/values.test.mjs's own color-relationship
+// tests, for the same reason: a palette is a promise about every pair in it,
+// and the only place that promise can be checked is a test that reads the
+// whole array, not the file that defines one entry at a time.
+const chan = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
+const rgb = (hex) => [1, 3, 5].map((i) => chan(hex, i));
+const luminance = (hex) =>
+  rgb(hex)
+    .map((c) => c / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((acc, c, i) => acc + [0.2126, 0.7152, 0.0722][i] * c, 0);
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+test('every calendar palette pair clears 4.5:1 against its own tint', () => {
+  for (const p of CALENDAR_PALETTE) {
+    const r = contrast(p.color, p.tint);
+    assert.ok(r >= 4.5, `${p.name} (${p.color} on ${p.tint}) is only ${r.toFixed(2)}:1`);
+  }
+});
+
+test('and against white, which is what the printed sheet and a plain page use', () => {
+  for (const p of CALENDAR_PALETTE) {
+    const r = contrast(p.color, '#FFFFFF');
+    assert.ok(r >= 4.5, `${p.name} (${p.color} on white) is only ${r.toFixed(2)}:1`);
+  }
+});
+
+// ⚠ DEFAULT_CATEGORIES IS A SEPARATE COPY OF THESE SAME COLORS, not derived
+// from CALENDAR_PALETTE — it is what a fresh install seeds and what the site
+// falls back to if calendar_categories cannot be read at all (see the note
+// above it). A fix landing in the palette and not here would still ship the
+// old, failing color on day one or during an outage.
+test('DEFAULT_CATEGORIES carries the same fix, not just CALENDAR_PALETTE', () => {
+  for (const c of CATEGORIES) {
+    const r = contrast(c.color, c.tint);
+    assert.ok(r >= 4.5, `${c.name} (${c.color} on ${c.tint}) is only ${r.toFixed(2)}:1`);
+  }
+});
+
+// The three that collapsed into one indistinguishable dark gold-brown when
+// simply darkened in place (see the note above CALENDAR_PALETTE) have to
+// still read as three different hues once they are dark enough to pass —
+// clearing the contrast bar by converging on each other would trade one
+// legibility bug for a "which one was this again" bug.
+test('amber, sand and gold stay visually distinct once darkened for contrast', () => {
+  const hue = (hex) => {
+    const [r, g, b] = rgb(hex).map((c) => c / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    if (d === 0) return 0;
+    let h;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    return h < 0 ? h + 360 : h;
+  };
+  const amber = hue(CALENDAR_PALETTE.find((p) => p.key === 'amber').color);
+  const sand = hue(CALENDAR_PALETTE.find((p) => p.key === 'sand').color);
+  const gold = hue(CALENDAR_PALETTE.find((p) => p.key === 'gold').color);
+  const gap = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+  assert.ok(gap(amber, sand) >= 10, `amber and sand are only ${gap(amber, sand).toFixed(0)}° apart`);
+  assert.ok(gap(sand, gold) >= 10, `sand and gold are only ${gap(sand, gold).toFixed(0)}° apart`);
+  assert.ok(gap(amber, gold) >= 10, `amber and gold are only ${gap(amber, gold).toFixed(0)}° apart`);
+});
+
+// The other collapse: 'stone' (facility) and 'gray' (other, the neutral
+// fallback) were both a near-identical warm taupe. 'gray' is a true neutral
+// now (zero saturation) specifically so it cannot converge on 'stone' again
+// however dark either one is pushed for contrast.
+test('gray (the neutral fallback) has no hue at all, so it cannot converge on stone again', () => {
+  const gray = CALENDAR_PALETTE.find((p) => p.key === 'gray').color;
+  const [r, g, b] = rgb(gray);
+  assert.equal(r, g, 'gray must be a true neutral — R, G and B equal');
+  assert.equal(g, b, 'gray must be a true neutral — R, G and B equal');
 });
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
