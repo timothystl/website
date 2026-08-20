@@ -7409,6 +7409,49 @@ Run: the rewritten `payroll emails its report to the bookkeeper` group in
 `test/admin-redesign.test.mjs`, verified non-vacuous — corrupting the
 one-line "is attached" wording fails it.
 
+#### The MDO director can approve her own staff's hours, and this screen reads it (2026-08-20)
+
+Dinger asked whether an "approved" button could exist on the payroll screen
+**in the childcare-portal MDO app**, that signals to this page — the church's
+combined payroll reader — that the MDO side of a period is ready.
+
+**This is a different fact from `payroll_periods`, on purpose.**
+`payroll_periods` has always meant "the *combined* church+MDO run for this
+period was signed off," and it has always been written from *this* screen by
+whoever runs payroll here — it has no idea whether the MDO director has
+actually reviewed her own staff's hours before that happens. There was no
+signal from her side at all.
+
+- **`mdo_payroll_approvals`** (period_start PK, approved_at, approved_by) is a
+  new table in the same shared Supabase project, but it is **not** written
+  through the `/sb/` proxy the way `payroll_periods` is. The childcare-portal
+  admin has its own real Supabase Auth session, so it writes this table
+  directly, gated by RLS to `admin_role() = 'full'` — the same gate that repo's
+  own CLAUDE.md says the sensitive payroll-adjacent tables should use. `anon`
+  holds no grant on it at all.
+- **`payroll_get_mdo_period_approval(p_secret, p_period_start)`** is the
+  fourteenth `payroll_*` RPC, added to `PAYROLL_RPC_FNS` alongside the other
+  thirteen, same shared-secret gate as its siblings. It is **read-only from
+  this side** — this Worker never writes `mdo_payroll_approvals`, only reads
+  it, the same way it only ever reads MDO staff/hours/clock/PTO.
+- **Shown as its own pill next to the "Reading childcare hours…" line**
+  (`#mdoApprovalPill`), never folded into `periodApproval`/`entryStatus`. The
+  church's own Approve/Take-back-approval button and status column are
+  entirely unchanged — approving the combined run here still means what it
+  always meant, and a director approving her own staff on the other app
+  neither requires nor substitutes for it.
+- **⚠ Two independent approvals, two independent people, and they must stay
+  that way.** Merging them (e.g. requiring the MDO approval before this screen
+  lets the combined run be approved) was deliberately not done — nothing here
+  asked for that ordering, and inventing it would make the church-side
+  approval depend on a signal from an app this Worker holds no credentials to
+  and cannot verify beyond the RPC's own answer.
+
+Run: `node test/payroll.test.mjs` (its stub server answers the new RPC with an
+empty array, the same "not yet approved" shape a real fresh period reads) and
+the RPC-allowlist group in `test/admin-redesign.test.mjs`, updated to fourteen
+functions in both directions.
+
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
 - **v3.0.0 renamed three keys** — `pages_edit`→`notices_edit`, `site_pages`→`pages_edit`, `site_pages_own`→`pages_edit_own`. See "The v3.0.0 Admin Overhaul" above; the migration must never run twice.

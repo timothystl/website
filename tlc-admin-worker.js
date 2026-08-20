@@ -256,10 +256,17 @@ function cleanSlug(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
 }
 
-// The thirteen payroll RPC functions the /sb/ proxy will forward to Supabase,
-// and the only thing it will forward. See the gate in _fetch for why this is a
-// list rather than a prefix, and admin/escaping.test.mjs's sibling assertion
-// that it matches what admin/payroll.html actually calls.
+// The payroll RPC functions the /sb/ proxy will forward to Supabase, and the
+// only thing it will forward. See the gate in _fetch for why this is a list
+// rather than a prefix, and admin/escaping.test.mjs's sibling assertion that
+// it matches what admin/payroll.html actually calls.
+//
+// payroll_get_mdo_period_approval is a read-only window onto a fact this
+// Worker never writes: whether the MDO director has approved her own staff's
+// hours for a period, in the childcare portal's own Payroll report. It is a
+// separate table (mdo_payroll_approvals) from payroll_periods — the church's
+// own approve/unapprove pair above still only ever reads and writes
+// payroll_periods, and the two approvals are never merged.
 export const PAYROLL_RPC_FNS = [
   'payroll_get_staff',
   'payroll_get_period_entries',
@@ -269,6 +276,7 @@ export const PAYROLL_RPC_FNS = [
   'payroll_get_mdo_hours',
   'payroll_get_mdo_clock_events',
   'payroll_get_mdo_pto',
+  'payroll_get_mdo_period_approval',
   'payroll_approve_period',
   'payroll_unapprove_period',
   'payroll_save_hours',
