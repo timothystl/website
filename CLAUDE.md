@@ -398,6 +398,123 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   Andrew asked for his own copy of every report, deduped against the
   bookkeeper's address in case they're ever the same.
 
+### Three more editor tools: Countdown, Documents, Embed (v5.35.0, 2026-08-20)
+
+The remaining three items from the original "exhaustive drag-and-drop builder
+tools" list, not counting video background, which is still deliberately
+deferred pending a decision on upload-through-the-editor vs. link-only (see
+the R2 cost note below — link-only costs nothing and needs no new
+infrastructure; a real uploader is its own piece of work).
+
+**Countdown** is a standalone version of the ticking countdown the redesign's
+banners already carry, for a page that wants one with nothing else around it.
+- **Automatic or pinned**, the same shape the Give block's fund picker and the
+  Christian Ed classes already use: blank means "whichever dated News &
+  Events post is soonest," a chosen id overrides it. Automatic is what most
+  pages want and needs nobody to remember to update it once the market or the
+  VBS date is set elsewhere.
+- **⚠ RENDERS NOTHING when there is nothing to count down to** — no dated
+  posts at all, or a pinned post whose date got cleared, or a pinned id that
+  no longer exists. The dead-control rule: a countdown reading "—" forever is
+  worse than the block simply not being there. The editor explains the
+  emptiness instead of looking broken.
+- Reuses `churchInstant()` and `COUNTDOWN_SCRIPT`, the same church-time
+  arithmetic and ticking mechanism the banner's own countdown already runs on
+  — one countdown implementation, not two that could disagree about what
+  "3 days" means across a DST boundary.
+
+**Documents** is Download made plural — one list, several files, for a
+packet of forms or a year of council minutes rather than one line each
+competing for its own block.
+- **Reuses Download's own row markup**, so a list of documents and a single
+  File download block never come to look like two different ideas of what a
+  file link is.
+- **A native file picker, not the photo library.** There is no shared
+  document library the way `ministry_media` is a library of photos — nothing
+  to browse — so `docField()` is a `<label>`-wrapped hidden `<input
+  type=file>` plus the address box every field already had, rather than the
+  picture field's modal. `isFileField()` is checked **before** `isLinkField`
+  in the item-field loop, because a field literally named `url` would
+  otherwise be claimed by the link-picker treatment first.
+- **`/api/upload-doc` was scoped to `notices_edit` alone**, built for the
+  Voters screen's own file list — which would have 403'd any ordinary page
+  editor trying to attach a PDF. Widened to `pages_edit`/`pages_edit_own`,
+  the same reasoning already stated above `UPLOAD_IMAGE_PERMS`: whoever can
+  touch the page can attach a file to it.
+- **⚠ No client-side resize, unlike a photo.** A PDF cannot be "shrunk" the
+  way a photo can without a real re-encode this admin has no library for; the
+  10MB cap is enforced server-side. The served filename is therefore the
+  real, sanitized posted filename — not a synthesized one the way a resized
+  photo's is.
+
+**Embed is the general case of a gap that turned out to already exist twice.**
+Building it meant asking what should be allowed in an iframe, and the honest
+answer was: nothing was ever checked. Calendar's own "or another embed"
+fallback and the Signup form block both iframed **any** https address with no
+restriction on where it pointed — an iframe has no same-origin protection of
+its own, so that was a page editor's ability to embed literally any site,
+phishing included, inside timothystl.org.
+- **`EMBED_HOSTS` / `allowedEmbedSrc()`** in `admin/blocks.js` is one
+  allowlist and one gate, shared by all three: Embed, Calendar's non-calendar
+  fallback, and Signup form. `docs.google.com`, `forms.gle`,
+  `drive.google.com`, `calendar.google.com`, `tithe.ly`, `squareup.com`,
+  `open.spotify.com`, `podcasts.apple.com`, and the church's own
+  `connect.`/`serve.`/`mdo.timothystl.org`.
+- **⚠ A real parsed URL, not a prefix match.** `https://tithe.ly.evil.example/`
+  and `https://evil.example/?u=tithe.ly` both read like "tithe.ly" to a
+  regex and are not; `new URL(safe).hostname` is what a browser actually
+  sends the request to, and that's what's checked.
+- **Takes a pasted `<iframe>` snippet as well as a bare address** — the shape
+  most of these services actually hand somebody to copy — extracting the
+  `src` before the allowlist check runs. Only the clean address is ever
+  stored; the rest of the tag is not.
+- **Gated at both write AND read.** `sanitizeBlock` drops a disallowed
+  address before it is ever stored (`embedGate: true` on the def), and the
+  render branches for Calendar, Form and Embed all run `allowedEmbedSrc()`
+  again rather than trusting the stored value — belt and braces for any row
+  saved before this shipped, which still has whatever address was posted at
+  it back then.
+- **⚠ THERE IS NO THIRD RENDER STATE.** A rejected address is dropped at the
+  sanitizer, so by the time a block reaches render, "nothing pasted yet" and
+  "something was pasted and refused" are the identical fact — `b.url` is
+  blank either way, and the public page cannot tell them apart to explain
+  itself. The inspector's own **standing note**, naming the real allowed
+  hosts from the shipped `embedHosts` config, is the one place that
+  distinction is said — before anything is ever saved, the only point at
+  which it is still knowable.
+- Signup form's field only ever asked for a Google Form anyway, which is on
+  the list — nothing documented about it changes; what closes is that
+  anything else silently would have worked.
+
+**R2 video storage, answered but not built.** Asked what hosting short video
+clips would cost: Cloudflare R2 is $0.015/GB/month storage with **zero**
+egress fee (R2's whole pitch), plus ~$0.36 per million Class A writes — a
+typical 20-second banner clip (a few MB) costs a fraction of a cent a month
+to store and nothing to serve, however many times it's watched. Cheap enough
+that cost was never the reason to defer it; a real uploader is real new
+infrastructure (chunked upload, a transcode or at least a dimension/duration
+check, a place in the media library for video the way there already is for
+photos), and that's its own piece of work, not a corner of this one.
+
+**⚠ Not verified end-to-end in this sandbox: the full `editor-edit.test.mjs`
+suite.** Every new group in it (`blocks.test.mjs`'s Countdown/Documents/Embed
+groups, `editor-media.test.mjs`'s Documents drag-and-drop group, and an
+isolated reproduction of the Embed group's own note-text and fill-and-save
+mechanics) passes cleanly on its own. The **whole 20-group file**, run
+start to finish, crashes partway through with `Target page, context or
+browser has been closed` — reproduced four times, at the same line, and
+confirmed via `git stash` to reproduce identically on the **unmodified**
+tree, so it is a pre-existing instability in this one sandboxed session (no
+crash dump, no OOM in `dmesg`, resources otherwise idle — consistent with a
+host-level constraint this guest can't see) rather than anything this change
+introduced. Worth a real run in CI before trusting it fully; if it still
+fails there, that is the thing to chase next, not this diff.
+
+Run: the `a standalone countdown`, `Documents`, and `Embed` groups in
+`node admin/blocks.test.mjs` (3318), the Documents groups in
+`node test/editor-media.test.mjs`, the `an upload needs a reason` group in
+`test/admin-redesign.test.mjs`, and `node test/editor.test.mjs`.
+
 ### Push Alert: two audiences, not scoped triggers (v5.34.0, 2026-08-19)
 
 The review above (SEC-6/FX-29) found that `pushToAllSubscribers()` reads the

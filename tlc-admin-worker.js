@@ -6456,8 +6456,12 @@ ${PAYROLL_HTML}`, 'Payroll');
     const UPLOAD_IMAGE_PERMS = ['newsletter_edit', 'news_edit', 'ministries_edit',
       'sermons_edit', 'pages_edit', 'pages_edit_own', 'notices_edit', 'staff_edit',
       'gym_manage'];
-    // The voter-document uploader is on one screen only, behind one permission.
-    const UPLOAD_DOC_PERMS = ['notices_edit'];
+    // Was one screen, one permission, when it only served the Voters file
+    // list. The Documents block puts a PDF uploader on any page a `pages_edit`
+    // or `pages_edit_own` holder can reach, so the gate widens to match — the
+    // same reasoning UPLOAD_IMAGE_PERMS above already states: whoever can
+    // touch the page can attach a file to it.
+    const UPLOAD_DOC_PERMS = ['notices_edit', 'pages_edit', 'pages_edit_own'];
     const canAny = (perms) => perms.some((k) => hasPermission(currentUser, k));
 
     if (path === '/api/upload-image' && method === 'POST') {
