@@ -3735,7 +3735,10 @@ function tlcCalDates(ev) {
 
 function tlcCalCat(st, key) {
   for (var i = 0; i < st.cats.length; i++) if (st.cats[i].key === key) return st.cats[i];
-  return { key: 'other', name: 'Other', color: '#8C8880', tint: '#F1EFEA' };
+  // ⚠ Kept in step with DEFAULT_CATEGORIES.other in admin/calendar.js — see
+  // the note above CALENDAR_PALETTE there for why this is #656565 and not
+  // the old #8C8880, which read at 3.07:1 against its own tint.
+  return { key: 'other', name: 'Other', color: '#656565', tint: '#F1EFEA' };
 }
 // 'both' is a real source, not a third calendar: it is one happening that is in
 // Google AND in News & Events, collapsed by the Worker. It therefore has to

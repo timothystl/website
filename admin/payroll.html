@@ -26,6 +26,7 @@
      ══════════════════════════════════════════════════════════════ -->
 <style>
 .tlc-pay{padding:18px 26px 40px;max-width:1180px;font-family:var(--tlc-sans);}
+.tlc-pay-ytd{font:600 12.5px var(--tlc-sans);color:var(--tlc-muted);margin:-6px 0 14px;}
 .tlc-pay-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px;}
 .tlc-pay-plabel{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
 .tlc-pay-period{position:relative;}
@@ -174,6 +175,12 @@
 <div class="tlc-pay">
   <h1 class="tlc-title">Payroll</h1>
   <p class="tlc-purpose">Enter hours and exceptions, approve the period, then print the gross-pay report — church staff and Timothy MDO, with a combined total. Withholding, taxes, and bank details stay with the payroll service.</p>
+  <!-- Once a period is approved, its gross is frozen from the rate that was
+       live at that moment — a later raise never rewrites it. This line sums
+       what has actually been approved so far this year, from that frozen
+       figure, so it never drifts even if every rate on the roster changes
+       tomorrow. -->
+  <p class="tlc-pay-ytd" id="ytdLine">Year to date: loading…</p>
 
   <div class="tlc-pay-bar">
     <span class="tlc-pay-plabel">Pay period</span>
@@ -368,6 +375,10 @@ let mdoStaff = [];
 let mdoPeriodMap = new Map();
 let mdoPtoMap = new Map();
 let mdoError = '';
+// The rate/pay-type MDO had on record at the moment this period was
+// approved (payroll_mdo_rate_snapshot). Keyed by staff_id. Empty for a
+// period that has never been approved — there is nothing to freeze yet.
+let mdoRateSnapshot = new Map();
 // Whether this period has been signed off, and by whom. Null means not — there
 // is no false, because a write that failed simply leaves it null, and half-set
 // is the one state an approval must never be in.
@@ -459,6 +470,42 @@ function calcMdoGross(s) {
 }
 
 // ════════════════════════════════════════════════════════════
+// RATE FREEZE — a raise must never rewrite a period that already ran
+// ════════════════════════════════════════════════════════════
+// church_staff / the MDO app's staff table hold only the CURRENT rate, so
+// every money function above, reading `s.hourly_rate` etc. straight off the
+// live record, used to recompute EVERY period — past, present or future —
+// at today's number the moment somebody typed a new one in. Once a period
+// is approved, payroll_save_hours/payroll_approve_period snapshot the rate
+// that was live at that moment onto the period's own row; these two read
+// that snapshot back instead of the live record, for an approved period
+// only. A period not yet approved has nothing to freeze, and correctly
+// keeps reading live — the office is still allowed to fix a rate for a run
+// that has not happened yet (see "Where a pay rate comes from" in CLAUDE.md).
+function effectiveChurch(s) {
+  const entry = periodEntries[s.id];
+  if (!periodApproval || !entry || entry.hourly_rate_used === undefined || entry.hourly_rate_used === null) return s;
+  return {
+    ...s,
+    pay_type: entry.pay_type_used || s.pay_type,
+    hourly_rate: entry.hourly_rate_used,
+    base_salary_biweekly: entry.base_salary_used,
+    housing_allowance_biweekly: entry.housing_allowance_used,
+    insurance_opt_out_biweekly: entry.insurance_opt_out_used,
+    hsa_contribution_biweekly: entry.hsa_contribution_used,
+    mileage_biweekly: entry.mileage_used,
+    retirement_403b_type: entry.retirement_403b_type_used,
+    retirement_403b_amount: entry.retirement_403b_amount_used,
+  };
+}
+
+function effectiveMdo(s) {
+  const snap = mdoRateSnapshot.get(s.id);
+  if (!periodApproval || !snap) return s;
+  return { ...s, pay_type: snap.pay_type, hourly_rate: snap.hourly_rate, salary_biweekly: snap.salary_biweekly };
+}
+
+// ════════════════════════════════════════════════════════════
 // PAY PERIODS
 // ════════════════════════════════════════════════════════════
 // Dates are formatted from local components throughout. Parsing "2026-07-16"
@@ -521,6 +568,27 @@ function showError(msg) {
   el.textContent = msg;
 }
 
+// ════════════════════════════════════════════════════════════
+// YEAR TO DATE
+// ════════════════════════════════════════════════════════════
+// Summed from payroll_periods.total_gross_cents — a plain number stored at
+// the moment each period was approved, using the exact reportGroups()
+// formula this page already renders with. Nothing here re-derives gross pay
+// from hours and rates a second time, which is what would let this figure
+// quietly disagree with the report above it.
+async function loadYtd() {
+  const el = $('ytdLine');
+  if (!el) return;
+  const year = new Date().getFullYear();
+  const { data, error } = await sb.rpc('payroll_get_year_totals', { p_year: year });
+  if (error) { el.textContent = 'Year to date: could not be read — ' + error.message; return; }
+  const rows = (data || []).filter((r) => r.total_gross_cents !== null && r.total_gross_cents !== undefined);
+  if (!rows.length) { el.textContent = 'Year to date, ' + year + ': nothing approved yet.'; return; }
+  const total = fromCents(rows.reduce((n, r) => n + Number(r.total_gross_cents || 0), 0));
+  el.textContent = 'Year to date, ' + year + ': ' + money(total) + ' across ' + rows.length
+    + (rows.length === 1 ? ' approved period' : ' approved periods') + '.';
+}
+
 async function loadStaff() {
   const { data, error } = await sb.rpc('payroll_get_staff', {});
   if (error) {
@@ -537,10 +605,11 @@ async function onPeriodChange(value) {
   $('entryPeriodLabel').textContent = 'Pay period · ' + periodLabel(periodStart, periodEnd);
   $('entryPays').textContent = paysOnLabel(periodEnd);
 
-  const [entriesRes, approvalRes, mdoApprovalRes] = await Promise.all([
+  const [entriesRes, approvalRes, mdoApprovalRes, mdoSnapRes] = await Promise.all([
     sb.rpc('payroll_get_period_entries', { p_period_start: periodStart }),
     sb.rpc('payroll_get_period_approval', { p_period_start: periodStart }),
     sb.rpc('payroll_get_mdo_period_approval', { p_period_start: periodStart }),
+    sb.rpc('payroll_get_mdo_rate_snapshot', { p_period_start: periodStart }),
     loadMdoData(periodStart, periodEnd),
   ]);
   if (entriesRes.error) showError('This period’s hours could not be read: ' + entriesRes.error.message);
@@ -553,6 +622,11 @@ async function onPeriodChange(value) {
 
   periodEntries = {};
   (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
+
+  // The frozen MDO rate for this period, if it has ever been approved. Empty
+  // for a period that has not — effectiveMdo() then reads live, correctly.
+  mdoRateSnapshot = new Map();
+  (mdoSnapRes.data || []).forEach((r) => { mdoRateSnapshot.set(r.staff_id, r); });
 
   const { data: priorEntries } = await sb.rpc('payroll_get_prior_pto', { p_period_start: periodStart });
   ptoCumulative = {};
@@ -732,7 +806,12 @@ function renderEntry(periodStart) {
     const hoursVal = entry.hours_worked === undefined || entry.hours_worked === null ? '' : entry.hours_worked;
     const ptoVal = entry.pto_hours_used === undefined || entry.pto_hours_used === null ? '' : entry.pto_hours_used;
     const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
-    const rate = isSalary ? money(s.base_salary_biweekly) + '/period' : money(s.hourly_rate) + '/hr';
+    // The rate label shown here follows the freeze too, once approved —
+    // otherwise it would show today's rate while the report beside it
+    // (reportGroups/exportReport) shows the frozen one, disagreeing about
+    // what this person was actually paid for this period.
+    const es = effectiveChurch(s);
+    const rate = isSalary ? money(es.base_salary_biweekly) + '/period' : money(es.hourly_rate) + '/hr';
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + ' · ' + esc(rate) + '</span></span>'
       + '<span>' + (isSalary
@@ -808,10 +887,19 @@ $('approvePeriodBtn').addEventListener('click', async () => {
   }
   if (periodApproval && !confirm('Take back the approval on this period?')) return;
 
+  // Computed from the SAME reportGroups() the on-screen report already
+  // renders, and computed BEFORE the RPC runs — at this instant periodApproval
+  // is still whichever it was, so this reads live rates exactly once, at the
+  // moment of approval, which is exactly what the database is about to freeze
+  // per person. Never re-derived in SQL: one formula for what somebody is
+  // owed, not two that could quietly disagree.
+  const totalGrossCents = periodApproval ? null
+    : cents(reportGroups().reduce((n, g) => n + fromCents(cents(subtotal(g.people))), 0));
+
   btn.disabled = true;
   const { error } = periodApproval
     ? await sb.rpc('payroll_unapprove_period', { p_period_start: periodStart })
-    : await sb.rpc('payroll_approve_period', { p_period_start: periodStart, p_approved_by: WHO });
+    : await sb.rpc('payroll_approve_period', { p_period_start: periodStart, p_approved_by: WHO, p_total_gross_cents: totalGrossCents });
   btn.disabled = false;
 
   // Only touch the local record once the write has landed. Flipping it first
@@ -820,8 +908,27 @@ $('approvePeriodBtn').addEventListener('click', async () => {
   if (error) { showError('That could not be saved: ' + error.message); return; }
   showError('');
   periodApproval = periodApproval ? null : { approved_at: new Date().toISOString(), approved_by: WHO };
+
+  // Re-read the entries and the MDO snapshot rather than trusting the copy
+  // already in memory — approving is what just wrote the frozen columns
+  // (including backfilling salaried church staff and every MDO person, who
+  // this browser's periodEntries/mdoRateSnapshot never had a row for before
+  // now), and effectiveChurch/effectiveMdo fall back to LIVE data whenever
+  // the frozen columns are missing. Skipping this would show correct figures
+  // only until the office's next rate edit, then silently start drifting
+  // again on the very period that was just signed off.
+  const [entriesRes2, snapRes2] = await Promise.all([
+    sb.rpc('payroll_get_period_entries', { p_period_start: periodStart }),
+    sb.rpc('payroll_get_mdo_rate_snapshot', { p_period_start: periodStart }),
+  ]);
+  periodEntries = {};
+  (entriesRes2.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
+  mdoRateSnapshot = new Map();
+  (snapRes2.data || []).forEach((r) => { mdoRateSnapshot.set(r.staff_id, r); });
+
   renderEntry(periodStart);
   flashSaved();
+  loadYtd();
 });
 
 function missingHours() {
@@ -919,7 +1026,11 @@ function mdoLines(s) {
 }
 
 function reportGroups() {
-  const church = churchStaff.filter((s) => calcGross(s) > 0).map((s) => ({
+  // Effective-first: once the period is approved these read the frozen
+  // snapshot instead of today's live rate (see RATE FREEZE above). `id` is
+  // preserved by the spread, so periodEntries[s.id]/mdoPeriodMap.get(s.id)
+  // lookups below are unaffected.
+  const church = churchStaff.map(effectiveChurch).filter((s) => calcGross(s) > 0).map((s) => ({
     name: s.name,
     basis: s.pay_type === 'salary' ? '—' : hrs((periodEntries[s.id] || {}).hours_worked || 0) + ' @ ' + money(s.hourly_rate),
     // Zeroed rather than hidden here, so the group's PTO total is right
@@ -929,7 +1040,7 @@ function reportGroups() {
     salaried: s.pay_type === 'salary',
     gross: calcGross(s), lines: churchLines(s),
   }));
-  const mdo = mdoStaff.filter((s) => calcMdoGross(s) > 0).map((s) => ({
+  const mdo = mdoStaff.map(effectiveMdo).filter((s) => calcMdoGross(s) > 0).map((s) => ({
     name: s.name,
     basis: s.pay_type === 'salary' ? '—' : hrs(mdoPeriodMap.get(s.id) || 0) + ' @ ' + money(s.hourly_rate),
     pto: takesPto(s.pay_type) ? (mdoPtoMap.get(s.id) || 0) : 0,
@@ -967,7 +1078,7 @@ function subtotal(people) { return fromCents(people.reduce((n, p) => n + cents(p
 function exportReport(periodStart, periodEnd) {
   const num = (v) => Number(v) || 0;
 
-  const mdoRows = mdoStaff.filter((s) => calcMdoGross(s) > 0).map((s) => ({
+  const mdoRows = mdoStaff.map(effectiveMdo).filter((s) => calcMdoGross(s) > 0).map((s) => ({
     name: s.name,
     salaried: s.pay_type === 'salary',
     rate: num(s.hourly_rate),
@@ -976,7 +1087,7 @@ function exportReport(periodStart, periodEnd) {
     gross: calcMdoGross(s),
   }));
 
-  const churchRows = churchStaff.filter((s) => calcGross(s) > 0).map((s) => {
+  const churchRows = churchStaff.map(effectiveChurch).filter((s) => calcGross(s) > 0).map((s) => {
     const entry = periodEntries[s.id] || {};
     return {
       name: s.name,
@@ -1490,5 +1601,6 @@ $('staffRemoveBtn').addEventListener('click', async () => {
   await loadStaff();
   const sel = $('periodSelect');
   if (sel.value) await onPeriodChange(sel.value);
+  loadYtd();
 })();
 </script>

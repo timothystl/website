@@ -1090,6 +1090,107 @@ works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
 
+### The calendar palette couldn't actually be read, and the comment that said it was checked was wrong (v5.38.0, 2026-08-20)
+
+Dinger: *"It needs to be readable publicly"* — about the church calendar. Not
+a rendering bug, not a missing feature: read against the real production
+feed, the live `/calendar` page is mostly a wash of pale, barely-legible gray
+text, and it has been since the redesign shipped.
+
+**The root cause is upstream of any one color.** 40 of the 72 events in the
+live August feed are `other` — nobody has picked a color for an event in
+Google yet, including, it turns out, the church's own weekly Divine Service
+and Christian Education hour, which land on `other` right along with
+everything else uncolored. That is expected, documented behavior (see "The
+calendar's categories are the office's now" below) and not something a
+developer can fix — coloring an event is a one-time pick in Google's own
+UI, one the office simply hasn't gotten to yet. But it means the single most
+common thing on the calendar renders in whatever color `other` happens to
+be, and that color was never actually checked.
+
+**⚠ THE COMMENT ABOVE `CALENDAR_PALETTE` HAS CLAIMED SINCE IT WAS WRITTEN
+THAT `admin/calendar.test.mjs` "measures the contrast of every one of them."
+IT DID NOT.** Nothing in that file ever imported `CALENDAR_PALETTE` at all.
+Measured for real: **seven of the twelve pairs failed WCAG AA's 4.5:1**
+against their own tint — teal (3.94), stone (3.77), amber (3.06), sand
+(4.21), steel (3.65), gold (2.35), and gray, the one actually carrying the
+live site's most common category, at **3.07:1**. A promise a comment makes
+about a test that was never written is worse than no promise at all, because
+it is the reason nobody went looking.
+
+- **Verified against the real thing, not a guess.** `/api/calendar`'s live
+  August feed was fetched directly and rendered locally against the real
+  `public/index.html`, once with production data as it actually ships and
+  once with the fix — a visible, not just measured, before/after. Text that
+  reads as a wash of near-invisible gray in the first render reads as
+  ordinary dark text in the second.
+- **Darkening in place wasn't enough on its own — it created a second
+  legibility bug.** `amber`/`sand`/`gold` distinguish themselves from each
+  other almost entirely by *lightness and saturation* in the original
+  palette (three very similar hues, 39–41°, spread out only by how light or
+  saturated each is). Push all three dark enough to pass 4.5:1 and that
+  lightness spread collapses — `amber` and `gold`, darkened in place, land
+  within a few hex digits of each other, i.e. Youth & family and Special
+  events would have become the same color. Caught by rendering swatches
+  side by side before shipping, not by the contrast number alone, which was
+  satisfied either way. Fixed by re-spacing the three across the whole warm
+  hue range instead of merely darkening them — `brick` (11°, untouched) →
+  `amber` (29°) → `sand` (47°) → `gold` (65°) → `moss` (93°, untouched),
+  each a clean ~18° apart — rather than three colors converging toward one
+  as they darken.
+- **The same collapse, the same fix, for `stone` and `gray`.** Both were a
+  near-identical warm taupe before this — `#7D7972` and `#8C8880`, 3.77:1
+  and 3.07:1, separated mainly by lightness the same way amber/gold were.
+  `gray` — the neutral, uncategorized fallback — is a true neutral now
+  (zero saturation), which cannot converge on `stone`'s slightly warm hue
+  however dark either one is pushed later.
+- **`DEFAULT_CATEGORIES` carries the identical fix, not just
+  `CALENDAR_PALETTE`.** It is a separate, hand-duplicated copy of the same
+  eleven colors (never derived from the palette array) — it is what a fresh
+  install seeds *and* what the site falls back to if `calendar_categories`
+  cannot be read at all, so fixing only the palette would still have shipped
+  the old, failing color on day one of a new install or during any outage.
+  `public/index.html`'s own client-side `other`-category fallback (`tlcCalCat()`,
+  reached only when a category truly cannot be found in the fetched list) was
+  updated the same way, for the same reason this repo keeps warning about
+  two copies of one fact.
+- **⚠ Only the seven failing pairs moved.** `navy`, `moss`, `slate`, `plum`
+  and `brick` already passed and are untouched — repainting five categories
+  nobody reported a problem with, to fix two that were reported, is the
+  wrong scope for a legibility fix.
+- **The missing test now exists, and it is what the comment always claimed.**
+  Two groups in `admin/calendar.test.mjs` check every `CALENDAR_PALETTE` pair
+  against its own tint and against white; a third checks `DEFAULT_CATEGORIES`
+  the same way, since it is not derived from the palette and could drift from
+  it again; a fourth asserts `amber`/`sand`/`gold` stay at least 10° apart from
+  each other so the darkening fix cannot silently collapse them a second time;
+  a fifth asserts `gray` is a true neutral. All five were verified non-vacuous
+  by reintroducing the exact bug each guards and watching it fail with the
+  real symptom — the old `gray` hex fails the first two on its own numbers,
+  and a hand-darkened-in-place `amber`/`gold` pair (the naive fix, tried and
+  rejected above) fails the distinctness check at 5° apart.
+- **Nothing about *which* Google color maps to which category changed.**
+  `public/manual.html`'s office-facing table names Google's own color labels
+  (Blueberry, Peacock, …) and category names only, no hex codes — this pass
+  never touches what an office person picks in Google, only how the site
+  draws whatever they picked.
+- **⚠ `#8C8880`, `#2E7EA6`, `#C9973A` and the other old swatch hexes are
+  reused elsewhere in this codebase for completely unrelated things** — the
+  site's own brand accent color, `admin/intake.js`'s gym source-dot color,
+  giving-page CSS, a dozen design-handoff mockups. None of those were
+  touched; this fix is scoped to `CALENDAR_PALETTE` and `DEFAULT_CATEGORIES`
+  in `admin/calendar.js` and the one client-side mirror in `public/index.html`,
+  found and edited by hand rather than by a global find-and-replace, which
+  would have repainted the site's Give button along with the calendar.
+- **What is still outstanding is the same office task this file already
+  named**: coloring events in Google. This pass makes the *fallback* — what
+  every uncolored event actually looks like today — legible; it does not
+  reduce how many events need a color picked, which only the office can do.
+
+Run: `node admin/calendar.test.mjs` (57, five new), plus the full
+`test/admin-redesign.test.mjs` and `test/public-calendar.test.mjs` suites,
+unaffected and still green.
+
 ### Event Intake — the office's own triage queue (v5.34.0, 2026-08-20)
 
 Built from `Event Intake.dc.html`, a Claude Design handoff — the companion

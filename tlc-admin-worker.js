@@ -267,6 +267,15 @@ function cleanSlug(s) {
 // separate table (mdo_payroll_approvals) from payroll_periods — the church's
 // own approve/unapprove pair above still only ever reads and writes
 // payroll_periods, and the two approvals are never merged.
+//
+// payroll_get_mdo_rate_snapshot and payroll_get_year_totals were added
+// alongside the rate-freeze fix (see CLAUDE.md, "payroll issues... back pay
+// rates"): church_staff and the MDO app's staff table only ever hold a
+// person's CURRENT pay, so a raise was rewriting every past period's gross
+// the moment it was saved. payroll_save_hours and payroll_approve_period now
+// snapshot the pay-determining fields onto the period itself the moment it
+// is entered/approved, and these two read that snapshot back plus the
+// stored per-period totals a year-to-date figure is summed from.
 export const PAYROLL_RPC_FNS = [
   'payroll_get_staff',
   'payroll_get_period_entries',
@@ -277,6 +286,8 @@ export const PAYROLL_RPC_FNS = [
   'payroll_get_mdo_clock_events',
   'payroll_get_mdo_pto',
   'payroll_get_mdo_period_approval',
+  'payroll_get_mdo_rate_snapshot',
+  'payroll_get_year_totals',
   'payroll_approve_period',
   'payroll_unapprove_period',
   'payroll_save_hours',
@@ -1536,11 +1547,10 @@ export default {
       // request was never forwarded", and it is one Supabase grant away from
       // failing.
       //
-      // ⚠ THE LIST IS EXACTLY WHAT admin/payroll.html CALLS — the thirteen
-      // payroll_* RPC functions, no more. A test reads the page and asserts
-      // the two sets are identical in both directions, so adding a fourteenth
-      // call without adding it here fails rather than 403ing in front of
-      // somebody running payroll.
+      // ⚠ THE LIST IS EXACTLY WHAT admin/payroll.html CALLS, no more. A test
+      // reads the page and asserts the two sets are identical in both
+      // directions, so adding a new call without adding it here fails rather
+      // than 403ing in front of somebody running payroll.
       //
       // ⚠ POST ONLY. PostgREST executes an RPC on GET too, so allowing the
       // method would put a payroll write one address bar away from a CSRF —
@@ -1578,7 +1588,7 @@ export default {
       // direct grants on church_staff, church_staff_period_entries,
       // payroll_periods and staff_pto_entries, with no replacement for the
       // one thing that legitimately needs anon-key access to them: this
-      // proxy. `admin/payroll.html` now calls thirteen narrow
+      // proxy. `admin/payroll.html` now calls a small set of narrow
       // `SECURITY DEFINER` Postgres functions instead of those tables
       // directly (`payroll_get_staff`, `payroll_save_hours`, etc.) — same
       // shape as CHMS_INTAKE_API_KEY/ADMIN_PUSH_API_KEY: a shared secret

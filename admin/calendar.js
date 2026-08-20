@@ -37,19 +37,39 @@
 // hex field is one paste away from a month where nobody can read the times, on a
 // page the whole congregation opens. Each pair below was chosen together, and
 // `admin/calendar.test.mjs` measures the contrast of every one of them.
+// ⚠ SEVEN OF THESE TWELVE FAILED WCAG AA (4.5:1) AGAINST THEIR OWN TINT UNTIL
+// 2026-08-20, DESPITE THE COMMENT ABOVE CLAIMING A TEST ALREADY CHECKED THIS.
+// It didn't — admin/calendar.test.mjs had no contrast assertion at all, so a
+// palette nobody could actually read shipped and stayed that way. Found by
+// reading the LIVE feed: 40 of 72 real events are 'other' (nobody has colored
+// anything in Google yet — see "The calendar's categories are the office's
+// now" below), which is most of what a visitor actually sees, and its gray
+// (3.07:1) was barely visible against its own tint. teal/stone/amber/sand/
+// steel/gold/gray are darkened here to clear 4.5:1 with margin; navy/moss/
+// slate/plum/brick already passed and are untouched. Darkening amber, sand
+// and gold together collapsed them toward one indistinguishable dark
+// gold-brown (they differ mainly by SATURATION in the original, a strategy
+// that doesn't survive being pushed dark enough to read) — those three are
+// re-spaced across the warm hue range instead (brick 11° → amber 29° → sand
+// 47° → gold 65° → moss 93°, each a clean ~18° apart) rather than merely
+// darkened in place. Same collision, same fix, for stone vs gray: 'gray' is
+// now a true neutral (zero saturation) so it can never converge on 'stone'
+// again however dark either one gets pushed. admin/calendar.test.mjs now
+// asserts every pair really does clear 4.5:1, both against its own tint and
+// against white, so this cannot regress silently a second time.
 export const CALENDAR_PALETTE = [
   { key: 'navy',   name: 'Navy',       color: '#1E2D4A', tint: '#EDF2F7' },
-  { key: 'teal',   name: 'Teal',       color: '#2E7EA6', tint: '#E8F1F6' },
+  { key: 'teal',   name: 'Teal',       color: '#276C8E', tint: '#E8F1F6' },
   { key: 'moss',   name: 'Moss',       color: '#4A5E3A', tint: '#EDF1E9' },
-  { key: 'stone',  name: 'Stone',      color: '#7D7972', tint: '#F1EFEA' },
-  { key: 'amber',  name: 'Amber',      color: '#B0821E', tint: '#F8F0DE' },
+  { key: 'stone',  name: 'Stone',      color: '#68655F', tint: '#F1EFEA' },
+  { key: 'amber',  name: 'Amber',      color: '#93571F', tint: '#F8F0DE' },
   { key: 'slate',  name: 'Slate',      color: '#3A4E5C', tint: '#EAEFF2' },
-  { key: 'sand',   name: 'Sand',       color: '#8A6E2F', tint: '#F5EFE0' },
+  { key: 'sand',   name: 'Sand',       color: '#776422', tint: '#F5EFE0' },
   { key: 'plum',   name: 'Plum',       color: '#7A5A7A', tint: '#F2ECF2' },
-  { key: 'steel',  name: 'Steel blue', color: '#6A8090', tint: '#EEF2F4' },
-  { key: 'gold',   name: 'Gold',       color: '#C9973A', tint: '#FBF1DC' },
+  { key: 'steel',  name: 'Steel blue', color: '#576876', tint: '#EEF2F4' },
+  { key: 'gold',   name: 'Gold',       color: '#646B1F', tint: '#FBF1DC' },
   { key: 'brick',  name: 'Brick',      color: '#8C3A28', tint: '#F7E4DE' },
-  { key: 'gray',   name: 'Gray',       color: '#8C8880', tint: '#F1EFEA' },
+  { key: 'gray',   name: 'Gray',       color: '#656565', tint: '#F1EFEA' },
 ];
 export const paletteEntry = (key) =>
   CALENDAR_PALETTE.find((p) => p.key === key) || CALENDAR_PALETTE[CALENDAR_PALETTE.length - 1];
@@ -72,23 +92,30 @@ export const googleColorName = (id) => (GOOGLE_COLORS.find((g) => g.id === Strin
 // This list is what the table is seeded with, so the day the screen appears
 // nothing on the site moves — and it is what the site falls back to if the
 // table cannot be read at all.
+// ⚠ THESE COLORS MUST STAY IN STEP WITH CALENDAR_PALETTE ABOVE, ENTRY FOR
+// ENTRY — this is what a fresh install seeds AND what the site falls back to
+// if calendar_categories cannot be read at all, so a color fixed only in the
+// palette and not here would still ship the old, low-contrast one on day one
+// or during an outage. See the note above CALENDAR_PALETTE for why these
+// seven changed and why three of them (amber/sand/gold) also moved apart in
+// hue, not just darker.
 export const DEFAULT_CATEGORIES = [
   { key: 'worship',  name: 'Worship',              google: 'Blueberry', colorId: '9',  color: '#1E2D4A', tint: '#EDF2F7' },
-  { key: 'learn',    name: 'Learn / Bible study',  google: 'Peacock',   colorId: '7',  color: '#2E7EA6', tint: '#E8F1F6' },
+  { key: 'learn',    name: 'Learn / Bible study',  google: 'Peacock',   colorId: '7',  color: '#276C8E', tint: '#E8F1F6' },
   { key: 'ministry', name: 'Ministry & service',   google: 'Basil',     colorId: '10', color: '#4A5E3A', tint: '#EDF1E9' },
-  { key: 'facility', name: 'Facility / rentals',   google: 'Graphite',  colorId: '8',  color: '#7D7972', tint: '#F1EFEA' },
-  { key: 'youth',    name: 'Youth & family',       google: 'Tangerine', colorId: '6',  color: '#B0821E', tint: '#F8F0DE' },
+  { key: 'facility', name: 'Facility / rentals',   google: 'Graphite',  colorId: '8',  color: '#68655F', tint: '#F1EFEA' },
+  { key: 'youth',    name: 'Youth & family',       google: 'Tangerine', colorId: '6',  color: '#93571F', tint: '#F8F0DE' },
   { key: 'wol',      name: 'Word of Life School',  google: 'Sage',      colorId: '2',  color: '#3A4E5C', tint: '#EAEFF2' },
-  { key: 'mdo',      name: "Mother's Day Out",     google: 'Banana',    colorId: '5',  color: '#8A6E2F', tint: '#F5EFE0' },
+  { key: 'mdo',      name: "Mother's Day Out",     google: 'Banana',    colorId: '5',  color: '#776422', tint: '#F5EFE0' },
   { key: 'music',    name: 'Music',                google: 'Grape',     colorId: '3',  color: '#7A5A7A', tint: '#F2ECF2' },
-  { key: 'meetings', name: 'Meetings',             google: 'Lavender',  colorId: '1',  color: '#6A8090', tint: '#EEF2F4' },
-  { key: 'special',  name: 'Special events',       google: 'Tomato',    colorId: '11', color: '#C9973A', tint: '#FBF1DC' },
+  { key: 'meetings', name: 'Meetings',             google: 'Lavender',  colorId: '1',  color: '#576876', tint: '#EEF2F4' },
+  { key: 'special',  name: 'Special events',       google: 'Tomato',    colorId: '11', color: '#646B1F', tint: '#FBF1DC' },
   // ⚠ THE NEUTRAL CATEGORY IS NOT OPTIONAL. An event whose color nobody set,
   // or set to one this table has no row for (Flamingo), still has to appear on
   // the calendar — a church event silently missing from the church calendar is
   // the worst failure this feature has. It gets a gray chip and says "Other",
   // which reads as unclassified rather than as broken.
-  { key: 'other',    name: 'Other',                google: '',          colorId: '',   color: '#8C8880', tint: '#F1EFEA' },
+  { key: 'other',    name: 'Other',                google: '',          colorId: '',   color: '#656565', tint: '#F1EFEA' },
 ];
 
 export const NEUTRAL_CATEGORY = 'other';
