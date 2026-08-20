@@ -617,12 +617,13 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats }) 
 // ── THE FEED ────────────────────────────────────────────────────────────────
 // Everything above, assembled. Returns the payload /api/calendar serves.
 export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, cats }) {
-  const [google, news, building] = await Promise.all([
+  const [google, news, building, local] = await Promise.all([
     fetchGoogleEvents(env, { ids: calendarIds, from, to, getToken, cats }),
     readNewsEvents(env, from, to, cats),
     readGymBookings(env, from, to),
+    readLocalIntakeEvents(env, from, to, cats),
   ]);
-  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news, building))));
+  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news, building, local))));
   // Trimmed to the requested window AFTER the merge, so an event that reaches
   // into the window from outside it is kept while one that only touched the
   // padding is not.
@@ -652,6 +653,57 @@ export async function readNewsEvents(env, from, to, cats) {
     ).bind(addDays(from, -1), addDays(to, 1)).all();
     return (rows.results || []).map((r) => normalizeNewsItem(r, cats)).filter(Boolean);
   } catch (_) { return []; }
+}
+
+// ── EVENT INTAKE'S OWN "LOCAL" ROWS ─────────────────────────────────────────
+// A room booking typed straight into Event Intake, with no Google event and
+// no News & Events post behind it — a private wedding, a one-off outside
+// group, anything the office wants on the calendar without either of the
+// site's other two doors. See admin/intake.js and the `event_intake` table.
+//
+// ⚠ THE TYPE-TO-CATEGORY MAPPING IS ONE-WAY AND COMPUTED HERE, NEVER STORED.
+// Event Intake's own `type` (worship/education/rental/news — see the note at
+// the top of admin/intake.js on why that is a separate question from a
+// calendar category) still has to draw SOME color on the public month, so it
+// is mapped onto the nearest calendar_categories key at render time. Nothing
+// writes this back onto the event_intake row — re-pointing a category's own
+// color in the admin still repaints every local event that maps to it, the
+// same as it repaints everything else.
+const INTAKE_TYPE_TO_CATEGORY = { worship: 'worship', education: 'learn', rental: 'facility', news: 'special' };
+
+export async function readLocalIntakeEvents(env, from, to, cats) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, event_type, local_title, local_event_date, local_end_date,
+              local_event_time, local_end_time, room
+         FROM event_intake
+        WHERE source_kind = 'local' AND local_event_date IS NOT NULL
+          AND local_event_date >= ? AND local_event_date <= ?
+        ORDER BY local_event_date ASC
+        LIMIT 300`
+    ).bind(addDays(from, -1), addDays(to, 1)).all();
+    return (rows.results || []).map((r) => normalizeLocalIntakeEvent(r, cats)).filter(Boolean);
+  } catch (_) { return []; }
+}
+
+// Deliberately mirrors normalizeNewsItem()'s own shape — a run of days as one
+// entry, a blank time as genuinely all day, an unstated end left equal to the
+// start rather than guessed at. See the notes on normalizeNewsItem() for why
+// each of those is built the way it is; they hold here for the same reasons.
+export function normalizeLocalIntakeEvent(row, cats) {
+  if (!row || !isYmd(row.local_event_date)) return null;
+  const title = String(row.local_title || '').trim();
+  if (!title) return null;
+  const start = clockOnDay(row.local_event_date, row.local_event_time);
+  const lastDay = isYmd(row.local_end_date) && row.local_end_date > row.local_event_date
+    ? row.local_end_date : row.local_event_date;
+  const category = INTAKE_TYPE_TO_CATEGORY[row.event_type] || categoryForNews({}, cats);
+  const base = {
+    id: `l:${row.id}`, title, location: String(row.room || '').trim(),
+    description: '', category, source: 'local',
+  };
+  if (!start) return { ...base, start: row.local_event_date, end: lastDay, allDay: true };
+  return { ...base, start, end: newsEnd(row.local_event_date, lastDay, start, row.local_end_time), allDay: false };
 }
 
 // ── BUILDING RENTALS ────────────────────────────────────────────────────────

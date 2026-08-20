@@ -3967,13 +3967,14 @@ function tlcCalSourceBand(st) {
     if (e.source === 'both') { has.gcal = true; has.news = true; } else { has[e.source] = true; }
   });
   var pills = [tlcCalPill('src', 'all', st.src === 'all', 'All sources')];
-  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use']].forEach(function (p) {
+  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use'], ['local', 'Entered here']].forEach(function (p) {
     if (has[p[0]] || st.src === p[0]) pills.push(tlcCalPill('src', p[0], st.src === p[0], p[1]));
   });
   var keys = [];
   if (has.gcal)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.gcal + '"></span>Google</span>');
   if (has.news)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.news + '"></span>News &amp; Events</span>');
   if (has.building) keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.building + '"></span>Building use</span>');
+  if (has.local)    keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.local + '"></span>Entered here</span>');
   if (pills.length <= 1) return '';
   return '<div class="tlc-cal-src">' +
     '<span class="tlc-cal-eyebrow">Source</span>' +
@@ -4000,8 +4001,8 @@ function tlcCalCatBand(st) {
   return '<div class="tlc-cal-cats">' + pills.join('') + '</div>';
 }
 
-var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', building: '#7D7972', both: '#4A5E3A' };
-var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', building: 'Building use', both: 'In more than one' };
+var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', building: '#7D7972', local: '#7A8B5F', both: '#4A5E3A' };
+var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', building: 'Building use', local: 'Entered here', both: 'In more than one' };
 
 // The six weeks the grid draws: back to the Sunday on or before the 1st, then
 // 42 days. Six rows always, so the calendar does not change height as the

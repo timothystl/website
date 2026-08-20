@@ -157,6 +157,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Links | Office staff | **DONE** — manages link cards shown at links.timothystl.org (`link_cards` table) |
 | Staff | Office staff | **DONE** — staff directory (photos, bios, emails) shown on /about |
 | Gym Rentals | Office staff (Dinger) | **DONE** (v3.2.0) — full rental management at /gym-rentals, queue rebuilt to the design; see "Gym and Payroll, to the mockups" below |
+| Event Intake | Office staff — requires `intake_manage` | **DONE** (v5.34.0) — the office's own triage queue at /event-intake, over Google Calendar, News & Events and confirmed gym rentals at once; an internal checklist that never gates the public calendar; see "Event Intake — the office's own triage queue" below |
 | Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
 | Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
@@ -869,6 +870,159 @@ the sheet then looks complete. The second assertion catches that, and it only
 works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
+
+### Event Intake — the office's own triage queue (v5.34.0, 2026-08-20)
+
+Built from `Event Intake.dc.html`, a Claude Design handoff — the companion
+file to the church-calendar boards that shipped as "The calendar is ours now"
+and "An event is entered once" above. Recreated directly from the mock's
+markup and CSS (not from a screenshot, per that bundle's own README), in
+`admin/intake-page.js`, with every pure decision — types, checklist
+templates, the merge, the queues — split into `admin/intake.js` and unit
+tested with zero D1 access, the same split `admin/market.js`/`admin/gym.js`
+already use for their own bespoke (non-`renderListSection`) screens.
+
+Before any code, three explicit questions were put to Andrew, and all three
+answers are binding on this design:
+
+1. **The checklist is purely internal staff tracking.** It must never gate
+   what appears on the public `/calendar` — confirmed end to end: an event
+   can sit on the church calendar with every checklist box unchecked and
+   nothing ever published from this screen, exactly as it did before Event
+   Intake existed. `admin/calendar.js`'s feed has no idea `event_intake`
+   exists at all, except for reading a `local` row's own fields — the one
+   kind of row this screen actually owns.
+2. **"Type" (Worship / Education / Rental / News) is a new, separate idea**
+   from the eleven `calendar_categories` a Google event's color already maps
+   to (see "The calendar's categories are the office's now" above). Picking a
+   type never writes `calendar_category`, and re-pointing a category's color
+   never touches an Intake row's type.
+3. **Everything flows into the queue** — not just Google Calendar events.
+   Every News & Events post with a date and every *confirmed* gym booking
+   gets a row too (a `hold` never does — it is not a real booking anybody can
+   rely on, the same rule the public calendar's own building-rental source
+   already follows). The mock's own seed data only ever showed
+   `google`/`news`/`form` as sources; `gym` is this repo's fourth, answering
+   that third question directly.
+
+**A fourth source, `local`, is new relative to the mock too** — the mock's
+own "+ New event" button, for a booking with no Google event and no News post
+behind it (a private wedding, a one-off outside group). A `local` row is the
+one kind Event Intake can create or delete outright; every other row's real
+record — the Google event, the News post, the gym booking — is completely
+unaffected by anything on this screen. The key space is the public calendar's
+own, extended by one letter: `g:<id>` / `n:<id>` / `b:<id>` (already used by
+`admin/calendar.js`'s de-dupe) plus a new `l:<id>` for a local row.
+
+- **⚠ `event_intake` is an ordinary migration-block table, not a
+  marker-gated seed.** Unlike the school-year rows, there is nothing to seed
+  — the table starts empty and fills itself the first time anyone with
+  `intake_manage` opens the screen.
+- **A visit is what syncs it**, deliberately: `GET /event-intake` reads
+  Google, News & Events and confirmed gym bookings for a fixed window
+  (`churchDatePlus(-3)` to `churchDatePlus(60)`) and `INSERT ... ON
+  CONFLICT(source_key) DO UPDATE` a placeholder row for each — a `local` row
+  needs no such placeholder, being the real row already. **`intake_manage`'s
+  sidebar badge is a DB-only count, never a live Google poll** —
+  `intakeOpenCount()` (`tlc-admin-worker.js`) reads `event_intake` as of the
+  last sync and is honest about being a day or two stale rather than paying
+  for a Google fetch on every single admin page load, the same tradeoff
+  Filtered Mail's own badge already makes.
+- **⚠ THE SAVE ROUTE NEVER TRUSTS A POSTED FIELD NAME AT ALL.** It iterates
+  `TYPE_FIELDS[type]`/`CHECKLISTS[type]` — the fixed, server-side list — and
+  reads each value by its own known key, rather than reading whatever keys
+  the POST happened to carry and checking them against an allowlist. A
+  crafted `extra___proto__` or `check_constructor` in the body is never even
+  looked at. `admin/intake.js` still exports `isValidTypeField()`/
+  `isValidChecklistKey()` and both are unit tested — they exist for a future
+  write path (an AJAX single-field save, the shape the Christmas Market's
+  vendor table already uses) that would need to check a posted key rather
+  than only ever building one from a fixed list, and are not needed by this
+  screen's own full-page-reload saves.
+- **⚠ A DEFERRED FIELD SET IS READ-ONLY AGAINST A CRAFTED POST, NOT JUST
+  HIDDEN IN THE MARKUP.** `deferredFieldsSource(type, sourceKind)` says when
+  a type's own extra fields are owned by a real record elsewhere — a
+  `rental` classified from a `gym` booking defers to Gym Rentals, a `news`
+  item defers to its own News & Events post. The save route checks this
+  server-side before it ever builds an `extra` object; a POST trying to
+  overwrite a renter's name through Intake writes nothing to `extra_json` at
+  all, verified by injecting the guard's removal and watching the test fail
+  with the literal smuggled value landing in the column. The renter's real
+  name is read live from `gym_groups`/`gym_bookings` at render time and shown
+  read-only with a link to the real screen — never duplicated into
+  `event_intake`, which is this repo's own standing rule about two places
+  holding one fact.
+- **⚠ PUBLISH IS REFUSED SERVER-SIDE, NOT JUST BY A DISABLED BUTTON.** A
+  crafted `action=publish` with an incomplete checklist is silently declined
+  — the row's other fields (room, whichever checklist boxes really were
+  ticked) still save, `published_at` simply never gets a value. Verified by
+  removing the `openCountOf(type, checks) === 0` guard and watching the test
+  fail with a real timestamp where `null` belongs.
+- **The hidden `queue` field on every form carries the queue the office is
+  *browsing*, not the item's own type.** Threading `item.type || 'inbox'`
+  through instead — the obvious-looking shortcut — would bounce someone
+  working through the "Needs a decision" inbox to a *different* queue every
+  time they set a type or saved, since the type is often the very thing that
+  just changed. `intakeDetail()` takes the browsing queue as an explicit
+  parameter for exactly this reason.
+- **The screen does a full page reload per action, not the Christmas
+  Market vendor table's instant AJAX save (v5.30.0).** Every control is a
+  plain link or a plain `<form>`: Type, Save, Publish, Hold, New, Delete each
+  read cleanly as "submit, land back on the queue." This is a scope decision,
+  not a limitation nobody noticed — the mock's own interaction (an instant
+  checkbox click) would need a client script this pass did not build. If the
+  office finds the reload tedious in daily use, wiring the market's own
+  AJAX pattern onto these same routes is the natural next step, not a
+  rewrite: the routes already save one field's worth of change per POST.
+- **No per-service-type checklist variant.** The mock's own seed data
+  carries a Funeral-flavored worship checklist alongside the ordinary
+  Sunday-service one, but nothing in the mock's own component logic ever
+  regenerates `.checks` from anything but the type — it is unreachable seed
+  data, not a feature the markup exercises. Built as one checklist per type,
+  matching what the mock's actual behavior does rather than what one row of
+  its sample data suggests.
+- **No de-duping between a Google event and its own News & Events post**,
+  unlike the public calendar's own `dedupeEvents()`. The public feed is
+  stateless and recomputed on every request, so collapsing "the same event
+  from two sources" into one displayed chip costs it nothing; Event Intake's
+  checklist needs a *stable, persistent identity* to hang state off, and
+  "book the room" (Google) and "write the blurb" (News) are genuinely
+  different office tasks that can be done by different people on different
+  days. Both rows appear, independently classifiable.
+- **`admin/calendar.js` gained a fourth feed source and a one-way type→
+  category mapping**, `INTAKE_TYPE_TO_CATEGORY` — `worship→worship`,
+  `education→learn`, `rental→facility`, `news→special`. Nothing is ever
+  written back onto the `event_intake` row from this map; a local event's
+  color is computed fresh at render time, the same as every other event's,
+  so re-pointing a category's own color in the admin still repaints every
+  local event that maps to it.
+- **⚠ `/api/calendar`'s cache key gained a matching `localV` fingerprint**,
+  the same shape `catV` already uses for calendar categories — without it, a
+  local event created through "+ New event" would sit behind up to ten
+  minutes of stale cache before a visitor's own subscription or the printed
+  month noticed it, which is exactly the kind of small inconsistency this
+  repo's own review culture keeps finding and closing.
+- **The sidebar row lives under Events, gated on `intake_manage`, its own
+  new permission** — not folded into `market_manage` or `gym_manage`, since
+  Event Intake reaches across all three domains (worship, education, rental,
+  news) that those two narrower permissions were built to keep apart. Added
+  to the `'Office staff'` preset.
+
+Run: `node admin/intake.test.mjs` (92 — every pure decision, verified
+non-vacuous by injecting the bug each assertion guards), `node
+admin/calendar.test.mjs` (the `local` source's normalize/merge/type-mapping
+group), and the seven Event Intake groups in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1369 total) — the permission gate, that a visit genuinely writes placeholder
+rows and a second visit does not duplicate them, that picking a type leaves
+`calendar_category` untouched and the item still reaches the public feed with
+zero checklist progress, that Publish is refused server-side (not merely by a
+disabled button) on an incomplete checklist, that a deferred field set cannot
+be overwritten by a crafted POST, that a `local` event created here reaches
+and later leaves the public `/api/calendar` feed, and that the sidebar badge
+tracks the database exactly. The two server-side refusal assertions were each
+verified by removing their guard and confirming the real symptom — a
+timestamp or a smuggled value landing where `null` belongs.
 
 ### An event is entered once (2026-08-19)
 
@@ -7043,6 +7197,7 @@ one-line "is attached" wording fails it.
 - **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
 - **Giving** requires the dedicated `giving_manage` permission — not bundled into `settings_manage` (see "Giving Tab" above)
 - **Christmas Market** requires the dedicated `market_manage` permission, with a `Market coordinator` preset that grants it and nothing else — the coordinator is a volunteer running one event a year, and the list holds seventy people's home addresses
+- **Event Intake** requires the dedicated `intake_manage` permission (see "Event Intake — the office's own triage queue" above) — its own key rather than folded into `market_manage`/`gym_manage`, since it reaches across worship, education, rental and news at once
 - Youth director password: scope to `ministries_edit` only (separate password so it can be changed independently of office staff accounts)
 
 ---

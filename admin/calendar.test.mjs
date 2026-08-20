@@ -22,6 +22,7 @@ import {
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
   normalizeClock, clockOnDay, newsEnd, icsEnd, parseFilterList, filterEvents, feedName,
   normalizeGymBooking, BUILDING_IN_USE, BUILDING_ROOM,
+  readLocalIntakeEvents, normalizeLocalIntakeEvent,
 } from './calendar.js';
 
 let pass = 0;
@@ -378,6 +379,7 @@ atest('a database that will not answer costs the News half, not the whole feed',
   const brokenDb = { prepare: () => { throw new Error('no table'); } };
   try {
     assert.deepEqual(await readNewsEvents({ DB: brokenDb }, '2026-08-01', '2026-08-31'), []);
+    assert.deepEqual(await readLocalIntakeEvents({ DB: brokenDb }, '2026-08-01', '2026-08-31'), []);
     const feed = await buildCalendarFeed({ DB: brokenDb }, { from: '2026-08-01', to: '2026-08-31', calendarIds: ['a@b'], getToken: async () => 'T' });
     assert.equal(feed.events.length, 1, 'the Google half still renders');
   } finally { globalThis.fetch = realFetch; }
@@ -598,6 +600,67 @@ test('a gym rental names the room and its block of time, and never the renter', 
   for (const leak of ['group', 'contact', 'note', 'email', 'phone']) {
     assert.ok(!text.includes(leak), `a booking must carry no ${leak}`);
   }
+});
+
+
+// ── A LOCAL INTAKE EVENT REACHES THE CALENDAR TOO ───────────────────────────
+// Same shape and same rules as normalizeNewsItem — a run of days as one entry,
+// a blank time genuinely all day, an unstated end left equal to the start.
+
+test('a local intake event reaches the calendar with the room as its location', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeLocalIntakeEvent({ id: 4, event_type: 'rental', local_title: 'Wedding — Bauer / Klein',
+    local_event_date: '2026-09-05', local_event_time: '14:00', room: 'Sanctuary' }, cats);
+  assert.equal(ev.title, 'Wedding — Bauer / Klein');
+  assert.equal(ev.location, 'Sanctuary');
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start, '2026-09-05T14:00:00');
+  assert.equal(ev.source, 'local');
+});
+
+test('a local event with no time is genuinely all day, not midnight', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeLocalIntakeEvent({ id: 5, event_type: 'rental', local_title: 'Rummage sale', local_event_date: '2026-09-06' }, cats);
+  assert.equal(ev.allDay, true);
+  assert.equal(ev.start, '2026-09-06');
+});
+
+test('a local event with no title is dropped, the same as a News post with no title', () => {
+  const cats = mergedCategories([]);
+  assert.equal(normalizeLocalIntakeEvent({ id: 6, local_event_date: '2026-09-06', local_title: '' }, cats), null);
+  assert.equal(normalizeLocalIntakeEvent(null, cats), null);
+});
+
+test('an intake TYPE maps onto a calendar category, one way, never stored', () => {
+  const cats = mergedCategories([]);
+  const worship = normalizeLocalIntakeEvent({ id: 1, event_type: 'worship', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const education = normalizeLocalIntakeEvent({ id: 2, event_type: 'education', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const rental = normalizeLocalIntakeEvent({ id: 3, event_type: 'rental', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const news = normalizeLocalIntakeEvent({ id: 4, event_type: 'news', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  assert.equal(worship.category, 'worship');
+  assert.equal(education.category, 'learn');
+  assert.equal(rental.category, 'facility');
+  assert.equal(news.category, 'special');
+  // An unclassified local event (nobody has picked a type in Intake yet)
+  // still renders — falling to a real category rather than crashing on an
+  // undefined lookup, the same "never dropped for having no color" rule
+  // every other uncategorized event on this calendar already follows.
+  const unclassified = normalizeLocalIntakeEvent({ id: 5, event_type: null, local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  assert.ok(typeof unclassified.category === 'string' && unclassified.category.length > 0);
+});
+
+test('a local event joins the merged feed and files under its own source', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  const db = { prepare: () => ({ bind: () => ({ all: async () => ({ results: [
+    { id: 9, event_type: 'rental', local_title: 'Wedding — Bauer / Klein', local_event_date: '2026-09-05', local_event_time: '14:00', room: 'Sanctuary' },
+  ] }) }) }) };
+  try {
+    const feed = await buildCalendarFeed({ DB: db }, { from: '2026-09-01', to: '2026-09-30', calendarIds: ['a@b'], getToken: async () => null });
+    const ev = feed.events.find((e) => e.title === 'Wedding — Bauer / Klein');
+    assert.ok(ev, 'the local event is in the merged feed');
+    assert.equal(ev.source, 'local');
+  } finally { globalThis.fetch = realFetch; }
 });
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
