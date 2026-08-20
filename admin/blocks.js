@@ -1238,7 +1238,7 @@ export const APPEARABLE_TYPES = new Set(
 // test walks every type, renders it, and asserts this set is exactly the set
 // whose markup contains a .tlcb-btn, so adding a button to a type without
 // adding it here fails rather than shipping a dead control.
-export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'form', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
+export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
 
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
@@ -5038,11 +5038,27 @@ function renderInner(b, opts) {
 
   if (t === 'form') {
     const src = safeUrl(b.url);
-    const inner = src && !opts.editing
-      ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Form')}" loading="lazy" style="width:100%;height:640px;border:0;border-radius:9px"></iframe>`
-      : `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
+    // ⚠ A VISITOR NEVER SEES A FAKE FIELD OR A FAKE BUTTON. The editing-mode
+    // mockup (two blank boxes, a "Sign up" pill) exists so whoever is
+    // configuring this block can see roughly what it will look like once a
+    // Google Form URL is pasted in — it was never meant to reach the public
+    // page. It did anyway: published with no url, the .tlcb-btn class is
+    // exactly what a real button looks like, and .tlcb-field reads as a real
+    // input, so a visitor sees what appears to be a working form with nothing
+    // behind either control. That is the dead-control rule broken — a block
+    // that renders nothing is honest; a block that renders something inert
+    // and interactive-looking is not. An unconfigured block now renders only
+    // its own head/body in public and says nothing else.
+    let inner;
+    if (src && !opts.editing) {
+      inner = `<iframe src="${esc(src)}" title="${esc(b.title || 'Form')}" loading="lazy" style="width:100%;height:640px;border:0;border-radius:9px"></iframe>`;
+    } else if (opts.editing) {
+      inner = `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
           <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">Sign up</span>
           <span class="tlcb-note">${src ? 'Form embed' : 'Paste a Google Form URL in the panel on the right.'}</span></div>`;
+    } else {
+      inner = '';
+    }
     return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
   }
 
