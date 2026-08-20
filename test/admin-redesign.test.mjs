@@ -2865,12 +2865,12 @@ group('the Supabase proxy forwards thirteen RPC calls and refuses everything els
   eq(viaGet.status, 403, 'a GET at an allowlisted RPC is refused too');
   eq(forwarded.length, 0, 'and never reached Supabase');
 
-  // ⚠ THE LIST IS EXACTLY WHAT THE PAGE CALLS, in both directions — a
-  // fourteenth call added to the page without being added here would 403 in
-  // front of somebody running payroll, which is a bad way to find out.
+  // ⚠ THE LIST IS EXACTLY WHAT THE PAGE CALLS, in both directions — a new
+  // call added to the page without being added here would 403 in front of
+  // somebody running payroll, which is a bad way to find out.
   const called = new Set([...payrollPage.matchAll(/sb\.rpc\('([a-z_]+)'/g)].map((m) => m[1]));
   const allowed = new Set(PAYROLL_RPC_FNS);
-  eq(called.size, 13, 'the page calls thirteen RPC functions');
+  eq(called.size, 15, 'the page calls fifteen RPC functions');
   for (const f of called) ok(allowed.has(f), 'the proxy allows ' + f + ', which the page calls');
   for (const f of allowed) ok(called.has(f), 'the page calls ' + f + ', which the proxy allows');
 
