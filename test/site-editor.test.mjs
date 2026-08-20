@@ -30,6 +30,9 @@ const harness = createEditorServer({
     // having to drive the layout control first.
     { slug: 'grow', title: 'Grow', path: '/grow', template: 'sectionside', blocks: [newBlock('text', { body: '<p>GROW COPY</p>' })] },
     { slug: 'classes', title: 'Bible Classes', path: '/grow/classes', parent_id: 'grow', blocks: [newBlock('text', { body: '<p>Classes</p>' })] },
+    // Mirrors the real Worker's NATIVE_FORM_ONLY_PAGE_IDS — a page whatever
+    // is published for it never reaches the live site.
+    { slug: 'contact', title: 'Contact', path: '/contact', neverLive: true, blocks: [newBlock('text', { body: '<p>CONTACT COPY</p>' })] },
   ],
 });
 await new Promise((r) => harness.server.listen(0, r));
@@ -93,7 +96,7 @@ await page.waitForTimeout(120);
 ok((await page.textContent('.ed-pages-list')).includes('No pages match'), 'an empty search says so');
 await page.fill('#edPagesSearch', '');
 await page.waitForTimeout(120);
-eq((await railTitles()).length, 6, 'clearing the search brings every page back');
+eq((await railTitles()).length, 7, 'clearing the search brings every page back');
 
 group('collapsing the rail');
 await page.click('#edPagesToggle');
@@ -308,6 +311,21 @@ group('the homepage renders through its own layout');
 await open('home');
 eq(await page.locator('.ed-paper .tlcb-page--home').count(), 1, 'the Home layout is used on the canvas');
 eq(await page.getAttribute('#edView', 'href'), 'https://timothystl.org/', 'and View live points at the root');
+
+group('a page whatever is published never reaches the live site says so');
+{
+  await open('contact');
+  const banner = page.locator('#edNeverLive');
+  eq(await banner.isVisible(), true, 'the warning shows on a page flagged neverLive');
+  ok((await banner.textContent()).includes('never reaches the live site'), 'and says so in words, not just a color');
+  eq(await page.getAttribute('#edNeverLiveViewLive', 'href'), 'https://timothystl.org/contact',
+    'its link points at the real live page, so a person can check the two against each other');
+
+  // Scoped, not a general break: an ordinary page's editor stays exactly as
+  // it was — no banner, no space reserved for one.
+  await open('about');
+  eq(await page.locator('#edNeverLive').isVisible(), false, 'an ordinary page shows nothing');
+}
 
 eq(errors.length, 0, 'no page errors overall: ' + errors.join(' | '));
 
