@@ -157,6 +157,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Links | Office staff | **DONE** — manages link cards shown at links.timothystl.org (`link_cards` table) |
 | Staff | Office staff | **DONE** — staff directory (photos, bios, emails) shown on /about |
 | Gym Rentals | Office staff (Dinger) | **DONE** (v3.2.0) — full rental management at /gym-rentals, queue rebuilt to the design; see "Gym and Payroll, to the mockups" below |
+| Event Intake | Office staff — requires `intake_manage` | **DONE** (v5.34.0) — the office's own triage queue at /event-intake, over Google Calendar, News & Events and confirmed gym rentals at once; an internal checklist that never gates the public calendar; see "Event Intake — the office's own triage queue" below |
 | Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
 | Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
@@ -971,6 +972,357 @@ the sheet then looks complete. The second assertion catches that, and it only
 works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
+
+### Event Intake — the office's own triage queue (v5.34.0, 2026-08-20)
+
+Built from `Event Intake.dc.html`, a Claude Design handoff — the companion
+file to the church-calendar boards that shipped as "The calendar is ours now"
+and "An event is entered once" above. Recreated directly from the mock's
+markup and CSS (not from a screenshot, per that bundle's own README), in
+`admin/intake-page.js`, with every pure decision — types, checklist
+templates, the merge, the queues — split into `admin/intake.js` and unit
+tested with zero D1 access, the same split `admin/market.js`/`admin/gym.js`
+already use for their own bespoke (non-`renderListSection`) screens.
+
+Before any code, three explicit questions were put to Andrew, and all three
+answers are binding on this design:
+
+1. **The checklist is purely internal staff tracking.** It must never gate
+   what appears on the public `/calendar` — confirmed end to end: an event
+   can sit on the church calendar with every checklist box unchecked and
+   nothing ever published from this screen, exactly as it did before Event
+   Intake existed. `admin/calendar.js`'s feed has no idea `event_intake`
+   exists at all, except for reading a `local` row's own fields — the one
+   kind of row this screen actually owns.
+2. **"Type" (Worship / Education / Rental / News) is a new, separate idea**
+   from the eleven `calendar_categories` a Google event's color already maps
+   to (see "The calendar's categories are the office's now" above). Picking a
+   type never writes `calendar_category`, and re-pointing a category's color
+   never touches an Intake row's type.
+3. **Everything flows into the queue** — not just Google Calendar events.
+   Every News & Events post with a date and every *confirmed* gym booking
+   gets a row too (a `hold` never does — it is not a real booking anybody can
+   rely on, the same rule the public calendar's own building-rental source
+   already follows). The mock's own seed data only ever showed
+   `google`/`news`/`form` as sources; `gym` is this repo's fourth, answering
+   that third question directly.
+
+**A fourth source, `local`, is new relative to the mock too** — the mock's
+own "+ New event" button, for a booking with no Google event and no News post
+behind it (a private wedding, a one-off outside group). A `local` row is the
+one kind Event Intake can create or delete outright; every other row's real
+record — the Google event, the News post, the gym booking — is completely
+unaffected by anything on this screen. The key space is the public calendar's
+own, extended by one letter: `g:<id>` / `n:<id>` / `b:<id>` (already used by
+`admin/calendar.js`'s de-dupe) plus a new `l:<id>` for a local row.
+
+- **⚠ `event_intake` is an ordinary migration-block table, not a
+  marker-gated seed.** Unlike the school-year rows, there is nothing to seed
+  — the table starts empty and fills itself the first time anyone with
+  `intake_manage` opens the screen.
+- **A visit is what syncs it**, deliberately: `GET /event-intake` reads
+  Google, News & Events and confirmed gym bookings for a fixed window
+  (`churchDatePlus(-3)` to `churchDatePlus(60)`) and `INSERT ... ON
+  CONFLICT(source_key) DO UPDATE` a placeholder row for each — a `local` row
+  needs no such placeholder, being the real row already. **`intake_manage`'s
+  sidebar badge is a DB-only count, never a live Google poll** —
+  `intakeOpenCount()` (`tlc-admin-worker.js`) reads `event_intake` as of the
+  last sync and is honest about being a day or two stale rather than paying
+  for a Google fetch on every single admin page load, the same tradeoff
+  Filtered Mail's own badge already makes.
+- **⚠ THE SAVE ROUTE NEVER TRUSTS A POSTED FIELD NAME AT ALL.** It iterates
+  `TYPE_FIELDS[type]`/`CHECKLISTS[type]` — the fixed, server-side list — and
+  reads each value by its own known key, rather than reading whatever keys
+  the POST happened to carry and checking them against an allowlist. A
+  crafted `extra___proto__` or `check_constructor` in the body is never even
+  looked at. `admin/intake.js` still exports `isValidTypeField()`/
+  `isValidChecklistKey()` and both are unit tested — they exist for a future
+  write path (an AJAX single-field save, the shape the Christmas Market's
+  vendor table already uses) that would need to check a posted key rather
+  than only ever building one from a fixed list, and are not needed by this
+  screen's own full-page-reload saves.
+- **⚠ A DEFERRED FIELD SET IS READ-ONLY AGAINST A CRAFTED POST, NOT JUST
+  HIDDEN IN THE MARKUP.** `deferredFieldsSource(type, sourceKind)` says when
+  a type's own extra fields are owned by a real record elsewhere — a
+  `rental` classified from a `gym` booking defers to Gym Rentals, a `news`
+  item defers to its own News & Events post. The save route checks this
+  server-side before it ever builds an `extra` object; a POST trying to
+  overwrite a renter's name through Intake writes nothing to `extra_json` at
+  all, verified by injecting the guard's removal and watching the test fail
+  with the literal smuggled value landing in the column. The renter's real
+  name is read live from `gym_groups`/`gym_bookings` at render time and shown
+  read-only with a link to the real screen — never duplicated into
+  `event_intake`, which is this repo's own standing rule about two places
+  holding one fact.
+- **⚠ PUBLISH IS REFUSED SERVER-SIDE, NOT JUST BY A DISABLED BUTTON.** A
+  crafted `action=publish` with an incomplete checklist is silently declined
+  — the row's other fields (room, whichever checklist boxes really were
+  ticked) still save, `published_at` simply never gets a value. Verified by
+  removing the `openCountOf(type, checks) === 0` guard and watching the test
+  fail with a real timestamp where `null` belongs.
+- **The hidden `queue` field on every form carries the queue the office is
+  *browsing*, not the item's own type.** Threading `item.type || 'inbox'`
+  through instead — the obvious-looking shortcut — would bounce someone
+  working through the "Needs a decision" inbox to a *different* queue every
+  time they set a type or saved, since the type is often the very thing that
+  just changed. `intakeDetail()` takes the browsing queue as an explicit
+  parameter for exactly this reason.
+- **The screen does a full page reload per action, not the Christmas
+  Market vendor table's instant AJAX save (v5.30.0).** Every control is a
+  plain link or a plain `<form>`: Type, Save, Publish, Hold, New, Delete each
+  read cleanly as "submit, land back on the queue." This is a scope decision,
+  not a limitation nobody noticed — the mock's own interaction (an instant
+  checkbox click) would need a client script this pass did not build. If the
+  office finds the reload tedious in daily use, wiring the market's own
+  AJAX pattern onto these same routes is the natural next step, not a
+  rewrite: the routes already save one field's worth of change per POST.
+- **No per-service-type checklist variant.** The mock's own seed data
+  carries a Funeral-flavored worship checklist alongside the ordinary
+  Sunday-service one, but nothing in the mock's own component logic ever
+  regenerates `.checks` from anything but the type — it is unreachable seed
+  data, not a feature the markup exercises. Built as one checklist per type,
+  matching what the mock's actual behavior does rather than what one row of
+  its sample data suggests.
+- **No de-duping between a Google event and its own News & Events post**,
+  unlike the public calendar's own `dedupeEvents()`. The public feed is
+  stateless and recomputed on every request, so collapsing "the same event
+  from two sources" into one displayed chip costs it nothing; Event Intake's
+  checklist needs a *stable, persistent identity* to hang state off, and
+  "book the room" (Google) and "write the blurb" (News) are genuinely
+  different office tasks that can be done by different people on different
+  days. Both rows appear, independently classifiable.
+- **`admin/calendar.js` gained a fourth feed source and a one-way type→
+  category mapping**, `INTAKE_TYPE_TO_CATEGORY` — `worship→worship`,
+  `education→learn`, `rental→facility`, `news→special`. Nothing is ever
+  written back onto the `event_intake` row from this map; a local event's
+  color is computed fresh at render time, the same as every other event's,
+  so re-pointing a category's own color in the admin still repaints every
+  local event that maps to it.
+- **⚠ `/api/calendar`'s cache key gained a matching `localV` fingerprint**,
+  the same shape `catV` already uses for calendar categories — without it, a
+  local event created through "+ New event" would sit behind up to ten
+  minutes of stale cache before a visitor's own subscription or the printed
+  month noticed it, which is exactly the kind of small inconsistency this
+  repo's own review culture keeps finding and closing.
+- **The sidebar row lives under Events, gated on `intake_manage`, its own
+  new permission** — not folded into `market_manage` or `gym_manage`, since
+  Event Intake reaches across all three domains (worship, education, rental,
+  news) that those two narrower permissions were built to keep apart. Added
+  to the `'Office staff'` preset.
+
+Run: `node admin/intake.test.mjs` (92 — every pure decision, verified
+non-vacuous by injecting the bug each assertion guards), `node
+admin/calendar.test.mjs` (the `local` source's normalize/merge/type-mapping
+group), and the seven Event Intake groups in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1369 total) — the permission gate, that a visit genuinely writes placeholder
+rows and a second visit does not duplicate them, that picking a type leaves
+`calendar_category` untouched and the item still reaches the public feed with
+zero checklist progress, that Publish is refused server-side (not merely by a
+disabled button) on an incomplete checklist, that a deferred field set cannot
+be overwritten by a crafted POST, that a `local` event created here reaches
+and later leaves the public `/api/calendar` feed, and that the sidebar badge
+tracks the database exactly. The two server-side refusal assertions were each
+verified by removing their guard and confirming the real symptom — a
+timestamp or a smuggled value landing where `null` belongs.
+
+### An event is entered once (2026-08-19)
+
+Dinger, once the calendar was rendering, on what the real problem had been all
+along: *"my real pain points are that only i can add google events to the
+calendar. and that if things are added to newsletter events, and then i have to
+add to teh google calendar, and then to go adn print it out, it is wasted time
+and something is always forgotten. or just dont want to do it. Then theer is
+the problem of me having to subscribe to the church google calendar word of
+life calendar etc and my own personal calendar is crowded out."* Then: *"so the
+mroe that we can make this funnel everything and me not to have a church google
+calendar that is poorly maintained"*.
+
+**Three pain points, and two of them were not what they looked like.**
+
+- **"Only I can add Google events"** was already half solved and nobody had been
+  told. A News & Events post with an event date has reached the calendar since
+  v5.29.0 and needs only `news_edit`, which the Office staff preset already
+  holds — no Google account at all. What was missing is that it was presented
+  as *write a news post*, not as *add an event*.
+- **The triple entry was structural, and the newsletter was the cause.** `events`
+  is its own table — rows tied to one `newsletter_id`, typed free-hand, deleted
+  and re-inserted on every save — and they reached the email and **nothing
+  else**. Not the calendar, not the printed month, not Google. That is the
+  loop: written into the letter, written again on the calendar, remembered a
+  third time when the month had to be printed.
+- **The crowded personal calendar had an answer that was one query parameter
+  away.** `/api/calendar.ics` already merged all three sources into one
+  subscription. It was unfiltered, so subscribing meant taking the building
+  rentals and (now) the school year with it.
+
+**⚠ A NEWS POST HAD NO CLOCK, AND THAT IS WHY THE NEWSLETTER KEPT ITS OWN ROWS.**
+`news_items` had `event_date` and nothing else, so a 7:00 pm council meeting
+could be typed into an email and could not be said here at all.
+`event_time` / `event_end_time` / `event_end_date` / `event_location` are that
+gap closed, and everything else in this entry rests on them.
+
+- **⚠ A BLANK TIME IS ALL DAY, NOT MIDNIGHT.** `19:00` and `` are different
+  facts, and reading the second as `00:00` would put every dateless-but-timed
+  announcement at the top of the day looking deliberate.
+- **⚠ `normalizeClock()` IS EXPORTED AND USED BY BOTH THE SAVE PATH AND THE
+  RENDERER.** A value the calendar would ignore must never be stored either, or
+  the form comes back showing a time the month does not show.
+- **⚠ AN UNSTATED END BECOMES ONE HOUR AND IS NEVER SHOWN.** The page prints
+  only the start — `tlcCalTime()` reads `ev.start` and has no end branch — but
+  `.ics` cannot say "starts at 7, we did not say when it stops": DTEND equal to
+  DTSTART is a zero-length event a calendar app draws as a hairline. **Clamped
+  to the same day**, or an 11:30 pm event is drawn on tomorrow's grid as well.
+  ⚠ The first version of that test asserted only the DATE and was **vacuous** —
+  the bug produces `2026-09-01T24:30:00`, the same date, an hour that does not
+  exist, lexically still `>=` the start. The clock itself has to be read.
+- **`event_end_date` is a run of days as ONE entry**, not five identical chips.
+  An end before the start is ignored rather than honored: drawing it would take
+  the event off the month entirely.
+
+**The newsletter picks now, and the `events` table stays.** The Upcoming events
+card is a checkbox list of every dated post; ticking one prints it in the letter
+**and** puts it on the calendar and the printed month.
+
+- **⚠ MATERIALIZED AT SAVE TIME, NOT RESOLVED WHEN THE EMAIL IS BUILT.** A sent
+  issue is locked and its archive has to keep saying what was actually sent, so
+  renaming the post next March must not rewrite an issue six hundred people
+  already have. A test drives exactly that. It also means `buildEmailHtml`, the
+  archive page and the public API are byte-for-byte unchanged.
+- **⚠ `events.news_item_id` IS ONLY WHAT LETS A LATER EDIT TICK THE RIGHT
+  BOXES.** NULL means somebody typed the row by hand before this existed: kept,
+  shown, removable, and there is no longer any way to create another one.
+  Dropping them on the next save would silently delete work out of a draft.
+- **⚠ THE OFFER IS NOT FILTERED TO THE EMAIL CHANNEL**, unlike the news picker
+  above it. That tick means "worth a paragraph"; a date is a fact about the
+  week, and leaving a dated post out of the offer sends somebody back to typing
+  it.
+- **⚠ The preview reads through the SAME collector as the save**, or it would
+  flatter what will actually send.
+- Order is by the date each event falls on, not by tick order — a hand-kept
+  legacy row has no place in the checkbox sequence, and appending it would print
+  February under March.
+- ⚠ The picker's date label is anchored at noon, the way `admin/email.js`
+  already prints a picked date: `new Date('2026-09-01')` is UTC midnight, which
+  renders as August 31 in Central, so the label under a checkbox would name the
+  day *before* the one the event is on.
+
+**A subscription can leave things out, and that is the whole point.**
+`/api/calendar.ics?cat=worship,meetings`, with a Subscribe panel on `/calendar`
+that has a tick box per category.
+
+- **⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION.** Clicking one in a browser
+  downloads a snapshot: the events land once and never update again, which looks
+  like it worked and quietly stops being true the following week. The panel
+  offers a `webcal:` address, which hands it to the calendar app, and a copyable
+  `https` one for anything that ignores the scheme. The bar's old plain `<a>` to
+  the `.ics` had exactly that trap in it.
+- **⚠ THE PANEL KEEPS ITS OWN SELECTION, NOT THE MONTH'S FILTER PILLS.** A pill
+  is what somebody is looking at for a moment; a subscription is what appears in
+  their calendar every day for years. Coupling them would silently change one
+  when they touched the other, and a test drives that.
+- **⚠ THE FILTER APPLIES TO THE SUBSCRIPTION, NOT TO THE PAGE.** Filtering the
+  JSON would leave the on-screen pills unable to widen what they were handed,
+  and the print sheet — which deliberately ignores the pills — printing a month
+  quietly short of everything but one category.
+- **⚠ THE FILTER IS PART OF THE CACHE KEY, SORTED.** Without it whichever filter
+  was asked for first is served to every other subscriber for ten minutes —
+  somebody who asked for worship getting the school year, with nothing at their
+  end to see. Sorted, so `?cat=a,b` and `?cat=b,a` are one entry. ⚠ The test
+  installs a **real recording cache**: asserted against the Node harness's
+  absent `caches` it would have passed either way.
+- **⚠ NOTHING TICKED IS REFUSED, not served as an empty file.** From inside a
+  calendar app an empty subscription and a broken one look the same.
+- `X-WR-CALNAME` says what is in a filtered feed, because "Timothy Lutheran
+  Church" appearing twice in a sidebar with different contents is what makes
+  people unsubscribe from both.
+- An unrecognized category is **dropped** rather than treated as one nothing
+  matches — a renamed category must not silently empty somebody's subscription.
+
+**⚠ AND `NEWS_WHERE_SQL` DID NOT EXIST, THOUGH A COMMENT HAS CLAIMED IT DID FOR
+A YEAR.** COR-1 in the 2026-08-19 review, forced by this work rather than picked
+off the list: only `NEWS_ORDER_SQL` was ever extracted, and the two WHERE
+clauses had drifted three ways — `pageData()` compared against UTC `date('now')`
+rather than church time, never checked `publish_date`, and never filtered the
+channel. **A post scheduled for a future date was already live on every
+block-rendered page**, as was one the office had marked email-only. It is one
+clause now, taking the date as a bind so neither caller can go back to asking
+SQLite what day it is in UTC.
+
+**A `calendar` channel the feed reads and `/news` does not.** A school break is
+a date on the month and is not news anybody wants a paragraph about; without it
+the only way to keep twenty-nine of them out of the news feed would be to keep
+them off the calendar too.
+
+**Not done, and deliberately: writing site-entered events BACK to Google.** The
+mechanism is proven — `addGymBookingToGCal()` (`admin/gym.js:291`) already
+pushes with the write-scoped service account — and it would keep the Google
+calendar correct for whoever is still subscribed to it directly. It is a bridge
+for a calendar Dinger has said he wants to stop having, so it waits on that
+being the actual intention rather than being built on the assumption.
+
+Run: `node admin/calendar.test.mjs` (46), `node admin/newsletter.test.mjs`
+(113), `node --experimental-loader ./test/html-loader.mjs
+test/admin-redesign.test.mjs` (1311), and in a browser
+`NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (88). Every new
+assertion was verified by injecting the regression it guards; the one that was
+vacuous on the first attempt is recorded as such in the file.
+
+### The Word of Life school year is in, from a PDF (2026-08-19)
+
+Dinger: *"if i send you a pdf of the school calendar can you create that for
+our claendar"*, then, when asked whether the school kept a Google calendar:
+*"no, they refuse to do a google calendar"* — and *"we also dont need every
+event, probably jsut early dismissal days, grandparents day, graduation."*
+
+**A Google calendar would have been a field, not a feature.** `calendar_google_ids`
+is a setting, so a school that kept one would be added in a click and stay
+correct forever. They publish a PDF once a year instead, so somebody has to read
+the sheet. `admin/school-calendar-seed.js` is that reading — twenty-nine dates,
+in version control where they can be checked against the sheet rather than
+trusted, loaded once behind a marker.
+
+- **⚠ THE MARKER IS WHAT MAKES THIS SAFE TO DELETE FROM.** The schema block
+  re-runs on every `SCHEMA_VERSION` bump, so without it a date the office
+  removed on purpose — the school moved it, or it was never wanted — comes back
+  on the next deploy, silently, for as long as the code exists. It is keyed on
+  the **school year**, so next year's sheet is a new list and a new marker
+  (`school_cal_2027-2028`), never an edit to this one: changing a title here
+  would do nothing to a database that has already run it, which is exactly the
+  trap that would make somebody think the list was wrong.
+- **⚠ THE ROWS ARE ORDINARY News & Events RECORDS.** They are edited and deleted
+  from the News screen like anything else. A separate school-events table would
+  be a second thing to teach every reader of the calendar about, for data that
+  is already exactly the shape the calendar reads.
+- **⚠ EVERY ROW IS CATEGORY `wol` AND CHANNEL `calendar`.** The category is what
+  lets somebody leave the whole school year out of their own subscription in one
+  tick — which was the deciding requirement, since a hundred school dates
+  crowding out a personal calendar is the problem this was meant to solve, not
+  cause. The channel keeps twenty-nine break notices out of the news feed.
+- **⚠ A TIMOTHY EARLY DISMISSAL IS 11:45 am.** The school's own footnote gives
+  two times — Ascension 12:00, Timothy/St. Lucas 11:45 — and this is Timothy's
+  calendar. Do not "correct" these to noon.
+- **⚠ GOOD FRIDAY AND EASTER MONDAY ARE TWO ROWS, NOT A RANGE.** The sheet writes
+  them as "26, 29", with an ordinary weekend between. A 26–29 range would draw a
+  four-day bar and claim the school was shut on days it was never open.
+- **⚠ THE SHEET ITSELF HAS AT LEAST ONE ERROR**: a Teacher Workday on Saturday
+  13 March 2027. It is not in the list, and if it is ever added it wants
+  checking with the school rather than copying. Every other date was verified
+  against its weekday before being written down — a transcription error here is
+  invisible, because a wrong date looks exactly like a right one.
+- **What was deliberately left out** is named in the file so nobody adds it back
+  thinking it was missed: the three NWEA assessment weeks, K-8 picture day, 6th
+  grade camp, end of Quarter 1, the Saturday workday, the two August parent
+  meetings and the March conference evenings.
+- **⚠ NO EXPIRY.** The sweep DELETES a row and its image outright, and the
+  calendar deliberately shows last month as well as this one — a date vanishing
+  from the printed month the morning after it happened is not what anybody
+  means by expired.
+
+⚠ **Two test seeds had to stop hardcoding `news_items` ids and three calendar
+assertions had to name their event rather than count the feed.** The seed runs
+in every fresh database, so "the feed has exactly one event" stopped being a
+fact about those tests.
 
 ### The calendar's categories are the office's now, and rentals are on it (2026-08-19)
 
@@ -6947,6 +7299,7 @@ one-line "is attached" wording fails it.
 - **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
 - **Giving** requires the dedicated `giving_manage` permission — not bundled into `settings_manage` (see "Giving Tab" above)
 - **Christmas Market** requires the dedicated `market_manage` permission, with a `Market coordinator` preset that grants it and nothing else — the coordinator is a volunteer running one event a year, and the list holds seventy people's home addresses
+- **Event Intake** requires the dedicated `intake_manage` permission (see "Event Intake — the office's own triage queue" above) — its own key rather than folded into `market_manage`/`gym_manage`, since it reaches across worship, education, rental and news at once
 - Youth director password: scope to `ministries_edit` only (separate password so it can be changed independently of office staff accounts)
 
 ---

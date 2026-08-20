@@ -226,7 +226,7 @@ async function goToFixtureMonth(p) {
 // ── building use is its own source, and only when there is some ─
 {
   const withRental = FEED.events.concat([
-    ev({ id: 'b:1', title: 'Building in use', start: day(21) + 'T18:00:00', end: day(21) + 'T20:00:00',
+    ev({ id: 'b:1', title: 'Gym rented', location: 'Gym', start: day(21) + 'T18:00:00', end: day(21) + 'T20:00:00',
       source: 'building', category: 'facility' }),
   ]);
   const { p, ctx } = await open({ feed: { ...FEED, events: withRental } });
@@ -237,7 +237,7 @@ async function goToFixtureMonth(p) {
   await p.waitForTimeout(120);
   const shown = await p.$$eval('.tlc-cal-chip .tlc-cal-name', (n) => n.map((x) => x.textContent));
   eq(shown.length, 1, 'and filtering to it leaves the booking alone');
-  eq(shown[0], 'Building in use', 'which says the building is taken, and does not name the renter');
+  eq(shown[0], 'Gym rented', 'which names the room, and never the renter');
   await ctx.close();
 }
 
@@ -318,7 +318,8 @@ async function goToFixtureMonth(p) {
   ok(rows >= 3, 'the week-grouped list is what a phone gets (' + rows + ' days)');
   ok(await p.$('.tlc-cal-weekhd'), 'with its week headings');
   const list = (await p.$$eval('.tlc-cal-listevs', (n) => n.map((x) => x.textContent).join(' ')));
-  ok(/8:00 AM/.test(list) && /Divine Service/.test(list), 'and the events are spelled out');
+  // The list has room for the whole block, so it prints one: 8:00 – 9:15 AM.
+  ok(/8:00\s*[–-]\s*9:15 AM/.test(list) && /Divine Service/.test(list), 'and the events are spelled out');
   // Nothing may scroll sideways on a phone — the rule the rest of the site is
   // measured against at this width.
   const overflow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -515,6 +516,173 @@ async function goToFixtureMonth(p) {
   // The homepage carries neither mount, so opening the site must not pay for a
   // month of events — the lazy behavior the iframe already had.
   eq(calls(), 0, 'the homepage does not fetch the calendar');
+  await ctx.close();
+}
+
+// ── a block of time, where there is room to print one ───────
+// "for blocks that building in use maybe it should say ... the time block that
+// it is used." A gym rental is only useful as a block: the question somebody
+// is asking is whether the gym is free at two.
+{
+  const timed = [
+    ev({ id: 'b:9', title: 'Gym rented', location: 'Gym', source: 'building', category: 'facility',
+         start: day(21) + 'T13:00:00', end: day(21) + 'T15:00:00' }),
+    // An end equal to the start is what a News post with no end time produces.
+    ev({ id: 'n:9', title: 'Council meeting', source: 'news', category: 'meetings',
+         start: day(21) + 'T19:00:00', end: day(21) + 'T19:00:00' }),
+    ev({ id: 'g:9', title: 'Morning prayer', category: 'worship',
+         start: day(21) + 'T09:00:00', end: day(21) + 'T13:30:00' }),
+  ];
+  const { p, ctx, errors } = await open({ feed: { ...FEED, events: timed }, width: 800 });
+  await p.waitForTimeout(300);
+  const list = await p.$$eval('.tlc-cal-listev .ltime', (e) => e.map((x) => x.textContent.trim()));
+
+  ok(list.includes('9:00 AM – 1:30 PM'), 'a span crossing noon keeps both meridiems: ' + list.join(' | '));
+  ok(list.includes('1:00 – 3:00 PM'), 'and one inside the afternoon prints a single PM, as a bulletin would');
+  // ⚠ AN END NOBODY TYPED MUST NOT BE PRINTED AS ONE. The .ics needs a number
+  // and derives one; the page must not claim a duration the record never made.
+  ok(list.includes('7:00 PM'), 'an unstated end shows the start alone: ' + list.join(' | '));
+  ok(!list.some((t) => t.startsWith('7:00') && t.includes('–')), 'and never invents a range for it');
+
+  // The grid chip stays compact — a range does not fit a day cell.
+  const chip = await p.$$eval('.tlc-cal-chip .tlc-cal-time', (e) => e.map((x) => x.textContent.trim()));
+  ok(!chip.some((t) => t.includes('–')), 'the month grid keeps the start alone, for room: ' + chip.join(' | '));
+
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// ── the printed sheet on a PUBLISHED page ───────────────────
+// ⚠ THE CASE THE PRINT RULES WERE NEVER DRIVEN AGAINST, AND THE SAME MISTAKE AS
+// LAST TIME. Every print assertion above renders the hardcoded /calendar markup
+// — which is what a visitor gets only while the page is UNPUBLISHED. /calendar
+// has in fact been published, so what a visitor really gets is a stack of
+// blocks with the calendar somewhere inside it. The old print CSS was a
+// DENYLIST naming the hardcoded page's chrome (.nav, .page-hero, footer, the
+// newsletter band), and a block appears on none of it — so a published page
+// printed its hero, its text and its buttons above the sheet and pushed the
+// month onto page two. Reported as "it is printing the whole page".
+{
+  const hero = sanitizeBlock({ ...newBlock('hero'), title: 'Church calendar',
+    subtitle: 'Everything happening at Timothy, all in one place, month by month.' });
+  const words = sanitizeBlock({ ...newBlock('text'),
+    body: '<p>' + 'A paragraph that exists to take up room on the page. '.repeat(40) + '</p>' });
+  const cal = sanitizeBlock({ ...newBlock('calendar'), url: '' });
+  const html = renderPage([hero, words, cal, sanitizeBlock({ ...newBlock('text'), body: '<p>And something after it.</p>' })],
+    { editing: false, withCss: false });
+
+  const { p, ctx, errors } = await open({ rendered: { calendar: html } });
+  await p.waitForSelector('#page-calendar .tlc-print-sheet', { timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(300);
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 1, 'the published page draws exactly one sheet');
+
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(150);
+
+  // ⚠ ASKED OF THE BROWSER, NOT READ OFF THE CSS. Reading the rules is what
+  // produced the bug: they looked complete, and were complete for a page
+  // nobody was being served.
+  const stray = await p.evaluate(() => {
+    const sheet = document.querySelector('.tlc-print-sheet');
+    const out = [];
+    document.querySelectorAll('#page-calendar .tlcb, .nav, footer, #newsletter-band').forEach((el) => {
+      if (el.contains(sheet)) return;                       // on the path down to it
+      if (getComputedStyle(el).display !== 'none') out.push(el.className || el.tagName);
+    });
+    return out;
+  });
+  eq(stray.length, 0, 'nothing else on the page is printed: ' + stray.join(', '));
+
+  // The proof that matters: it is still one sheet of paper.
+  const pdf = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  eq(pages, 1, 'a published calendar page still prints as ONE landscape sheet');
+  ok(pdf.length > 5000, 'with real content on it (' + pdf.length + ' bytes)');
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// ── and a page with no sheet prints as it always did ────────
+{
+  // ⚠ The rule is scoped to a document that HAS a sheet, so it can never reach
+  // a ministry page somebody is printing with its hero and its footer — the
+  // behavior the old scoping existed to protect.
+  const { p, ctx } = await open({ page: 'news' });
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(150);
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 0, '/news draws no sheet');
+  const navShown = await p.$eval('.nav', (e) => getComputedStyle(e).display);
+  ok(navShown !== 'none', 'so the page around it prints exactly as it always has');
+  await ctx.close();
+}
+
+// ── subscribing to part of it ───────────────────────────────
+// ⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION. Clicking one downloads a
+// snapshot: the events land once and never update, which looks like it worked
+// and quietly stops being true the following week. What is pinned here is that
+// the panel offers a `webcal:` address and a copyable one, and that the choice
+// of what is in it actually reaches the address.
+{
+  const { p, ctx, errors } = await open();
+  ok(!(await p.$('.tlc-cal-subpanel')), 'the panel is shut to begin with');
+  await p.click('.tlc-cal-sub');
+  ok(await p.$('.tlc-cal-subpanel'), 'Subscribe opens it');
+  eq(await p.getAttribute('.tlc-cal-sub', 'aria-expanded'), 'true', 'and says so to a screen reader');
+
+  // ⚠ webcal:, not https:. This is the whole difference between subscribing
+  // and downloading a file that never changes again.
+  const href = await p.getAttribute('.tlc-cal-subbtn', 'href');
+  ok(/^webcal:\/\//.test(href), 'the button hands the address to a calendar app: ' + href);
+  ok(!/[?&]cat=/.test(href), 'and with everything ticked it asks for everything, not a list of all of them');
+
+  const url = await p.inputValue('.tlc-cal-suburl');
+  ok(/^https:\/\//.test(url), 'and there is an https address to paste into an app that ignores webcal');
+
+  // ⚠ EVERY CLICK REDRAWS THE PANEL, so an element handle taken before one is
+  // detached by the time of the next. Everything below re-queries.
+  const catCount = (await p.$$('.tlc-cal-subcat input')).length;
+  ok(catCount >= 2, 'there is a box per category on the month');
+  // Unticking one leaves the other ten, rather than leaving nothing.
+  await p.click('.tlc-cal-subcat:nth-of-type(2) input');
+  const href2 = await p.getAttribute('.tlc-cal-subbtn', 'href');
+  ok(/[?&]cat=/.test(href2), 'unticking one narrows the address: ' + href2);
+  const asked = decodeURIComponent((href2.match(/[?&]cat=([^&]*)/) || [])[1] || '').split(',');
+  eq(asked.length, catCount - 1, 'to everything except the one that was unticked');
+
+  // ⚠ THE PANEL IS ITS OWN CHOICE, NOT THE MONTH'S FILTER PILLS. A pill is
+  // what somebody is looking at for a moment; a subscription is what appears
+  // in their calendar every day for years, and coupling them would silently
+  // change one when they touched the other.
+  const pill = await p.$('.tlc-cal-cats [data-cal="cat"][data-val="worship"]');
+  if (pill) {
+    await pill.click();
+    await p.waitForTimeout(150);
+    const href3 = await p.getAttribute('.tlc-cal-subbtn', 'href');
+    eq(href3, href2, 'clicking a month filter does not rewrite the subscription');
+  }
+
+  // ⚠ Nothing ticked is refused rather than served as an empty file: from
+  // inside a calendar app, an empty subscription and a broken one look the same.
+  for (let i = 0; i < catCount + 2; i++) {
+    const next = await p.$('.tlc-cal-subcat input[type=checkbox]:checked');
+    if (!next) break;
+    await next.click();
+  }
+  ok(!(await p.$('.tlc-cal-subbtn')), 'with nothing ticked there is no address to add');
+  ok(await p.$('.tlc-cal-subwarn'), 'and it says to choose something');
+
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// The panel must never reach the printed month — it is a control, and the
+// sheet is a handout.
+{
+  const { p, ctx } = await open();
+  await p.click('.tlc-cal-sub');
+  await p.emulateMedia({ media: 'print' });
+  const shown = await p.$eval('.tlc-cal-subpanel', (el) => getComputedStyle(el).display);
+  eq(shown, 'none', 'the Subscribe panel is not on the printed sheet');
   await ctx.close();
 }
 

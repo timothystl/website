@@ -20,6 +20,9 @@ import {
   normalizeGoogleEvent, normalizeNewsItem, dedupeEvents, sortEvents,
   buildIcs, foldIcsLine, parseCalendarIds, DEFAULT_CALENDAR_IDS,
   fetchGoogleEvents, buildCalendarFeed, readNewsEvents,
+  normalizeClock, clockOnDay, newsEnd, icsEnd, parseFilterList, filterEvents, feedName,
+  normalizeGymBooking, BUILDING_IN_USE, BUILDING_ROOM,
+  readLocalIntakeEvents, normalizeLocalIntakeEvent,
 } from './calendar.js';
 
 let pass = 0;
@@ -376,8 +379,287 @@ atest('a database that will not answer costs the News half, not the whole feed',
   const brokenDb = { prepare: () => { throw new Error('no table'); } };
   try {
     assert.deepEqual(await readNewsEvents({ DB: brokenDb }, '2026-08-01', '2026-08-31'), []);
+    assert.deepEqual(await readLocalIntakeEvents({ DB: brokenDb }, '2026-08-01', '2026-08-31'), []);
     const feed = await buildCalendarFeed({ DB: brokenDb }, { from: '2026-08-01', to: '2026-08-31', calendarIds: ['a@b'], getToken: async () => 'T' });
     assert.equal(feed.events.length, 1, 'the Google half still renders');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+
+// ── A NEWS POST WITH A TIME ─────────────────────────────────────────────────
+// The column that ended the retyping. Before it, a News & Events record could
+// say WHICH DAY and nothing more — so a 7:00 pm meeting had to be typed into
+// the newsletter by hand and into Google by hand.
+//
+// Everything here is a case that is silently wrong rather than visibly broken:
+// a blank time read as midnight, a derived end pushing an event onto tomorrow,
+// or a stored time the month refuses to show.
+
+test('a time makes a news post a timed event, as a bare wall clock', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 7, title: 'Council', event_date: '2026-09-01', event_time: '19:00' }, cats);
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start, '2026-09-01T19:00:00');
+  // The property the whole file is built around: no Z, no offset, ever.
+  assert.ok(!/[Zz]|[+-]\d{2}:\d{2}$/.test(ev.start), 'a start must carry no timezone');
+});
+
+test('a BLANK time is all day, not midnight', () => {
+  const cats = mergedCategories([]);
+  for (const t of [undefined, null, '', '   ']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'Fair', event_date: '2026-09-01', event_time: t }, cats);
+    assert.equal(ev.allDay, true, `blank time ${JSON.stringify(t)} must stay all day`);
+    assert.equal(ev.start, '2026-09-01');
+  }
+});
+
+test('a time that is not a time is no time, never a guess', () => {
+  const cats = mergedCategories([]);
+  for (const t of ['25:00', '7pm', '19:60', 'noon', '1900']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_time: t }, cats);
+    assert.equal(ev.allDay, true, `${t} must not become a start time`);
+  }
+});
+
+test('an unstated end stays unstated on the event, and is derived only for .ics', () => {
+  const cats = mergedCategories([]);
+  const stated = normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_time: '09:00', event_end_time: '11:30' }, cats);
+  assert.equal(stated.end, '2026-09-01T11:30:00');
+
+  // ⚠ THE PAGE PRINTS A TIME RANGE WHEREVER IT HAS ROOM, so an end nobody
+  // typed must not look like one they did: "7:00 – 8:00 pm" on a meeting whose
+  // length nobody knows is a claim the record does not make.
+  const derived = normalizeNewsItem({ id: 2, title: 'Y', event_date: '2026-09-01', event_time: '09:00' }, cats);
+  assert.equal(derived.end, derived.start, 'an unstated end equals the start');
+
+  // An end BEFORE the start is a typo, not an overnight event.
+  const backwards = normalizeNewsItem({ id: 3, title: 'Z', event_date: '2026-09-01', event_time: '09:00', event_end_time: '08:00' }, cats);
+  assert.equal(backwards.end, backwards.start);
+
+  // ⚠ AND .ics STILL GETS A NUMBER, because DTEND equal to DTSTART is a
+  // zero-length event a calendar app draws as a hairline.
+  assert.equal(icsEnd(derived), '2026-09-01T10:00:00');
+  assert.equal(icsEnd(stated), '2026-09-01T11:30:00', 'a stated end is not overwritten');
+});
+
+test('a derived end never spills onto the next day', () => {
+  const cats = mergedCategories([]);
+  // ⚠ The one that would be invisible: tlcCalDates() walks start date → end
+  // date inclusive, so a naive +1 hour here draws an 11:30 pm event on
+  // tomorrow's grid as well, finished before anybody woke up.
+  //
+  // ⚠ ASSERTING THE DATE ALONE IS VACUOUS AND THE FIRST VERSION OF THIS DID
+  // EXACTLY THAT. Removing the clamp produces `2026-09-01T24:30:00` — the same
+  // DATE, an hour that does not exist, and lexically still >= the start. So
+  // the clock itself is what has to be read: 24:30 reaches the .ics as
+  // `20260901T243000`, which is a malformed instant a calendar app either
+  // drops or silently shifts.
+  for (const t of ['23:00', '23:30', '23:59']) {
+    const ev = normalizeNewsItem({ id: 1, title: 'Late', event_date: '2026-09-01', event_time: t }, cats);
+    const end = icsEnd(ev);
+    assert.equal(end.slice(0, 10), '2026-09-01', `${t} must end on its own day`);
+    assert.match(end, /T([01]\d|2[0-3]):[0-5]\d:00$/, `${t} produced an impossible end: ${end}`);
+    assert.ok(end >= ev.start, `${t} must not end before it starts`);
+  }
+});
+
+test('a location rides through, and a missing one is empty rather than absent', () => {
+  const cats = mergedCategories([]);
+  assert.equal(normalizeNewsItem({ id: 1, title: 'X', event_date: '2026-09-01', event_location: ' Fellowship Hall ' }, cats).location, 'Fellowship Hall');
+  assert.equal(normalizeNewsItem({ id: 2, title: 'Y', event_date: '2026-09-01' }, cats).location, '');
+});
+
+test('normalizeClock is the one answer the save path and the renderer share', () => {
+  assert.equal(normalizeClock('19:00'), '19:00');
+  assert.equal(normalizeClock('09:05'), '09:05');
+  assert.equal(normalizeClock('19:00:00'), '19:00');  // a seconds-carrying value still reads
+  assert.equal(normalizeClock('24:00'), null);
+  assert.equal(normalizeClock(''), null);
+  assert.equal(normalizeClock(null), null);
+  // If these two disagreed, a time could be STORED that the month then refuses
+  // to show — the form would come back looking saved and the calendar would
+  // say all day.
+  assert.equal(clockOnDay('2026-09-01', '19:00'), '2026-09-01T19:00:00');
+  assert.equal(clockOnDay('2026-09-01', '24:00'), null);
+});
+
+test('a timed news record now wins the clock in the de-dupe, not just the words', () => {
+  const cats = mergedCategories([]);
+  const news = normalizeNewsItem({ id: 5, title: 'Rally Day', event_date: '2026-09-13', event_time: '08:00', summary: 'Bring a dish' }, cats);
+  const g = normalizeGoogleEvent({ id: 'g1', summary: 'Rally Day', start: { dateTime: '2026-09-13T08:00:00-05:00' }, end: { dateTime: '2026-09-13T09:00:00-05:00' } }, cats);
+  const [ev] = dedupeEvents([g, news]);
+  assert.equal(ev.description, 'Bring a dish', 'the News record still wins the words');
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start.slice(11, 16), '08:00');
+  assert.equal(ev.source, 'both');
+});
+
+test('a timed news event writes a real DTSTART, not a DATE', () => {
+  const cats = mergedCategories([]);
+  const ics = buildIcs([normalizeNewsItem({ id: 1, title: 'Council', event_date: '2026-09-01', event_time: '19:00' }, cats)], { cats });
+  assert.ok(ics.includes('DTSTART;TZID=America/Chicago:20260901T190000'), ics);
+  assert.ok(ics.includes('DTEND;TZID=America/Chicago:20260901T200000'), ics);
+  assert.ok(!ics.includes('DTSTART;VALUE=DATE'), 'a timed event must not be written as an all-day one');
+});
+
+
+test('a run of days is one entry spanning them, not one per day', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 1, title: 'Spring break', event_date: '2027-03-15', event_end_date: '2027-03-19' }, cats);
+  assert.equal(ev.allDay, true);
+  assert.equal(ev.start, '2027-03-15');
+  assert.equal(ev.end, '2027-03-19');
+});
+
+test('an end date before the start is ignored, never honored', () => {
+  const cats = mergedCategories([]);
+  // ⚠ Drawing it would take the event off the month entirely — a church event
+  // silently missing from the church calendar is the worst failure this has.
+  for (const bad of ['2027-03-01', 'soon', '', null]) {
+    const ev = normalizeNewsItem({ id: 1, title: 'X', event_date: '2027-03-15', event_end_date: bad }, cats);
+    assert.equal(ev.end, '2027-03-15', `${JSON.stringify(bad)} must not move the end`);
+  }
+});
+
+test('a run of days with a start time finishes at the end of its LAST day', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeNewsItem({ id: 1, title: 'Camp', event_date: '2026-10-07', event_end_date: '2026-10-09', event_time: '09:00' }, cats);
+  assert.equal(ev.start, '2026-10-07T09:00:00');
+  // Not an hour after it began on the first day, which is what the same-day
+  // rule would have produced.
+  assert.equal(ev.end, '2026-10-09T23:59:00');
+});
+
+test('a multi-day all-day entry writes an exclusive DTEND, as the format means', () => {
+  const cats = mergedCategories([]);
+  const ics = buildIcs([normalizeNewsItem({ id: 1, title: 'Spring break', event_date: '2027-03-15', event_end_date: '2027-03-19' }, cats)], { cats });
+  assert.ok(ics.includes('DTSTART;VALUE=DATE:20270315'), ics);
+  assert.ok(ics.includes('DTEND;VALUE=DATE:20270320'), 'DTEND is the day AFTER the last day');
+});
+
+
+// ── SUBSCRIBING TO PART OF IT ───────────────────────────────────────────────
+// A subscription is not a page: somebody is deciding what appears in their own
+// calendar every day for years, and a hundred school dates crowding it out is
+// what stops people subscribing at all.
+
+test('an absent filter means everything, and an empty one does too', () => {
+  const evs = [{ category: 'worship', source: 'gcal' }, { category: 'wol', source: 'news' }];
+  assert.equal(filterEvents(evs, {}).length, 2);
+  assert.equal(filterEvents(evs, { cats: [], sources: [] }).length, 2);
+  assert.equal(filterEvents(evs).length, 2);
+});
+
+test('a category filter keeps only that category', () => {
+  const evs = [{ category: 'worship', source: 'gcal' }, { category: 'wol', source: 'news' }, { category: 'facility', source: 'building' }];
+  assert.deepEqual(filterEvents(evs, { cats: ['worship', 'facility'] }).map((e) => e.category), ['worship', 'facility']);
+});
+
+test('`both` answers to either source it came from, never falling out of each', () => {
+  // The same rule the page's own source pills follow. An event in Google AND
+  // in News & Events is one happening, not a third source.
+  const evs = [{ category: 'x', source: 'both' }];
+  assert.equal(filterEvents(evs, { sources: ['news'] }).length, 1);
+  assert.equal(filterEvents(evs, { sources: ['gcal'] }).length, 1);
+  assert.equal(filterEvents(evs, { sources: ['building'] }).length, 0);
+});
+
+test('an unrecognized category is dropped, not treated as one nothing matches', () => {
+  // ⚠ Otherwise a renamed category silently empties somebody's subscription,
+  // with nothing to see from inside a calendar app.
+  const evs = [{ category: 'worship', source: 'gcal' }];
+  assert.equal(filterEvents(evs, { cats: ['worship', 'a-category-that-went-away'] }).length, 1);
+});
+
+test('the filter list reads a comma or a space, and ignores the rest', () => {
+  assert.deepEqual(parseFilterList('worship,music'), ['worship', 'music']);
+  assert.deepEqual(parseFilterList(' Worship , MUSIC '), ['worship', 'music']);
+  assert.deepEqual(parseFilterList(''), []);
+  assert.deepEqual(parseFilterList(null), []);
+});
+
+test('a filtered feed says what is in it, so two of them are told apart', () => {
+  const cats = mergedCategories([]);
+  assert.equal(feedName([], cats), 'Timothy Lutheran Church');
+  assert.equal(feedName(['worship'], cats), 'Timothy Lutheran Church — Worship');
+  assert.ok(feedName(['worship', 'music', 'meetings', 'youth'], cats).endsWith('+1'),
+    'a long list is trimmed rather than filling the sidebar');
+});
+
+
+test('a gym rental names the room and its block of time, and never the renter', () => {
+  const ev = normalizeGymBooking({ id: 9, booking_date: '2026-09-01', start_time: '13:00', end_time: '15:00' });
+  assert.equal(ev.title, 'Gym rented');
+  assert.equal(ev.location, 'Gym');
+  assert.equal(ev.start, '2026-09-01T13:00:00');
+  assert.equal(ev.end, '2026-09-01T15:00:00', 'the whole block, so "is the gym free at two" can be answered');
+  // ⚠ The privacy rule has not moved: gym_groups is not joined and notes are
+  // not read, so there is nothing in the row a renter typed.
+  assert.equal(ev.description, '');
+  const text = JSON.stringify(ev).toLowerCase();
+  for (const leak of ['group', 'contact', 'note', 'email', 'phone']) {
+    assert.ok(!text.includes(leak), `a booking must carry no ${leak}`);
+  }
+});
+
+
+// ── A LOCAL INTAKE EVENT REACHES THE CALENDAR TOO ───────────────────────────
+// Same shape and same rules as normalizeNewsItem — a run of days as one entry,
+// a blank time genuinely all day, an unstated end left equal to the start.
+
+test('a local intake event reaches the calendar with the room as its location', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeLocalIntakeEvent({ id: 4, event_type: 'rental', local_title: 'Wedding — Bauer / Klein',
+    local_event_date: '2026-09-05', local_event_time: '14:00', room: 'Sanctuary' }, cats);
+  assert.equal(ev.title, 'Wedding — Bauer / Klein');
+  assert.equal(ev.location, 'Sanctuary');
+  assert.equal(ev.allDay, false);
+  assert.equal(ev.start, '2026-09-05T14:00:00');
+  assert.equal(ev.source, 'local');
+});
+
+test('a local event with no time is genuinely all day, not midnight', () => {
+  const cats = mergedCategories([]);
+  const ev = normalizeLocalIntakeEvent({ id: 5, event_type: 'rental', local_title: 'Rummage sale', local_event_date: '2026-09-06' }, cats);
+  assert.equal(ev.allDay, true);
+  assert.equal(ev.start, '2026-09-06');
+});
+
+test('a local event with no title is dropped, the same as a News post with no title', () => {
+  const cats = mergedCategories([]);
+  assert.equal(normalizeLocalIntakeEvent({ id: 6, local_event_date: '2026-09-06', local_title: '' }, cats), null);
+  assert.equal(normalizeLocalIntakeEvent(null, cats), null);
+});
+
+test('an intake TYPE maps onto a calendar category, one way, never stored', () => {
+  const cats = mergedCategories([]);
+  const worship = normalizeLocalIntakeEvent({ id: 1, event_type: 'worship', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const education = normalizeLocalIntakeEvent({ id: 2, event_type: 'education', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const rental = normalizeLocalIntakeEvent({ id: 3, event_type: 'rental', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  const news = normalizeLocalIntakeEvent({ id: 4, event_type: 'news', local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  assert.equal(worship.category, 'worship');
+  assert.equal(education.category, 'learn');
+  assert.equal(rental.category, 'facility');
+  assert.equal(news.category, 'special');
+  // An unclassified local event (nobody has picked a type in Intake yet)
+  // still renders — falling to a real category rather than crashing on an
+  // undefined lookup, the same "never dropped for having no color" rule
+  // every other uncategorized event on this calendar already follows.
+  const unclassified = normalizeLocalIntakeEvent({ id: 5, event_type: null, local_title: 'X', local_event_date: '2026-09-01' }, cats);
+  assert.ok(typeof unclassified.category === 'string' && unclassified.category.length > 0);
+});
+
+test('a local event joins the merged feed and files under its own source', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  const db = { prepare: () => ({ bind: () => ({ all: async () => ({ results: [
+    { id: 9, event_type: 'rental', local_title: 'Wedding — Bauer / Klein', local_event_date: '2026-09-05', local_event_time: '14:00', room: 'Sanctuary' },
+  ] }) }) }) };
+  try {
+    const feed = await buildCalendarFeed({ DB: db }, { from: '2026-09-01', to: '2026-09-30', calendarIds: ['a@b'], getToken: async () => null });
+    const ev = feed.events.find((e) => e.title === 'Wedding — Bauer / Klein');
+    assert.ok(ev, 'the local event is in the merged feed');
+    assert.equal(ev.source, 'local');
   } finally { globalThis.fetch = realFetch; }
 });
 

@@ -81,6 +81,51 @@ export const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── EVENT INTAKE ──────────────────────────────────────────────
+// The office's own checklist over everything with a date on it — see
+// admin/intake.js for the types, the fixed checklists and the merge rules.
+// One row per real-world booking, keyed on `source_key` in the SAME id space
+// admin/calendar.js's own g:/n:/b: ids already use, so a row here can be
+// matched straight to a normalized Google/News/gym event with no second
+// lookup. `source_key` is NULL only for a `local` row (source_kind='local',
+// entered here with nowhere else to defer to) — its own `id` is its identity.
+//
+// ⚠ THIS IS PURELY INTERNAL BOOKKEEPING. Nothing in this table gates what
+// appears on the public calendar; a Google event with every checklist item
+// still open renders on /calendar exactly as it always has. The one
+// exception is a `local` row's own title_/event_date_/event_time columns,
+// which ARE read onto the public calendar (see readLocalIntakeEvents() in
+// admin/calendar.js) — because a `local` row is the only one with no other
+// path to the calendar at all.
+export const DB_INIT_EVENT_INTAKE = `CREATE TABLE IF NOT EXISTS event_intake (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_kind   TEXT NOT NULL,           -- 'gcal' | 'news' | 'gym' | 'local'
+  source_key    TEXT UNIQUE,             -- 'g:<id>' | 'n:<id>' | 'b:<id>'; NULL for 'local'
+  event_type    TEXT,                    -- 'worship' | 'education' | 'rental' | 'news' | NULL
+  room          TEXT,
+  extra_json    TEXT,
+  checks_json   TEXT,
+  -- The row's own record of when it happens, refreshed on every sync for
+  -- EVERY source kind (not only 'local') — purely so a cheap DB-only query
+  -- (the sidebar badge) can bound itself to "upcoming, roughly" without
+  -- re-fetching Google on every page load. The live screen never trusts this
+  -- column; it always recomputes from the real source. See badgeCounts() in
+  -- tlc-admin-worker.js.
+  event_date    TEXT,
+  -- Only ever set for source_kind='local' — a room booking with no Google
+  -- event and no News post behind it, typed in directly.
+  local_title      TEXT,
+  local_event_date TEXT,
+  local_end_date   TEXT,
+  local_event_time TEXT,
+  local_end_time   TEXT,
+  published_at  TEXT,
+  published_by  TEXT,
+  updated_at    TEXT DEFAULT (datetime('now')),
+  updated_by    TEXT,
+  created_at    TEXT DEFAULT (datetime('now'))
+)`;
+
 export const DB_INIT_EVENTS = `CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   newsletter_id INTEGER,

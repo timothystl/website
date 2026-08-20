@@ -39,6 +39,12 @@ export const PERMISSIONS = {
   // roster, the same separation market_manage already keeps from the market
   // being merely reachable.
   events_manage:      'Events (create & manage)',
+  // The Event Intake screen — the checklist over every Google booking, News
+  // post and confirmed gym rental. Its own key rather than a share of
+  // news_edit or gym_manage: it reads across all three (plus payment/renter
+  // detail from Gym Rentals), so it should not silently widen to whoever
+  // holds any one of them.
+  intake_manage:      'Event intake',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
 };
@@ -93,7 +99,7 @@ export function migratePermissionKeys(perms) {
 // shortcuts that tick a set of boxes — the checkboxes remain the truth, and a
 // preset never grants anything the boxes do not then show.
 export const PERMISSION_PRESETS = {
-  'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage', 'events_manage'],
+  'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage', 'events_manage', 'intake_manage'],
   'Ministry leader': ['pages_edit_own', 'ministries_edit', 'news_edit'],
   'Bookkeeper': ['gym_manage', 'giving_manage', 'payroll_manage'],
   // One event, once a year, and nothing else in the admin. Deliberately not

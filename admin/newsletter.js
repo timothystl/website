@@ -292,3 +292,69 @@ function splitCsvLine(line) {
   out.push(cur);
   return out;
 }
+
+
+// ── UPCOMING EVENTS: PICKED, NOT RETYPED ────────────────────────────────────
+// The `events` table is one row per date printed inside a single issue, keyed
+// to `newsletter_id`. Those rows used to be TYPED, free-hand, into the
+// composer — and they reached the email and nothing else. Not the calendar,
+// not the printed month, not Google. That is the loop this closes: an event
+// was written here, then written again on the calendar, then remembered a
+// third time when the month had to be printed.
+//
+// ⚠ THE TABLE STAYS, AND IS STILL WRITTEN, AND THAT IS DELIBERATE. A sent
+// issue is locked and its archive has to keep saying what was actually sent —
+// so the picked posts are MATERIALIZED into these rows at save time rather
+// than resolved when the email is built. Editing a post's title next March
+// must not rewrite an issue six hundred people already have. It also means
+// `buildEmailHtml`, the archive page and the public API are byte-for-byte
+// unchanged; nothing downstream had to learn about any of this.
+//
+// `events.news_item_id` is what makes a row re-tickable on a later edit. A row
+// with none is one somebody typed by hand before this existed — kept, shown,
+// removable, and impossible to create another of.
+
+// `19:00` as somebody would read it aloud. The email and the archive print
+// this string as-is, so it is made once here rather than in two renderers.
+// ⚠ Anything that is not a real clock comes back EMPTY, not as itself: the
+// column is nullable and a blank time is a real answer (an all-day event),
+// where echoing a half-typed value would print `19:` into six hundred inboxes.
+export function prettyClock(hm) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(String(hm || '').trim());
+  if (!m) return '';
+  const h24 = Number(m[1]);
+  const h = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h}:${m[2]} ${h24 < 12 ? 'am' : 'pm'}`;
+}
+
+// A picked post becomes the row the email will print. The description is the
+// post's own summary — the one-line "location, special note" the typed field
+// asked for — so nothing has to be written twice to say the same thing.
+export function eventRowFromPost(post) {
+  return {
+    news_item_id: post.id,
+    event_date: post.event_date || '',
+    event_name: String(post.title || '').trim(),
+    event_time: prettyClock(post.event_time),
+    event_desc: String(post.summary || '').trim(),
+  };
+}
+
+// ⚠ THE ORDER IS THE ORDER OF THE EVENTS, NOT THE ORDER THEY WERE TICKED. A
+// checkbox list posts in document order, which is already by date — but a
+// hand-kept legacy row has no place in that sequence at all, and appending it
+// after the picked ones would print February under March. Everything is sorted
+// on the date it actually falls on, and anything dateless sits at the end
+// rather than at the top pretending to be the next thing happening.
+export function orderEventRows(rows) {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      const ad = a.r.event_date || '', bd = b.r.event_date || '';
+      if (!ad && !bd) return a.i - b.i;
+      if (!ad) return 1;
+      if (!bd) return -1;
+      return ad === bd ? a.i - b.i : (ad < bd ? -1 : 1);
+    })
+    .map(({ r }, i) => ({ ...r, sort_order: i }));
+}
