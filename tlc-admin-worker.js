@@ -261,6 +261,13 @@ function cleanSlug(s) {
 // rather than a prefix, and admin/escaping.test.mjs's sibling assertion that
 // it matches what admin/payroll.html actually calls.
 //
+// payroll_get_mdo_period_approval is a read-only window onto a fact this
+// Worker never writes: whether the MDO director has approved her own staff's
+// hours for a period, in the childcare portal's own Payroll report. It is a
+// separate table (mdo_payroll_approvals) from payroll_periods — the church's
+// own approve/unapprove pair above still only ever reads and writes
+// payroll_periods, and the two approvals are never merged.
+//
 // payroll_get_mdo_rate_snapshot and payroll_get_year_totals were added
 // alongside the rate-freeze fix (see CLAUDE.md, "payroll issues... back pay
 // rates"): church_staff and the MDO app's staff table only ever hold a
@@ -278,6 +285,7 @@ export const PAYROLL_RPC_FNS = [
   'payroll_get_mdo_hours',
   'payroll_get_mdo_clock_events',
   'payroll_get_mdo_pto',
+  'payroll_get_mdo_period_approval',
   'payroll_get_mdo_rate_snapshot',
   'payroll_get_year_totals',
   'payroll_approve_period',

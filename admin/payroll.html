@@ -217,6 +217,10 @@
       <div class="tlc-pay-live" id="mdoLive">
         <span class="tlc-pay-live-mark" aria-hidden="true">↻</span>
         <span id="mdoLiveText">Reading childcare hours…</span>
+        <!-- Set by the MDO director in the childcare portal's own Payroll
+             report, not here — this is a read-only signal from a separate
+             approval, never merged into this period's own periodApproval. -->
+        <span id="mdoApprovalPill"></span>
         <span style="margin-left:auto;"><button type="button" class="tlc-pay-btn" id="refreshMdoBtn">Read again</button></span>
       </div>
       <div class="tlc-pay-thead tlc-pay-grid">
@@ -379,6 +383,13 @@ let mdoRateSnapshot = new Map();
 // is no false, because a write that failed simply leaves it null, and half-set
 // is the one state an approval must never be in.
 let periodApproval = null;
+// A SEPARATE fact from periodApproval: whether the MDO director has approved
+// her own staff's hours for this period, from the childcare portal's own
+// Payroll report. This screen only ever READS it — approving/unapproving
+// happens over there, gated to a 'full' MDO admin — and never merges it into
+// periodApproval, because the two are independent decisions by independent
+// people. Null means not yet approved, same reasoning as periodApproval.
+let mdoPeriodApproval = null;
 let payView = 'entry';
 let payLayout = 'cards';
 let lastFocus = null;
@@ -594,9 +605,10 @@ async function onPeriodChange(value) {
   $('entryPeriodLabel').textContent = 'Pay period · ' + periodLabel(periodStart, periodEnd);
   $('entryPays').textContent = paysOnLabel(periodEnd);
 
-  const [entriesRes, approvalRes, mdoSnapRes] = await Promise.all([
+  const [entriesRes, approvalRes, mdoApprovalRes, mdoSnapRes] = await Promise.all([
     sb.rpc('payroll_get_period_entries', { p_period_start: periodStart }),
     sb.rpc('payroll_get_period_approval', { p_period_start: periodStart }),
+    sb.rpc('payroll_get_mdo_period_approval', { p_period_start: periodStart }),
     sb.rpc('payroll_get_mdo_rate_snapshot', { p_period_start: periodStart }),
     loadMdoData(periodStart, periodEnd),
   ]);
@@ -606,6 +618,7 @@ async function onPeriodChange(value) {
   // the safe way round: it asks for a second look at something already looked
   // at, rather than reporting an approval that never happened.
   periodApproval = (approvalRes.data || [])[0] || null;
+  mdoPeriodApproval = (mdoApprovalRes.data || [])[0] || null;
 
   periodEntries = {};
   (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
@@ -841,6 +854,10 @@ function renderEntry(periodStart) {
       : 'No childcare staff found for this period.';
   $('mdoLiveText').textContent = liveText;
   $('mdoLive').style.background = mdoError ? '#FAEFEF' : '#EDF4F8';
+
+  $('mdoApprovalPill').innerHTML = mdoPeriodApproval
+    ? pill('good', 'MDO approved by ' + mdoPeriodApproval.approved_by)
+    : pill('plain', 'MDO not yet approved');
 }
 
 // PY-1: names used to be interpolated into inline onclick handlers, so an

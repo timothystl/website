@@ -95,6 +95,7 @@ const srv = http.createServer((q, r) => {
         case 'payroll_get_mdo_hours': return json(200, MDO_HOURS);
         case 'payroll_get_mdo_clock_events': return json(200, []);
         case 'payroll_get_mdo_pto': return json(200, []);
+        case 'payroll_get_mdo_period_approval': return json(200, []);
         case 'payroll_approve_period':
           APPROVALS = [{ period_start: params.p_period_start, approved_by: params.p_approved_by, approved_at: '2026-08-01T10:00:00Z' }];
           return json(200, null);
