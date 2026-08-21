@@ -3798,6 +3798,27 @@ group('⚠ The staff grid shows every member of staff');
   for (const name of roster) has(about, name, name + ' is on it');
   has(about, 'object-position:40% 22%', 'with the crop the office set on the Staff screen');
   has(about, 'transform:scale(1.6)', 'and the zoom that goes with it');
+
+  // ⚠ THE BUG THIS EXISTS FOR TOO: fixImageUrls() used to rewrite EVERY
+  // src="/images/…" to admin.timothystl.org unconditionally, on the mistaken
+  // premise that an uploaded image is always stored root-relative. A staff
+  // photo like this one is a legacy static asset served from public/images/
+  // on the SITE worker — admin.timothystl.org has no such file and 404s on
+  // it, which is exactly what "many staff pictures are broken" looked like.
+  has(about, 'src="/images/dinger.webp"',
+    'a legacy static staff photo stays root-relative — it resolves fine on whichever site serves the page');
+  ok(!about.includes('src="https://admin.timothystl.org/images/dinger.webp"'),
+    'and must never be rewritten to admin.timothystl.org, which has no public/images/ of its own');
+
+  // A genuinely R2-uploaded photo (the "news-" key /api/upload-image mints)
+  // is stored ABSOLUTE already and is untouched either way — but the same
+  // rewrite has to still fire for the one shape that legitimately needs it:
+  // a root-relative upload key, if one is ever posted by hand or by an older
+  // row. That is the one case fixImageUrls exists to fix.
+  db.prepare("UPDATE staff_members SET photo_url='/images/news-1234-abcde.webp' WHERE name='Jinah'").run();
+  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
+  has(api2.rendered.about, 'src="https://admin.timothystl.org/images/news-1234-abcde.webp"',
+    'a real upload-key path is still made absolute against the admin origin, where R2 actually serves it');
 }
 
 
