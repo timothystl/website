@@ -93,7 +93,18 @@ async function call(env, path, { cookie = '', method = 'GET', form = null, fresh
   if (accept) headers.set('accept', accept);
   let body;
   if (form) {
-    body = new URLSearchParams(form).toString();
+    // ⚠ BUILT BY HAND, NOT `new URLSearchParams(form)` — that constructor
+    // stringifies an array value into ONE comma-joined pair rather than
+    // repeating the key, which is not what a real browser posts for several
+    // checkboxes sharing one `name` (Event Intake's bulk-assign `keys[]`,
+    // for one). Appending each element separately is what `form.getAll(...)`
+    // on the receiving end actually needs to see more than one value.
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(form)) {
+      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
+      else params.append(k, v);
+    }
+    body = params.toString();
     headers.set('content-type', 'application/x-www-form-urlencoded');
   }
   const req = new Request('https://admin.timothystl.org' + path, { method, headers, body });
@@ -5698,6 +5709,77 @@ group('the sidebar badge counts open Intake items, from the database alone');
   has(afterHtml, `${openNow - 1} item(s) need a decision`, 'and it dropped by exactly the one item that was just published');
 }
 
+group('the left rail is grouped by the four core values, not a flat "By calendar" list');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const res = await call(env, '/event-intake', { cookie, fresh: true });
+  const page = await res.text();
+  has(page, 'Christian Education', 'the value group heading renders, not the raw stored key "education"');
+  // Word of Life, MDO and Youth & Family sit under Christian Education —
+  // matching PARTNER_SEED's own Word-of-Life-is-'education' pairing.
+  const eduIdx = page.indexOf('Christian Education');
+  const outreachIdx = page.indexOf('Outreach');
+  for (const label of ['Word of Life', 'MDO', 'Youth &amp; Family']) {
+    const i = page.indexOf(`>${label}<`);
+    ok(i > eduIdx && i < outreachIdx, `${label} renders between Christian Education and Outreach`);
+  }
+  // News, Meetings and Special event render under "Other", never under any
+  // of the four value headings — the cross-cutting types this repo would not
+  // force a value onto (see the note above TYPE_VALUE in admin/intake.js).
+  const otherIdx = page.lastIndexOf('>Other<');
+  ok(otherIdx > -1, 'the ungrouped "Other" heading renders');
+  for (const label of ['News', 'Meetings', 'Special event']) {
+    ok(page.indexOf(`>${label}<`) > otherIdx, `${label} renders after Other, not folded into a value group`);
+  }
+}
+
+group('bulk type assignment sets one type on many events at once, and skips what does not belong to the office');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const d1 = churchDatePlus(12), d2 = churchDatePlus(13), d3 = churchDatePlus(14);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Fall Kickoff Sunday School', 'First day back.', churchDate(), d1, '2099-01-01', 'web');
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Confirmation Retreat', 'Overnight at camp.', churchDate(), d2, '2099-01-01', 'web');
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Deacon Meeting', 'Not a youth event.', churchDate(), d3, '2099-01-01', 'web');
+  await call(env, '/event-intake', { cookie, fresh: true }); // sync
+  const idOf = (title) => db.prepare('SELECT id FROM news_items WHERE title = ?').get(title).id;
+  const k1 = `n:${idOf('Fall Kickoff Sunday School')}`;
+  const k2 = `n:${idOf('Confirmation Retreat')}`;
+  const k3 = `n:${idOf('Deacon Meeting')}`;
+
+  // Andrew, looking at 135 unclassified imports: "can we just bulk assign
+  // them?" — two of three checked, one left alone, one type for both.
+  const res = await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'youth', keys: [k1, k2] } });
+  eq(res.status, 302, 'redirects back to the queue, same shape as every other action here');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k1).event_type, 'youth');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k2).event_type, 'youth');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
+    'the one not checked is untouched, even though it synced in the same visit');
+
+  // ⚠ AN UNRECOGNIZED TYPE DOES NOTHING, THE SAME REFUSAL /event-intake/type
+  // ALREADY ENFORCES FOR ONE EVENT — a crafted POST can't smuggle a bogus
+  // value into the column via the bulk door just because the single-item
+  // door checks it.
+  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'not-a-real-type', keys: [k3] } });
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
+    'a bogus type on the bulk route is refused exactly like on the single-item route');
+
+  // ⚠ A KEY WITH NO MATCHING ITEM IN THIS REQUEST'S OWN MERGE IS SKIPPED, NOT
+  // TRUSTED AS A BARE ID. A stale page or a crafted form posting a key for an
+  // event outside the sync window (or that never existed) must not reach
+  // writeIntakePatch with nothing real behind it.
+  const before = db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n;
+  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'meetings', keys: ['n:999999'] } });
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
+}
+
 group('push notifications have two audiences, and the six existing triggers stay in the staff one');
 {
   // Andrew's answer to the review's own SEC-6/FX-29 finding — not scoping the
@@ -5868,6 +5950,55 @@ group('Push Alert composes a message for the OTHER audience, and only that one')
     body: new URLSearchParams({ title: 'x', body: 'y' }).toString(),
   }), env, ctx);
   eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
+}
+
+group('every push notification leaves a trail in the Push Log, whatever triggered it');
+{
+  // Dinger: a push arrived about a reply from a real person and tapping it
+  // just opened the dashboard — because a *delivered* contact/prayer message
+  // was never stored anywhere, only emailed. The fix isn't the click target,
+  // it's that nothing about the push itself was ever recorded either. Every
+  // caller of pushToAllSubscribers()/pushToPublicSubscribers() funnels
+  // through one function, so logging there covers all of them at once.
+  const { db, env } = await boot();
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+  const admin = signIn(db, ['settings_manage'], 'office2');
+  const outsider = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'settings_manage'), 'noaccess2');
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('', { status: 201 });
+
+  const k1 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (1, ?, ?, ?, 'staff')")
+    .run('https://fcm.example/plog-staff', k1.p256dh, k1.auth);
+  const k2 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')")
+    .run('https://fcm.example/plog-public', k2.p256dh, k2.auth);
+
+  await pushToAllSubscribers(envWithVapid, { title: 'New message from Leah Seveking', body: 'Re: the LCEF proposal — thanks for...', tag: 'contact-message', url: '/dashboard' });
+  await pushToPublicSubscribers(envWithVapid, { title: 'Worship is canceled', body: 'Ice on the lot.', tag: 'push-alert', url: '/news' });
+
+  const rows = db.prepare('SELECT * FROM push_log ORDER BY id ASC').all();
+  eq(rows.length, 2, 'both sends were logged — the staff trigger and the public broadcast');
+  eq(rows[0].audience, 'staff', 'the first row is the staff-audience push');
+  eq(rows[0].sent, 1, 'and it really counted the one staff device it reached');
+  eq(rows[0].total, 1, 'never counting the public row that was never sent to');
+  has(rows[0].title, 'Leah Seveking', 'the title survives into the log');
+  has(rows[0].body, 'LCEF', 'so does the body — this is the record a lost push used to leave nothing of');
+  eq(rows[1].audience, 'public', 'the second row is the broadcast');
+  eq(rows[1].sent, 1, 'reaching the one public device');
+
+  globalThis.fetch = realFetch;
+
+  const denied = await call(env, '/push-log', { cookie: outsider.cookie });
+  eq(denied.status, 403, 'gated on settings_manage, the same as Filtered Mail beside it');
+
+  const page = await call(env, '/push-log', { cookie: admin.cookie });
+  eq(page.status, 200, 'settings_manage can open it');
+  const body = await page.text();
+  has(body, 'Leah Seveking', 'the delivered-message push shows up by name');
+  has(body, 'Worship is canceled', 'so does the broadcast');
+  has(body, 'Push Log', 'the sidebar and title name the screen plainly');
 }
 
 group('Contact and Prayer are never rendered from blocks, even when published');

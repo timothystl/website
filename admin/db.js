@@ -533,6 +533,30 @@ export const DB_INIT_PAYROLL_READY_NOTIFIED = `CREATE TABLE IF NOT EXISTS payrol
   notified_at  TEXT DEFAULT (datetime('now'))
 )`;
 
+// One row per push notification actually SENT, whatever triggered it — held
+// mail, a delivered contact/prayer message, a gym request, payroll turning
+// ready, a market application, an event sign-up, a newsletter awaiting
+// approval, the ChMS/scheduler relay, or an office broadcast. Every one of
+// those already funnels through the single pushToAllSubscribers() chokepoint
+// in admin/webpush.js, which is what lets this be logged in ONE place rather
+// than at each of the dozen call sites — a call site that forgot to log would
+// otherwise be a notification nobody could ever trace back to what it was
+// about. Written best-effort from inside that function: a logging failure
+// must never turn into a lost push, so it is wrapped the same way every write
+// in that path already is.
+export const DB_INIT_PUSH_LOG = `CREATE TABLE IF NOT EXISTS push_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  audience   TEXT NOT NULL,
+  tag        TEXT,
+  title      TEXT NOT NULL,
+  body       TEXT,
+  url        TEXT,
+  sent       INTEGER NOT NULL,
+  gone       INTEGER NOT NULL,
+  total      INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
 // ── GYM RENTAL DB TABLES ─────────────────────────────────────
 export const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

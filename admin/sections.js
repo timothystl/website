@@ -186,6 +186,18 @@ export const SECTIONS = {
     columns: [['From', '1.8fr'], ['Subject', '2.4fr'], ['Held', '1fr'], ['Why', '1.4fr']],
     note: 'Nothing is ever rejected outright — a real prayer request must never be lost, so anything that scores past the threshold is held here rather than dropped.'
   },
+  // Added 2026-08-21 — every push, whatever triggered it (held mail, a
+  // delivered contact/prayer message, a gym request, payroll, a market
+  // application, an event sign-up, the ChMS relay, an office broadcast) had
+  // been ringing a phone and leaving no record anywhere in the admin once the
+  // notification itself scrolled away. This is the trail.
+  pushLog: {
+    label: 'Push Log', glyph: '⚐', title: 'Push notification log',
+    purpose: 'Every push notification this admin has sent, whatever set it off, so tapping through to nothing does not mean the message is lost.',
+    search: 'Search title or message', filters: ['All', 'Staff', 'Public'],
+    columns: [['Notification', '2.6fr'], ['Kind', '1.2fr'], ['Reach', '1fr'], ['When', '1.2fr']],
+    note: 'This is the log, not the message itself — a push carries at most a couple hundred characters. For a contact or prayer form, the full text is still only in the office inbox.'
+  },
   subscribers: {
     label: 'Subscribers', glyph: '✉', title: 'Subscribers', purpose: 'People signed up for the weekly email, whether they joined on the website or were added by the office.',
     action: 'Import CSV', search: 'Search by email or name', filters: ['All', 'Website', 'Added by office', 'Bounced'],

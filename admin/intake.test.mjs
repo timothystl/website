@@ -6,7 +6,9 @@ import {
   CHECKLISTS, TYPE_FIELDS, checklistFor, openCountOf, isReady,
   isValidTypeField, isValidChecklistKey,
   mergeIntakeItems, QUEUE_TOP, inQueue, filterQueue, queueCounts, QUEUE_TITLES,
+  VALUE_LABELS, VALUE_ORDER, TYPE_VALUE, typesForValue, typesWithNoValue,
 } from './intake.js';
+import { CALENDAR_PALETTE } from './calendar.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -155,6 +157,71 @@ group('field and checklist keys are checked against a list before they are used'
   ok(!isValidChecklistKey('rental', 'readings'), 'a worship item is not a rental item');
   ok(!isValidChecklistKey('rental', 'constructor'), 'nor is an object-prototype name');
   ok(!isValidChecklistKey(null, 'agreement'), 'unclassified has no checklist to post to either');
+}
+
+group('the eleven types group under the four core values, and three deliberately do not');
+{
+  // ⚠ Every value-mapped type actually appears in TYPES, and every group is
+  // non-empty — a typo in TYPE_VALUE (a key that isn't a real type, or a
+  // value string that isn't one of the four) would silently vanish a type
+  // from the rail rather than error.
+  for (const [type, value] of Object.entries(TYPE_VALUE)) {
+    ok(TYPE_KEYS.includes(type), `${type} in TYPE_VALUE is a real type`);
+    ok(VALUE_ORDER.includes(value), `${value} in TYPE_VALUE is one of the four`);
+  }
+  eq(VALUE_ORDER.length, 4);
+  for (const v of VALUE_ORDER) ok(VALUE_LABELS[v], `${v} has a label`);
+  eq(VALUE_LABELS.education, 'Christian Education');
+
+  // Every type appears in EXACTLY one place: a value group, or the no-value
+  // list — never both, never neither.
+  const grouped = VALUE_ORDER.flatMap((v) => typesForValue(v));
+  const ungrouped = typesWithNoValue();
+  eq(grouped.length + ungrouped.length, TYPE_KEYS.length, 'every type is accounted for exactly once');
+  eq(new Set(grouped.concat(ungrouped)).size, TYPE_KEYS.length, 'and none of them twice');
+
+  // The three cross-cutting types this repo deliberately would not force
+  // under a value — see the note above TYPE_VALUE in intake.js.
+  for (const t of ['news', 'meetings', 'special']) ok(!TYPE_VALUE[t], `${t} has no value`);
+  ok(ungrouped.includes('news') && ungrouped.includes('meetings') && ungrouped.includes('special'));
+
+  // Word of Life ties to 'education' here exactly as PARTNER_SEED already
+  // ties the Word of Life partner ministry to 'education' in admin/db.js —
+  // verified by reading that mapping, not asserted against itself.
+  eq(TYPE_VALUE.wol, 'education');
+  eq(TYPE_VALUE.rental, 'outreach');
+}
+
+group('every type color is a real CALENDAR_PALETTE entry, at 4.5:1 against cream — verified, not assumed');
+{
+  // ⚠ THIS IS THE EXACT SHAPE OF BUG admin/calendar.js's own CALENDAR_PALETTE
+  // comment warns about: "a comment claimed a test already checked this and
+  // it didn't." Computed independently here rather than trusted, the same
+  // way admin/calendar.test.mjs verifies the calendar's own palette.
+  const chan = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
+  const rgb = (hex) => [1, 3, 5].map((i) => chan(hex, i));
+  const luminance = (hex) => rgb(hex).map((c) => c / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((acc, c, i) => acc + [0.2126, 0.7152, 0.0722][i] * c, 0);
+  const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  const CREAM = '#F7F4EE'; // .ei-pill-on's own text color, the white-on-fill state every type's color has to carry
+
+  const paletteByKey = new Map(CALENDAR_PALETTE.map((p) => [p.key, p]));
+  const usedPaletteKeys = new Set();
+  for (const t of TYPE_KEYS) {
+    const type = TYPES[t];
+    ok(type.palette, `${t} names a CALENDAR_PALETTE key`);
+    const entry = paletteByKey.get(type.palette);
+    ok(entry, `${type.palette} (${t}'s palette key) is a real CALENDAR_PALETTE entry`);
+    eq(type.color, entry.color, `${t}'s color is exactly its palette entry's color, not a hand-typed near-miss`);
+    ok(contrast(type.color, CREAM) >= 4.5, `${t} (${type.color}) clears 4.5:1 against cream pill text — got ${contrast(type.color, CREAM).toFixed(2)}:1`);
+    usedPaletteKeys.add(type.palette);
+  }
+  // ⚠ NO TWO TYPES SHARE A COLOR. Eleven types, eleven of the twelve
+  // CALENDAR_PALETTE keys — 'gray' is the one left over, deliberately (it
+  // means "uncategorized" on the calendar, and no type here is that).
+  eq(usedPaletteKeys.size, TYPE_KEYS.length, 'every type has its own color — none doubled up');
+  ok(!usedPaletteKeys.has('gray'), "'gray' is reserved for the calendar's own uncategorized fallback, not spent on a real type");
 }
 
 group('ROOMS and SOURCE labels are complete');
