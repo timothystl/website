@@ -428,14 +428,22 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
               if (form.get(`check_${c.key}`) === '1') checks[c.key] = true;
             }
             patch.checks_json = JSON.stringify(checks);
-            // ⚠ REFUSED SERVER-SIDE, NOT JUST A DISABLED BUTTON. A crafted
-            // POST claiming action=publish must not mark something ready that
-            // still has open items — the disabled button on screen is a
-            // courtesy, not the rule.
-            if (action === 'publish' && openCountOf(type, checks) === 0) {
-              patch.published_at = new Date().toISOString();
-              patch.published_by = currentUser.username;
-            }
+          }
+          // ⚠ PUBLISH IS NEVER GATED ON THE CHECKLIST, THE ROOM, OR EVEN
+          // HAVING A TYPE — reported directly: "not every event needs a
+          // room, or the checklist... dont make any field required, you can
+          // just leave it with a publish button." The checklist was never
+          // what put an event on the public calendar in the first place (a
+          // Google, News or gym-sourced event reaches it through its own
+          // path regardless; a local one reaches it the moment it is
+          // entered) — it was only ever the office's own record of its own
+          // paperwork, and forcing that paperwork before Publish would work
+          // conflated "on the calendar" with "the office is done with it,"
+          // which is a real distinction for a rental's insurance and a
+          // fiction for a plain note like "First day of school."
+          if (action === 'publish') {
+            patch.published_at = new Date().toISOString();
+            patch.published_by = currentUser.username;
           }
 
           if (row.source_kind === 'local') {
@@ -855,14 +863,14 @@ function intakeDetail(item, gymExtra, queue) {
         </div>` : ''}
         <div class="ei-actions">
           <button type="submit" name="action" value="save" class="ei-btn ei-btn-ghost">Save</button>
-          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary"${ready ? '' : ' disabled'}>${ready ? 'Publish to the calendar' : `Finish ${open == null ? 'classifying it' : open + ' item' + (open === 1 ? '' : 's') + ' first'}`}</button>
+          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">Publish</button>
         </div>
       </div>
     </form>
     <form method="POST" action="/event-intake/hold" class="ei-holdform"><button type="submit" class="ei-link-btn">← Back to Needs a decision</button></form>
     ${item.sourceKind === 'local' ? `<form method="POST" action="/event-intake/local/delete" class="ei-holdform" onsubmit="return confirm('Delete this event? This cannot be undone.')">
       <input type="hidden" name="key" value="${intakeEsc(item.key)}"><button type="submit" class="ei-link-btn ei-link-danger">Delete this event</button></form>` : ''}
-    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, and only the church’s own fields are asked for. Nothing reaches the public calendar with an open item.</p>
+    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, but nothing here is required. The room, the type and the checklist are all optional; a plain note needs none of them, and Publish works with the page exactly as it is.</p>
   </div>`;
 }
 
