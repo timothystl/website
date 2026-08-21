@@ -711,8 +711,16 @@ async function pageData(env, reqKey) {
       // Same public filter /api/newsletters itself uses — see
       // NEWSLETTER_PUBLIC_WHERE_SQL: published, and not superseded by a
       // later, corrected issue that has since been sent in its place.
+      // ⚠ Bounded to the last 12 months, not to a row count. A weekly letter
+      // makes ~52 issues a year, so the old `LIMIT 12` alone was actually a
+      // ~3-month window with no stated reason — an accident of the cap, not a
+      // decision about how far back the archive should read. The date bound
+      // is what governs the real cutoff now; the LIMIT stays only as a
+      // backstop against a format nobody expects (a daily quick-announcement
+      // habit) still bounding the payload every published page carries.
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
-         WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC, id DESC LIMIT 12`),
+         WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} AND published_at >= ?
+         ORDER BY published_at DESC, id DESC LIMIT 104`, churchDatePlus(-365)),
       // The giving page's three moving parts. They are read here, with
       // everything else a block might need, so the Giving widget and the
       // Amount ladder can be SELF-FILLING blocks — the one property that
@@ -3780,8 +3788,15 @@ export default {
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
+      // Bounded to the last 12 months — this had no LIMIT of any kind, so a
+      // church running this for years hands every issue it has ever sent,
+      // full pastor's note included, to every visitor of the legacy
+      // hardcoded /news fallback on every load. Same cutoff the
+      // newsletterarchive block's own pageData() query uses, so the two
+      // rendering paths (block-published vs. the legacy fallback) can't
+      // disagree about how far back the archive reads.
       const [rows, allEvts] = await Promise.all([
-        env.DB.prepare(`SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC`).all(),
+        env.DB.prepare(`SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} AND published_at >= ? ORDER BY published_at DESC`).bind(churchDatePlus(-365)).all(),
         env.DB.prepare('SELECT * FROM events ORDER BY event_date, sort_order').all()
       ]);
       const evtsByNewsletter = {};
@@ -3821,7 +3836,7 @@ export default {
         `SELECT id, subject, pastor_note, secondary_note, wol_content, lasm_content,
                 tertiary_note, tertiary_cta_label, tertiary_cta_url,
                 ministry_content, ministry_type, published_at, format,
-                cta_url, cta_label, bible_classes, news_item_ids
+                cta_url, cta_label, bible_classes, news_item_ids, extra_notes
            FROM newsletters
           WHERE id = ? AND ${NEWSLETTER_PUBLIC_WHERE_SQL}`
       ).bind(id).first();
@@ -3850,7 +3865,14 @@ export default {
         clean[k] = richOut(clean[k]);
       }
       if (clean.ministry_type !== 'image') clean.ministry_content = richOut(clean.ministry_content);
-      return new Response(JSON.stringify({ ...clean, events: evts.results, news_items: newsItems, bible_classes: bibleClasses }), {
+      // extra_notes is a sixth rich field this endpoint hands the public
+      // reader — each note's own `body` went through cleanRich() on save
+      // (admin/newsletter.js), same as the five above, and gets the same
+      // richOut() treatment here rather than being handed over as a raw
+      // JSON string for the client to parse and trust unsanitized.
+      const extras = parseExtras(row.extra_notes).map((n) => ({ title: n.title, body: richOut(n.body) }));
+      delete clean.extra_notes;
+      return new Response(JSON.stringify({ ...clean, events: evts.results, news_items: newsItems, bible_classes: bibleClasses, extras }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
