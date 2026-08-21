@@ -1366,6 +1366,28 @@ export function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// A plain-text preview carved out of rich HTML (strip the tags, keep the
+// words) is escaped again wherever it renders — so an entity left in the
+// stripped text is escaped a SECOND time: `&rsquo;` becomes `&amp;rsquo;`,
+// which a browser renders as the literal text "&rsquo;", not an apostrophe.
+// `tools/extract-pages.mjs` hit this first, converting hardcoded markup into
+// seeds, and carries the identical fix under the identical name for the
+// identical reason — decode before the strip is handed to esc(), or every
+// curly quote and every "&" a person ever typed comes out as visible entity
+// soup. Numeric entities (`&#8217;` / `&#x2019;`) are decoded too, since a
+// rich editor is as likely to emit one as the named form.
+const RICH_TEXT_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ',
+  mdash: '—', ndash: '–', hellip: '…', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”' };
+function decodeEntities(s) {
+  return String(s).replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') return String.fromCodePoint(Number((e[1] === 'x' || e[1] === 'X' ? '0' : '') + e.slice(1)));
+    return Object.prototype.hasOwnProperty.call(RICH_TEXT_ENTITIES, e.toLowerCase()) ? RICH_TEXT_ENTITIES[e.toLowerCase()] : m;
+  });
+}
+export function textFromRich(html) {
+  return decodeEntities(String(html || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
 // URLs that are safe to put in href/src. Everything else is dropped rather
 // than "fixed" — a silently rewritten link is worse than a missing one.
 export function safeUrl(u) {
@@ -3002,6 +3024,18 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 /* Inside a month the rows are already fenced by the month's own border, so a
    second border on each one reads as a box in a box. */
 .tlcb-nl-mlist .tlcb-nl-row{border:0;padding:7px 0;border-top:1px solid #EFEBE1;border-radius:0;}
+/* A row needs a wrapper of its own so its expanded panel has somewhere to sit
+   below it — the row itself stays the same flex line it always was. */
+.tlcb-nl-rowwrap{display:flex;flex-direction:column;}
+/* The letter reads in place, inside the card or under the row that opened
+   it — never a modal. The panel is a plain descendant of the block wrapper
+   the script found it in, so --tlcb-ui still resolves by inheritance same
+   as everywhere else in this block. */
+.tlcb-nl-full{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-date{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;}
+.tlcb-nl-full-body{font-size:15px;line-height:1.8;color:#1A1A2A;}
+.tlcb-nl-full-events{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-ev{font-size:13px;line-height:1.7;color:#3A3A4A;padding:4px 0;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
 /* The tile clips, the photo fills it. overflow:hidden is what keeps a zoomed
@@ -4019,6 +4053,76 @@ const LETTER_SCRIPT = '<script>' + `
   })();
 ` + '<\/script>';
 
+// ── THE NEWSLETTER ARCHIVE READS A LETTER IN PLACE, NOT IN AN OVERLAY ───────
+// Deliberately separate from LETTER_SCRIPT above, which is the "letter"
+// block's own mechanism and opens the shared overlay on purpose. Reported
+// directly against THIS block: "it still does a pop up window... i dont
+// want the overlay." So this one never calls loadNewsletterDetail() at
+// all — it fetches the same /api/newsletter/:id and drops the result into
+// a panel that is already sitting in the DOM, right where it was clicked.
+//
+// ⚠ Only one letter open at a time — closing every other panel before
+// opening the clicked one, the same "one open thing" rule the market's own
+// accordions and this same block's own month <details> already follow, so
+// a page with several cards never grows into a wall of open letters.
+//
+// ⚠ Fetched once per id and cached on the panel itself (data-loaded) — a
+// second click just re-opens what is already there rather than re-fetching.
+//
+// ⚠ No backticks anywhere in this string. It lives inside a template literal
+// and one would end it, breaking the module while still passing `node --check`.
+const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcNlArchive) return;
+    window.__tlcNlArchive = 1;
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function fmtDate(iso) {
+      if (!iso) return '';
+      var d = new Date(iso + 'T12:00:00');
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+    function closeAll(except) {
+      var open = document.querySelectorAll('.tlcb-nl-full:not([hidden])');
+      for (var i = 0; i < open.length; i++) if (open[i] !== except) open[i].hidden = true;
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest ? e.target.closest('.tlcb-nl-toggle') : null;
+      if (!t) return;
+      e.preventDefault();
+      var id = t.getAttribute('data-nl-id');
+      var panel = t.parentElement ? t.parentElement.querySelector('.tlcb-nl-full') : null;
+      if (!id || !panel) return;
+      if (!panel.hidden) { panel.hidden = true; return; }
+      closeAll(panel);
+      panel.hidden = false;
+      if (panel.getAttribute('data-loaded')) return;
+      panel.innerHTML = '<p class="tlcb-note">Loading&#8230;</p>';
+      fetch('https://admin.timothystl.org/api/newsletter/' + id).then(function (r) {
+        if (!r.ok) throw new Error('not found');
+        return r.json();
+      }).then(function (n) {
+        panel.setAttribute('data-loaded', '1');
+        var html = '<div class="tlcb-nl-full-date">' + esc(fmtDate(n.published_at)) + '</div>' +
+          '<div class="tlcb-nl-full-body">' + (n.pastor_note || '') + '</div>';
+        if (n.events && n.events.length) {
+          html += '<div class="tlcb-nl-full-events">' + n.events.map(function (ev) {
+            return '<div class="tlcb-nl-full-ev"><strong>' + esc(ev.event_name || '') + '</strong> ' +
+              esc([ev.event_date, ev.event_time].filter(Boolean).join(' · ')) +
+              (ev.event_desc ? ' &#8212; ' + esc(ev.event_desc) : '') + '</div>';
+          }).join('') + '</div>';
+        }
+        panel.innerHTML = html;
+      }).catch(function () {
+        panel.innerHTML = '<p class="tlcb-note">Could not load this letter right now.</p>';
+      });
+    });
+  })();
+` + '<\/script>';
+
 // ── THE MARKET APPLICATION'S BROWSER HALF ────────────────────────────────────
 // Shipped inside the block for the same reason as the three above: the block
 // works wherever it is rendered — the edge-rendered first paint, or the
@@ -4694,32 +4798,40 @@ function renderInner(b, opts) {
     const open = issues.slice(0, b.count);
     const rest = issues.slice(b.count);
 
-    // ⚠ A PLAIN <a href="/news/:id"> IS A FULL PAGE RELOAD, NOT THE IN-PLACE
-    // DETAIL VIEW public/index.html ALREADY BUILDS. The legacy hardcoded
-    // /news page's own "Read this letter" button has always called
-    // loadNewsletterDetail(id) and swallowed the click; this block never
-    // did, so reading a letter from a published page reloaded the whole
-    // document from scratch — a real navigation, which reads as a window
-    // popping up rather than the page quietly swapping to the letter. The
-    // href stays real (a working link if the script never loads, or the
-    // block is read outside a browser) and the handler only intercepts a
-    // click it can actually act on.
-    const detailClick = (n) => opts.editing
-      ? ' onclick="return false"'
-      : ` onclick="if(window.loadNewsletterDetail){event.preventDefault();window.loadNewsletterDetail(${Number(n.id) || 0})}"`;
+    // ⚠ A PLAIN <a href="/news/:id"> IS A FULL PAGE RELOAD. This block does
+    // NOT use loadNewsletterDetail()/the body-appended overlay that block
+    // (public/index.html) and the "letter" block type both open — reported
+    // directly, on this exact block: "it still does a pop up window... i
+    // dont want the overlay." NEWSLETTER_ARCHIVE_SCRIPT below expands the
+    // letter IN PLACE instead, inside the card (or under the row) that was
+    // clicked, on this same page, with no modal anywhere. The href stays
+    // real — a working link if the script never loads, or the block is read
+    // outside a browser — and the script only ever intercepts a click it can
+    // act on.
+    // ⚠ THE TOGGLE CLASS GOES IN THE SAME class="" ATTRIBUTE AS THE ELEMENT'S
+    // OWN — never a second class="" appended after it. Two class attributes
+    // on one tag is invalid HTML, and a browser honors only the first, so a
+    // second one silently does nothing at all: the exact "looks wired, does
+    // nothing" failure this file's own dead-control rule warns about.
+    const openAttrs = (n) => opts.editing ? ' onclick="return false"' : ` data-nl-id="${Number(n.id) || 0}"`;
+    const toggleClass = opts.editing ? '' : ' tlcb-nl-toggle';
     const card = (n) => {
-      const note = (n.pastor_note || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+      const note = textFromRich(n.pastor_note).slice(0, 220);
       return `<div class="tlcb-nl-item">
         <span class="tlcb-nl-date">${esc(fmtNewsDate(n.published_at))}</span>
         <span class="tlcb-nl-subj">${esc(n.subject || '')}</span>
         ${note ? `<p class="tlcb-nl-note">${esc(note)}${note.length >= 220 ? '…' : ''}</p>` : ''}
-        <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${detailClick(n)}>Read this letter</a>
+        <a class="tlcb-nl-link${toggleClass}" href="/news/${esc(n.id)}"${openAttrs(n)}>Read this letter</a>
+        <div class="tlcb-nl-full" hidden></div>
       </div>`;
     };
-    const row = (n) => `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${detailClick(n)}>
-      <span class="tlcb-nl-row-d">${esc(fmtNewsDate(n.published_at, true))}</span>
-      <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
-    </a>`;
+    const row = (n) => `<div class="tlcb-nl-rowwrap">
+      <a class="tlcb-nl-row${toggleClass}" href="/news/${esc(n.id)}"${openAttrs(n)}>
+        <span class="tlcb-nl-row-d">${esc(fmtNewsDate(n.published_at, true))}</span>
+        <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
+      </a>
+      <div class="tlcb-nl-full" hidden></div>
+    </div>`;
 
     // ── Everything older than the open ones folds away, a month at a time ──
     // The archive used to print a title row for every issue it had, which on a
@@ -4758,8 +4870,10 @@ function renderInner(b, opts) {
     </details>`).join('');
 
     const body = open.map(card).join('') + months;
+    // Only where there is something to open. No issues, no script.
+    const nlScript = !opts.editing && issues.length ? NEWSLETTER_ARCHIVE_SCRIPT : '';
     return `<div class="tlcb-stack">${renderHead(opts, b)}
-      ${body ? `<div class="tlcb-nl-list">${body}</div>` : `<p class="tlcb-note">No newsletters yet.</p>`}</div>`;
+      ${body ? `<div class="tlcb-nl-list">${body}</div>` : `<p class="tlcb-note">No newsletters yet.</p>`}${nlScript}</div>`;
   }
 
   if (t === 'staff') {
