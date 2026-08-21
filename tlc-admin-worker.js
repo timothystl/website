@@ -133,7 +133,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
          issueStatus, sendSummary, parseSubscriberCsv,
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
-         prettyClock, eventRowFromPost, orderEventRows } from './admin/newsletter.js';
+         prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -7330,7 +7330,11 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
            AND (channels IS NULL OR channels LIKE '%email%')
          ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today, today).all();
-      const eventPicker = eventPickerHtml(await upcomingEventPosts(env));
+      // A new issue starts with every event in the next two weeks ticked —
+      // see the note on defaultUpcomingEventIds — so the sidebar isn't
+      // empty unless the office deliberately unchecks everything.
+      const upcomingPostsForNew = await upcomingEventPosts(env);
+      const eventPicker = eventPickerHtml(upcomingPostsForNew, defaultUpcomingEventIds(upcomingPostsForNew, churchDatePlus(14)));
       const newsPickerHtml = emailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
         : emailItems.results.map(item => `

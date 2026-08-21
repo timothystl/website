@@ -10,7 +10,7 @@ import {
   SUBJECT_LIMIT, PREHEADER_LIMIT, isSent, canEdit, approvalState,
   issueStatus, sendSummary, parseSubscriberCsv,
   parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
-  prettyClock, eventRowFromPost, orderEventRows,
+  prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -282,6 +282,24 @@ group('an issue\'s event rows are built from posts, not typed');
     { event_name: 'First', event_date: '2026-09-01' },
   ]);
   eq(sameDay.map((r) => r.event_name).join(','), 'Second,First', 'a tie keeps the order it was given');
+}
+
+// ── a new issue starts with the nearby events already ticked ────────────────
+group('a new issue does not start with an empty sidebar');
+{
+  const posts = [
+    { id: 1, event_date: '2026-09-01' },  // within the window
+    { id: 2, event_date: '2026-09-14' },  // exactly on the cutoff — still included
+    { id: 3, event_date: '2026-09-15' },  // one day past the cutoff — not yet
+    { id: 4, event_date: null },          // no date at all
+  ];
+  const picked = defaultUpcomingEventIds(posts, '2026-09-14');
+  eq(picked.join(','), '1,2', 'events on or before the cutoff are pre-ticked, later ones are not');
+  ok(picked.every((id) => typeof id === 'string'), 'ids come back as strings, matching what a checkbox posts');
+
+  eq(defaultUpcomingEventIds([], '2026-09-14').length, 0, 'no posts means nothing to tick');
+  eq(defaultUpcomingEventIds(posts, '').length, 0, 'no cutoff — refuse rather than guess a window');
+  eq(defaultUpcomingEventIds(posts, null).length, 0, 'and a missing cutoff is the same as an empty one');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
