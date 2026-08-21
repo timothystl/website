@@ -1090,6 +1090,115 @@ works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
 
+### The print sheet's own isolation had a documented gap, and it was hit; the list view's time range had none (2026-08-20)
+
+Dinger, after the palette fix above: *"the print calendar is just printing
+the full page not the calendar on one page of paper. and on agenda view the
+time is printing over the events in places."* Both real, both traced to the
+ground, neither where the earlier reports about this feature had looked.
+
+**The print bug was the exact gap `styles.css`'s own comment already
+admitted existed.** The `:has()`-based "allowlist, not denylist" isolation
+(v5.29.0/v5.30.0-era, the fix for "it is printing the whole page" the first
+time) says outright: *"An inactive .page is already display:none, so only the
+page actually showing is ever in the printed document. A browser without
+:has() prints the page with its chrome above the sheet: degraded, not
+broken, and every current browser has it."* That last clause was optimistic,
+not universal — a church office computer is exactly the machine that goes
+years between browser updates, and "degraded" here means precisely what was
+reported: the nav, hero, calendar widget and footer print above the sheet and
+push it onto a second and third page.
+
+- **⚠ NOT REPRODUCIBLE BY READING THE CSS OR BY RENDERING IN THIS SANDBOX'S
+  OWN CHROMIUM**, which supports `:has()` fully — a real PDF generated against
+  the actual production feed (72 events) came out as one correctly-sized
+  page, byte-identical to the already-passing test suite's own claim. The gap
+  only shows up in a browser that does not understand the selector, and there
+  is no way to make headless Chromium NOT understand it. **Simulated the only
+  honest way available**: served `styles.css` with every rule whose selector
+  contains `:has(` stripped before it reaches the page. A selector list
+  containing an unsupported pseudo-class is invalid CSS and the *whole rule*
+  is dropped by a real non-supporting browser too — this produces the
+  identical CSSOM a real one would have, not an approximation of it. Under
+  that stripped stylesheet, the exact reported symptom reproduced: `nav`,
+  `.page-hero`, the newsletter band and the footer all still visible at print
+  time, the sheet pushed 416px down the page, and a 4-page PDF where the
+  church calendar was more or less lost in the middle of the church website.
+- **The fix is a second, `:has()`-free mechanism that runs alongside the
+  first, not a replacement for it.** There is no selector-only way to say
+  "hide everything except the path down to one element" without `:has()` —
+  that is the whole reason the CSS needed it in the first place. So this
+  walks the DOM by hand, in `public/index.html`: from `.tlc-print-sheet`,
+  climb to `<body>`, and at every step hide every sibling of the node just
+  left and flatten the parent's own padding/margin/width/background exactly
+  as the `:has()` rule two lines above it already does — the same allowlist,
+  built with `element.style.display='none'` instead of a selector. Every
+  change is recorded and undone on `afterprint`.
+- **⚠ FIRES ON `beforeprint`/`afterprint`, NOT ON THE BUTTON CLICK.** The
+  "Print month" button's own handler is a bare `window.print()`
+  (`tlcCalClick`); binding the fallback to that click would miss Ctrl/Cmd+P
+  and the browser's own Print menu item, both of which call `window.print()`
+  without ever touching the button. `beforeprint`/`afterprint` fire from
+  whichever of the three actually triggers printing — confirmed directly:
+  `window.print()` under headless Chromium fires a real, synchronous
+  `beforeprint`, which is what makes this testable at all.
+- **⚠ Where `:has()` IS supported, both mechanisms run.** Harmless — they
+  produce the same outcome, verified by screenshotting the real production
+  feed with the fix in place and confirming the sheet renders byte-identical
+  to before this pass (a single letter-landscape page, nothing else visible).
+- **The one thing the JS walk cannot reach: a pseudo-element.**
+  `body::before` is a decorative full-page noise-texture overlay
+  (`z-index:1000`), and there is no `style.display` on a pseudo-element for
+  JS to touch. `body[data-tlc-printing]::before{display:none !important;}`
+  is the companion — a plain attribute selector, no `:has()` involved — keyed
+  off the same attribute the JS walk sets on `<body>` while it is active.
+
+**The list-view overlap was never fixed at all — it is new, from this
+codebase's own enhancement over the design's original mock.** `tlcCalSpan()`
+prints a start–end range ("10:00 AM – 12:00 PM"), not the single start time
+the mock's own `.ltime` column was sized for; a range spanning noon does not
+collapse to one meridiem, so it runs nearly half again as wide as the ones
+that do ("8:00 – 9:15 AM"). The column was a fixed `88px` with
+`white-space:nowrap` on the text inside it — sized right for what the mock
+showed, wrong for what this site actually renders. `minmax(88px,max-content)`
+lets the column grow when the range genuinely needs the room.
+
+- **⚠ `getBoundingClientRect()` ON THE COLUMN'S OWN BOX DOES NOT CATCH THIS,
+  AND THE FIRST VERSION OF THE TEST DID NOT EITHER.** `.ltime` is blockified
+  as a grid item; with a *fixed* `88px` track its box stays exactly 88px even
+  when its `nowrap` content is wider — the overflow paints past the box's own
+  edge without growing the rect the box reports. Only a `Range` over the
+  text's actual contents reports where the glyphs really land. Verified by
+  running the same measurement against the OLD 88px column: the box itself
+  read as non-overlapping (an 88px box ending 14px before the title, gap
+  intact) while the *text inside it* read out to 25px past the title's own
+  left edge — a real, rendered overlap the box-only check was blind to.
+- **⚠ THE BUG ONLY SHOWS AT A DESKTOP WIDTH, WITH LIST EXPLICITLY CHOSEN, AND
+  THE FIRST VERSION OF THE TEST GOT BOTH WRONG.** Under 900px the phone rules
+  collapse `.tlc-cal-listev` to a single column — time and title stack
+  instead of sitting side by side, so there is nothing to overlap there. And
+  a window wider than 900px defaults to the **month grid**; List is a
+  toggle a visitor presses, not the default a wide window opens on — the
+  report says "agenda view," meaning somebody had clicked it. The first pass
+  at this test used `width:800` (the phone layout, where the columns stack
+  and can never overlap) and passed cleanly against the unfixed CSS — a test
+  that cannot fail is not a test.
+
+Run: two new groups in `NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs`
+(111 total) — the `:has()`-fallback group serves a stylesheet with every
+`:has(` rule stripped, confirms the resulting CSSOM genuinely carries none,
+triggers printing through the real `beforeprint` pipeline (not a stand-in),
+and checks the chrome is hidden, the sheet sits flush at the page origin, and
+a generated PDF is one page; the list-view group drives the reported
+10:00 AM–12:00 PM case at desktop width with List explicitly selected, and
+measures the rendered text's own extent rather than its box. Both were
+verified non-vacuous by reverting each fix independently: dropping the
+`index.html` walk fails the four `:has()`-fallback assertions with the real
+symptom (four stray elements, a sheet pushed 416px down the page, a 4-page
+PDF); dropping the `styles.css` column change fails the list-view assertion
+with the real symptom (time text ending at 406px against a title starting at
+381px).
+
 ### The calendar palette couldn't actually be read, and the comment that said it was checked was wrong (v5.38.0, 2026-08-20)
 
 Dinger: *"It needs to be readable publicly"* — about the church calendar. Not
