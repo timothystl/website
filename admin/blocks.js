@@ -3973,6 +3973,36 @@ const LIGHTBOX_SCRIPT = '<script>' + `
   })();
 ` + '<\/script>';
 
+// ── THE LETTER BLOCK'S OWN LINKS OPEN THE OVERLAY, NOT A NEW PAGE ────────────
+// Every "Read this week" / older-letter link this block renders keeps its
+// real href="/news/<id>" (a shared link, a new tab, no-JS all still work) —
+// but in public rendering it also carries class="tlcb-lt-open"
+// data-nl-id="<id>", which this script intercepts so the click stays on
+// /news and opens the same overlay loadNewsletterDetail() (public/index.html)
+// already builds for a direct /news/<id> visit, rather than letting a real
+// navigation run into tlcMaybeTakeOverSitePage()'s "hide every child of
+// #page-news" pass, which is what silently swallowed the old in-page panel.
+//
+// ⚠ Guarded like every other block script (COUNTDOWN_SCRIPT, LIGHTBOX_SCRIPT):
+// idempotent, delegated off document, appended only in public rendering.
+//
+// ⚠ No backticks anywhere in this string. It lives inside a template literal
+// and one would end it, breaking the module while still passing node --check.
+const LETTER_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcLetterLinks) return;
+    window.__tlcLetterLinks = 1;
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('.tlcb-lt-open') : null;
+      if (!a) return;
+      var id = a.getAttribute('data-nl-id');
+      if (!id || typeof window.loadNewsletterDetail !== 'function') return;
+      e.preventDefault();
+      window.loadNewsletterDetail(id);
+    });
+  })();
+` + '<\/script>';
+
 // ── THE MARKET APPLICATION'S BROWSER HALF ────────────────────────────────────
 // Shipped inside the block for the same reason as the three above: the block
 // works wherever it is rendered — the edge-rendered first paint, or the
@@ -4474,27 +4504,36 @@ function renderInner(b, opts) {
     const eyebrow = newest
       ? `<div class="tlcb-eyebrow">${esc(fmtNewsDate(newest.published_at))}</div>`
       : renderEyebrow(opts, b);
+    // \u26a0 `tlcb-lt-open`/`data-nl-id` are what LETTER_SCRIPT (below) intercepts
+    // so a click stays on /news and opens the overlay `loadNewsletterDetail()`
+    // (public/index.html) builds, rather than running into a real navigation
+    // that `tlcMaybeTakeOverSitePage()`'s "hide every child of #page-news"
+    // pass would swallow. The real href stays too \u2014 a shared link, a new tab
+    // and no-JS all still work; the script only ever prevents the default.
     const read = newest
-      ? `<a class="tlcb-btn" href="/news/${esc(newest.id)}"${dead}>Read this week</a>`
+      ? `<a class="tlcb-btn tlcb-lt-open" href="/news/${esc(newest.id)}" data-nl-id="${esc(newest.id)}"${dead}>Read this week</a>`
       : '';
     // The sign-up goes to the site's own page rather than carrying a form of
     // its own: there is exactly one newsletter sign-up on this site and it is
     // site-wide chrome (Menu \u2192 Appearance), not something a block owns a
     // second copy of.
     const join = b.signup ? `<a class="tlcb-btn tlcb-btn--ghost-light" href="/news#subscribe"${dead}>Get it by email</a>` : '';
-    const list = rest.map((n) => `<a class="tlcb-lt-row" href="/news/${esc(n.id)}"${dead}>
+    const list = rest.map((n) => `<a class="tlcb-lt-row tlcb-lt-open" href="/news/${esc(n.id)}" data-nl-id="${esc(n.id)}"${dead}>
       <span class="tlcb-lt-s">${esc(n.subject || '')}</span>
       <span class="tlcb-lt-d">${esc(fmtNewsDate(n.published_at, true))}</span></a>`).join('');
     const right = list
       ? `<div class="tlcb-lt-list">${list}</div>`
       : (opts.editing ? `<span class="tlcb-note">Older letters will be listed here as they are sent.</span>` : '');
+    // The script only has a job when there is a real link on the page for it
+    // to intercept, and it must never ship in the editor canvas.
+    const letterScript = !opts.editing && (newest || rest.length) ? LETTER_SCRIPT : '';
     return `<div class="tlcb-lt">
       <div class="tlcb-lt-b">${eyebrow}
         ${field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''), ' data-ph="The weekly letter"')}
         ${renderBody(opts, b, def, 'What the letter is, and who writes it')}
         ${read || join ? `<div class="tlcb-btns">${read}${join}</div>` : ''}
         ${newest ? '' : `<span class="tlcb-note">No letters have been sent yet, so the button is hidden until the first one goes out.</span>`}
-      </div>${right}</div>`;
+      </div>${right}${letterScript}</div>`;
   }
 
   if (t === 'alert') {
