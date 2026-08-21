@@ -3036,6 +3036,33 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-nl-full-body{font-size:15px;line-height:1.8;color:#1A1A2A;}
 .tlcb-nl-full-events{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
 .tlcb-nl-full-ev{font-size:13px;line-height:1.7;color:#3A3A4A;padding:4px 0;}
+/* The rest of the letter — secondary note, featured news, WOL/LASM, the
+   tertiary note and CTA, extra notes, Bible classes. Same section order
+   buildEmailHtml() (admin/email.js) uses, and the same neighboring style
+   the overlay reader in public/index.html already carries, so a letter
+   reads the same whichever surface opened it. */
+.tlcb-nl-full-sec{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;font-size:14px;line-height:1.7;color:#3A3A4A;}
+.tlcb-nl-full-eyebrow{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;}
+.tlcb-nl-full-news{margin-top:16px;padding-top:14px;border-top:2px solid #C9973A;}
+.tlcb-nl-full-news + .tlcb-nl-full-news{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;border-top-width:1px;}
+.tlcb-nl-full-news-t{font-family:var(--tlcb-serif);font-size:16px;color:#1E2D4A;margin-bottom:4px;}
+.tlcb-nl-full-news-s{font-size:13px;line-height:1.65;color:#3A3A4A;}
+.tlcb-nl-full-more{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-more-item{padding:7px 0;border-top:1px solid #EFEBE1;}
+.tlcb-nl-full-more-item:first-child{border-top:0;}
+.tlcb-nl-full-ministry{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.tlcb-nl-full-ministry--one{grid-template-columns:1fr;max-width:340px;}
+.tlcb-nl-full-ministry-block{background:#F7F3EC;border-left:3px solid #4A5E3A;border-radius:0 8px 8px 0;padding:12px;}
+.tlcb-nl-full-ministry-label{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#4A5E3A;margin-bottom:6px;}
+.tlcb-nl-full-ministry-body{font-size:13px;line-height:1.65;color:#3A3A4A;}
+.tlcb-nl-full-tertiary{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-tertiary-panel{background:#F7F3EC;border-left:3px solid #C9973A;border-radius:0 8px 8px 0;padding:14px 16px;}
+.tlcb-nl-full-tertiary-body{font-size:13px;line-height:1.7;color:#3A3A4A;}
+.tlcb-nl-full-cta{display:inline-block;margin-top:12px;background:#C9973A;color:#1E2D4A;font:700 13px var(--tlcb-ui);padding:9px 20px;border-radius:6px;text-decoration:none;}
+.tlcb-nl-full-extra{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-extra-body{font-size:13px;line-height:1.7;color:#3A3A4A;}
+.tlcb-nl-full-bible{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-bible-item{font-size:13px;line-height:1.65;color:#3A3A4A;padding:4px 0;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
 /* The tile clips, the photo fills it. overflow:hidden is what keeps a zoomed
@@ -4077,7 +4104,16 @@ const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
     window.__tlcNlArchive = 1;
     function esc(s) {
       return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    // Same rule as safeHref() in public/index.html — an office-typed CTA
+    // address is never trusted as-is, because it reaches an href attribute.
+    function safeHref(u) {
+      var s = String(u == null ? '' : u).trim();
+      if (!s) return '';
+      if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
+      if (/^[/#]/.test(s)) return s;
+      return '';
     }
     function fmtDate(iso) {
       if (!iso) return '';
@@ -4108,12 +4144,72 @@ const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
         panel.setAttribute('data-loaded', '1');
         var html = '<div class="tlcb-nl-full-date">' + esc(fmtDate(n.published_at)) + '</div>' +
           '<div class="tlcb-nl-full-body">' + (n.pastor_note || '') + '</div>';
+        // Same section order buildEmailHtml() (admin/email.js) uses: secondary
+        // note, featured/additional news, events, WOL/LASM, tertiary note +
+        // CTA, extra notes, Bible classes. A letter with none of these still
+        // renders correctly — every block below is conditional on its own data.
+        if (n.secondary_note) {
+          html += '<div class="tlcb-nl-full-sec">' + n.secondary_note + '</div>';
+        }
+        if (n.news_items && n.news_items.length) {
+          var mainNews = n.news_items[0];
+          var secondaryNews = n.news_items[1] || null;
+          var moreNews = n.news_items.slice(2);
+          html += '<div class="tlcb-nl-full-news"><div class="tlcb-nl-full-eyebrow">Featured</div>' +
+            '<div class="tlcb-nl-full-news-t">' + esc(mainNews.title || '') + '</div>' +
+            (mainNews.summary ? '<div class="tlcb-nl-full-news-s">' + esc(mainNews.summary) + '</div>' : '') +
+            '</div>';
+          if (secondaryNews) {
+            html += '<div class="tlcb-nl-full-news"><div class="tlcb-nl-full-news-t">' + esc(secondaryNews.title || '') + '</div>' +
+              (secondaryNews.summary ? '<div class="tlcb-nl-full-news-s">' + esc(secondaryNews.summary) + '</div>' : '') +
+              '</div>';
+          }
+          if (moreNews.length) {
+            html += '<div class="tlcb-nl-full-more"><div class="tlcb-nl-full-eyebrow">More from Timothy</div>' +
+              moreNews.map(function (item) {
+                return '<div class="tlcb-nl-full-more-item"><div class="tlcb-nl-full-news-t">' + esc(item.title || '') + '</div>' +
+                  (item.summary ? '<div class="tlcb-nl-full-news-s">' + esc(item.summary) + '</div>' : '') + '</div>';
+              }).join('') + '</div>';
+          }
+        }
         if (n.events && n.events.length) {
           html += '<div class="tlcb-nl-full-events">' + n.events.map(function (ev) {
             return '<div class="tlcb-nl-full-ev"><strong>' + esc(ev.event_name || '') + '</strong> ' +
               esc([ev.event_date, ev.event_time].filter(Boolean).join(' · ')) +
               (ev.event_desc ? ' &#8212; ' + esc(ev.event_desc) : '') + '</div>';
           }).join('') + '</div>';
+        }
+        var ministryBlock = function (label, body) {
+          return '<div class="tlcb-nl-full-ministry-block"><div class="tlcb-nl-full-ministry-label">' + esc(label) + '</div>' +
+            '<div class="tlcb-nl-full-ministry-body">' + body + '</div></div>';
+        };
+        if (n.wol_content && n.lasm_content) {
+          html += '<div class="tlcb-nl-full-ministry">' +
+            ministryBlock('Word of Life', n.wol_content) + ministryBlock('LASM', n.lasm_content) + '</div>';
+        } else if (n.wol_content || n.lasm_content) {
+          html += '<div class="tlcb-nl-full-ministry tlcb-nl-full-ministry--one">' +
+            ministryBlock(n.wol_content ? 'Word of Life' : 'LASM', n.wol_content || n.lasm_content) + '</div>';
+        }
+        if (n.tertiary_note) {
+          var ctaHref = safeHref(n.tertiary_cta_url);
+          var ctaBtn = (n.tertiary_cta_label && ctaHref)
+            ? '<a class="tlcb-nl-full-cta" href="' + esc(ctaHref) + '">' + esc(n.tertiary_cta_label) + '</a>' : '';
+          html += '<div class="tlcb-nl-full-tertiary"><div class="tlcb-nl-full-tertiary-panel">' +
+            '<div class="tlcb-nl-full-tertiary-body">' + n.tertiary_note + '</div>' + ctaBtn + '</div></div>';
+        }
+        if (n.extras && n.extras.length) {
+          html += n.extras.map(function (note) {
+            return '<div class="tlcb-nl-full-extra">' +
+              (note.title ? '<div class="tlcb-nl-full-eyebrow">' + esc(note.title) + '</div>' : '') +
+              '<div class="tlcb-nl-full-extra-body">' + (note.body || '') + '</div></div>';
+          }).join('');
+        }
+        if (n.bible_classes && n.bible_classes.length) {
+          html += '<div class="tlcb-nl-full-bible"><div class="tlcb-nl-full-eyebrow">Bible Classes</div>' +
+            n.bible_classes.map(function (c) {
+              return '<div class="tlcb-nl-full-bible-item"><strong>' + esc(c.topic || '') + '</strong> ' +
+                esc([c.leader, c.location].filter(Boolean).join(' · ')) + '</div>';
+            }).join('') + '</div>';
         }
         panel.innerHTML = html;
       }).catch(function () {
