@@ -712,7 +712,8 @@ async function pageData(env, reqKey) {
       // NEWSLETTER_PUBLIC_WHERE_SQL: published, and not superseded by a
       // later, corrected issue that has since been sent in its place.
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
-         WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC, id DESC LIMIT 12`),
+         WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} AND published_at >= ?
+         ORDER BY published_at DESC, id DESC LIMIT 12`, churchDatePlus(-365)),
       // The giving page's three moving parts. They are read here, with
       // everything else a block might need, so the Giving widget and the
       // Amount ladder can be SELF-FILLING blocks — the one property that
@@ -3780,8 +3781,12 @@ export default {
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
+      // Anything more than a year old is probably not worth keeping, or at
+      // least displaying — the archive grows without bound otherwise, and a
+      // church that has mailed a weekly letter for years would otherwise
+      // hand every visitor the whole history on one request.
       const [rows, allEvts] = await Promise.all([
-        env.DB.prepare(`SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC`).all(),
+        env.DB.prepare(`SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} AND published_at >= ? ORDER BY published_at DESC`).bind(churchDatePlus(-365)).all(),
         env.DB.prepare('SELECT * FROM events ORDER BY event_date, sort_order').all()
       ]);
       const evtsByNewsletter = {};
@@ -3821,7 +3826,7 @@ export default {
         `SELECT id, subject, pastor_note, secondary_note, wol_content, lasm_content,
                 tertiary_note, tertiary_cta_label, tertiary_cta_url,
                 ministry_content, ministry_type, published_at, format,
-                cta_url, cta_label, bible_classes, news_item_ids
+                cta_url, cta_label, bible_classes, news_item_ids, extra_notes
            FROM newsletters
           WHERE id = ? AND ${NEWSLETTER_PUBLIC_WHERE_SQL}`
       ).bind(id).first();
@@ -3846,11 +3851,16 @@ export default {
       // FX-04: every rich field this endpoint hands the SPA, which drops all
       // five straight into `innerHTML` in loadNewsletterDetail().
       const clean = { ...row };
+      delete clean.extra_notes;
       for (const k of ['pastor_note', 'secondary_note', 'wol_content', 'lasm_content', 'tertiary_note']) {
         clean[k] = richOut(clean[k]);
       }
       if (clean.ministry_type !== 'image') clean.ministry_content = richOut(clean.ministry_content);
-      return new Response(JSON.stringify({ ...clean, events: evts.results, news_items: newsItems, bible_classes: bibleClasses }), {
+      // The extra notes (up to MAX_EXTRA_NOTES) — same shape buildEmailHtml()
+      // reads for the sent issue, sanitized the same way every other rich
+      // field on this response is.
+      const extras = parseExtras(row.extra_notes).map((n) => ({ title: n.title, body: richOut(n.body) }));
+      return new Response(JSON.stringify({ ...clean, events: evts.results, news_items: newsItems, bible_classes: bibleClasses, extras }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
