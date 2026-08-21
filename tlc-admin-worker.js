@@ -3067,6 +3067,33 @@ export default {
       } catch (_) { /* retried on the next request */ }
     }
 
+    // ── ONE-TIME: THE VENDOR PAGES WERE NESTED UNDER SERMONS, NOT MINISTRIES
+    // (2026-08-21) ──
+    // Reported directly, with a screenshot of the Pages screen: the two
+    // Christmas Market vendor pages ("Christmas Market Vendors" and its own
+    // "Christmas Market Vendors Apply" child) were rendering under a
+    // "Sermons" section header. `admin/market-page-seed.js` and
+    // `admin/market-vendors-apply-seed.js` have always set the correct chain
+    // — marketvendorsapply → marketvendors → christmasmarket → ministries —
+    // and `INSERT OR IGNORE` only ever writes a page row ONCE, so a stale
+    // `parent_id` left on the live row from before this hierarchy was
+    // settled was never going to be corrected by the seed running again.
+    // ⚠ SCOPED TO ONE COLUMN, NOT A RE-SEED. Nothing else on either page —
+    // its blocks, its published content, `updated_by` — is touched; this
+    // fixes only where the page sits in the tree, which is what was wrong.
+    const MARKET_PARENT_FIX_MARKER = 'market_vendor_pages_parent_fix_v1';
+    const marketParentFixed = markersOk || markers.get(MARKET_PARENT_FIX_MARKER) === 'done';
+    if (!marketParentFixed) {
+      try {
+        for (const page of MARKET_SEEDED_PAGES) {
+          await env.DB.prepare('UPDATE pages SET parent_id = ? WHERE id = ? AND parent_id IS NOT ?')
+            .bind(page.parent_id, page.id, page.parent_id).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(MARKET_PARENT_FIX_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
     // ── ONE-TIME: THE CHRISTMAS MARKET BECOMES ONE EVENT ROW (2026-08-18) ──
     // The eleven `market_*` site_settings keys become the market's own
     // `site_events` row, and every `market_vendors` row becomes a
