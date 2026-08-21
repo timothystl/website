@@ -5640,16 +5640,16 @@ group('Publish is refused server-side when the checklist is incomplete, even via
   // Claim action=publish with only ONE of the four education checklist items
   // ticked — the disabled button on screen is a courtesy, not the rule.
   const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'education', action: 'publish', room: 'Library', check_teacher: '1' } });
+    form: { key, queue: 'education', action: 'publish', room: 'Youth Room', check_teacher: '1' } });
   eq(res.status, 302, 'still redirects — a refusal here is silent, not an error page');
   const row = db.prepare("SELECT published_at, checks_json, room FROM event_intake WHERE source_key = ?").get(key);
   eq(row.published_at, null, 'NOT marked ready — three of four items were never ticked');
   ok(JSON.parse(row.checks_json).teacher === true, 'the one real tick is still saved');
-  eq(row.room, 'Library', 'and so is the room — Save happens whether or not Publish succeeds');
+  eq(row.room, 'Youth Room', 'and so is the room — Save happens whether or not Publish succeeds');
 
   // Now tick the rest and publish for real.
   const res2 = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'education', action: 'publish', room: 'Library',
+    form: { key, queue: 'education', action: 'publish', room: 'Youth Room',
       check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1' } });
   eq(res2.status, 302, 'redirects on success too');
   const row2 = db.prepare("SELECT published_at, published_by FROM event_intake WHERE source_key = ?").get(key);
@@ -5674,11 +5674,11 @@ group('a deferred field set (a gym-sourced rental) is read-only against a crafte
   // deferredFieldsSource('rental', 'gym') in admin/intake.js. A crafted POST
   // trying to overwrite the renter's name through Intake must be dropped.
   const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'rental', action: 'save', room: 'Fellowship Hall',
+    form: { key, queue: 'rental', action: 'save', room: 'Gym',
       extra_renter: 'SOMEBODY ELSE ENTIRELY', extra_contact: 'not-a-real-contact' } });
   eq(res.status, 302, 'still saves the parts that are genuinely Intake’s (the room)');
   const row = db.prepare("SELECT extra_json, room FROM event_intake WHERE source_key = ?").get(key);
-  eq(row.room, 'Fellowship Hall', 'the room, which is not deferred, is saved');
+  eq(row.room, 'Gym', 'the room, which is not deferred, is saved');
   eq(row.extra_json, null, 'but extra_json was never written at all — the deferred fields have nowhere to land');
 
   // And the real renter name still comes from gym_groups, not from anything
@@ -5812,7 +5812,7 @@ group('the sidebar badge counts open Intake items, from the database alone');
   const key = `n:${db.prepare("SELECT id FROM news_items WHERE title='MDO Open House'").get().id}`;
   await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
   await call(env, '/event-intake/save', { cookie, method: 'POST', form: {
-    key, queue: 'education', action: 'publish', room: 'MDO Wing',
+    key, queue: 'education', action: 'publish', room: 'Multipurpose Room',
     check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1',
   } });
   const dashAfter = await call(env, '/dashboard', { cookie, fresh: true });
@@ -5890,6 +5890,58 @@ group('bulk type assignment sets one type on many events at once, and skips what
   await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
     form: { queue: 'inbox', type: 'meetings', keys: ['n:999999'] } });
   eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
+}
+
+// Three more reports off the same screen: the room list didn't match the
+// church's real spaces, the detail panel's own head (now wrapping eleven
+// type pills across three lines) pushed "Before it publishes" out of view,
+// and there was no way to act on a whole group of same-named events at once
+// ("i could pick all richmond heights and say those are gymn rentals").
+group('the room list is the church’s real spaces, the checklist sits above the type picker, and the list can be filtered by name');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Cub Scouts','Pat Reyes','preyes@example.org',1)").run();
+  const gymDate = churchDatePlus(9);
+  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:00','20:00','confirmed','')")
+    .run(gymDate);
+  await call(env, '/event-intake', { cookie, fresh: true });
+  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
+  const key = `b:${bookingId}`;
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
+
+  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
+
+  for (const room of ['Kitchen', 'Gym', 'Youth Room', '3rd Floor Classroom', 'Multipurpose Room', 'Sanctuary', 'Parking Lot']) {
+    has(page, `>${room}<`, `the room list offers "${room}"`);
+  }
+  for (const stale of ['Fellowship Hall', 'MDO Wing', 'Whole campus', 'Room 4', 'Lawn']) {
+    lacks(page, `>${stale}<`, `and no longer offers the old "${stale}"`);
+  }
+
+  // The checklist ("Before it publishes") now renders before the type pill
+  // row, which used to sit in the fixed head and, at eleven types, wrapped
+  // across three lines pushing everything else down. Reported as wanting the
+  // info box "moved up to the top so I can see it for the event."
+  const checklistAt = page.indexOf('Before it publishes');
+  const pillrowAt = page.indexOf('class="ei-pillrow"');
+  ok(checklistAt >= 0 && pillrowAt >= 0, 'both the checklist and the type picker are on the page');
+  ok(checklistAt < pillrowAt, 'the checklist renders before the type picker, not after it');
+  lacks(page.slice(page.indexOf('class="ei-detail-head"'), page.indexOf('class="ei-detail-body"')), 'ei-pillrow',
+    'and the type picker is no longer inside the fixed head — that was most of what pushed the checklist out of view');
+
+  // The name filter and "select all shown" — Andrew: "i could pick all
+  // richmond heights and say those are gymn rentals, all worship is worship,
+  // all handbells are music." Deep interaction (typing narrows the list,
+  // "select all shown" ticks only what the filter left visible, clearing the
+  // filter never un-ticks anything) was verified directly in a real browser
+  // against this exact markup; this pins the wiring that makes it possible.
+  has(page, 'id="ei-filter"', 'a name filter input is on the page');
+  has(page, 'oninput="tlcEiFilter(this)"', 'wired to filter the list live');
+  has(page, 'id="ei-filter-count"', 'and it says how many of the queue currently match');
+  has(page, 'onclick="tlcEiSelectAllShown(this)"', '"Select all shown" now means what it says — only what the filter left visible');
+  lacks(page, "querySelectorAll('.ei-row-check').forEach(function(c){c.checked=this.checked}",
+    'not the old handler that ticked the whole queue regardless of a filter');
 }
 
 // ⚠ Reported live: "when i assign type, it pops up the confirmation screen,

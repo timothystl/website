@@ -1834,6 +1834,93 @@ no tick mark at all; the reorder fix fails with the checklist's own position
 fails with all events visible and no "+N more" line on a cell built to
 overflow.
 
+### The rooms match the real building, the type picker stopped crowding the checklist, and the list filters by name (v5.44.0, 2026-08-21)
+
+Three more, off the same `/event-intake` screen:
+
+> "the spaces to have as choices are kitchen, gym, youth room, 3rd floor
+> classroom, multipurpose room, sanctuary, parking lot. secondly, the side
+> panel that does event details needs to not be so far down the page, it
+> should float next to selected event or be at the top. and still would
+> like a sort ability or mass select based on name, so i could pick all
+> richmond heights and say those are gymn rentals, all worship is worship,
+> all handbells are music, etc."
+
+**`ROOMS` was still the mock's own guess at the building** — Sanctuary,
+Fellowship Hall, Library, Room 4, MDO Wing, Whole campus, Kitchen, Lawn —
+never corrected against what the church actually has. It is the real seven
+now: Sanctuary, Gym, Youth Room, 3rd Floor Classroom, Multipurpose Room,
+Kitchen, Parking Lot. ⚠ A row already carrying one of the retired names (an
+old `Fellowship Hall`, say) simply shows the blank `—` option on next load —
+the same as any other enum this admin edits — rather than anything being
+rewritten or migrated; the stored value is untouched until somebody re-saves.
+
+**The checklist being "so far down the page" turned out not to be about the
+checklist's own position at all — it was the type picker's.** The v5.43.0
+pass already moved "Before it publishes" ahead of a type's own extra fields.
+What was still pushing it out of view is that the type picker grew from four
+pills to eleven (v5.40.0) and sat in the FIXED head — which never scrolls
+away, so its own height is what has to shrink for anything else to be
+visible without scrolling. Eleven pills wrap across three lines in a
+390–470px column; three lines of pills plus the kicker and title is roughly
+the 170px of blank space the screenshot showed before "Every event" ever
+appeared.
+
+- **The pill row moved out of the head and into the scrollable body**, as its
+  own "Type" section, right after the checklist. Reassigning a type from this
+  screen is still one click on a pill — nothing about *how* it works changed
+  — it now costs one scroll less to see what an already-classified event
+  still needs, which is the far more common visit than reclassifying one.
+- **The fixed head is kicker, title and status only now.** Three lines
+  shrink to about one.
+- The "Pick a type" placeholder shown before any type is chosen said "above"
+  the checklist; it says "below" now, matching where the picker actually is.
+
+**A name filter, and "Select all shown" made to mean it.** Andrew: *"i could
+pick all richmond heights and say those are gymn rentals, all worship is
+worship, all handbells are music."* The bulk-assign toolbar (v5.40.0) could
+already tick every row in the current queue at once; there was no way to
+narrow that to *some* of them by what they're called.
+
+- **`#ei-filter` is a plain text input, client-side only** — `tlcEiFilter()`
+  hides any `.ei-row-line` whose `.ei-row-title` text doesn't contain what
+  was typed (case-insensitive), and says how many matched (`"2 of 11
+  shown"`). ⚠ It hides the WHOLE row-and-checkbox pair, not just the row,
+  so a box a filter has hidden cannot be silently selected by something else
+  either.
+- **`tlcEiSelectAllShown()` replaces the old inline forEach**, and now
+  actually reads its own name: it walks every `.ei-row-line` and ticks the
+  checkbox only where the row is not `display:none`. Before this it ticked
+  every row in the queue regardless of the filter, which would have quietly
+  turned "pick the two Richmond Heights bookings" into "pick everything."
+- **Clearing the filter never un-ticks anything.** A box checked while
+  "Richmond Heights" narrowed the list stays checked once the filter is
+  cleared or changed to something else — which is what makes several passes
+  work: filter to one name, tick, filter to a second name, tick those too,
+  then assign one type to the accumulated selection, or submit after each
+  pass for a different type per name.
+- **This is the one script this screen didn't already have** (the "Select
+  all shown" checkbox's own inline handler was the prior, smaller exception
+  to "no client JS at all" — see v5.40.0). `EI_SCRIPT` is the one `<script>`
+  block, two named functions, no bigger than the interaction needs.
+- **Verified in a real browser against the real generated markup**, not
+  reasoned about: seeded events including two both titled "Maplewood
+  Richmond Heights," typed the filter, confirmed exactly those two stayed
+  visible and only those two got ticked by "Select all shown," then cleared
+  the filter and confirmed all rows returned with the two ticks still in
+  place.
+
+Run: `node admin/intake.test.mjs` (196, the `ROOMS` assertion updated to the
+real spaces), and the `the room list is the church's real spaces, the
+checklist sits above the type picker, and the list can be filtered by name`
+group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1570) — the reorder and room-list assertions were each verified non-vacuous
+by reverting the fix they guard and confirming the real failure; the deep
+filter/select-all-shown interaction was verified directly in Chromium against
+the real rendered page rather than only pinning the markup, since a Node-only
+harness has no way to fire a real `input` or `click` event.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all

@@ -226,7 +226,7 @@ group('every type color is a real CALENDAR_PALETTE entry, at 4.5:1 against cream
 
 group('ROOMS and SOURCE labels are complete');
 {
-  ok(ROOMS.includes('Sanctuary') && ROOMS.includes('Fellowship Hall'), 'the two rooms every rental checklist references exist');
+  ok(ROOMS.includes('Sanctuary') && ROOMS.includes('Gym'), 'the two rooms every rental checklist references exist');
   for (const s of ['gcal', 'news', 'gym', 'local']) {
     ok(SOURCE_LABEL[s], `${s} has a label`);
     ok(SOURCE_COLOR[s], `${s} has a color`);

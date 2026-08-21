@@ -157,7 +157,7 @@ export function deferredFieldsSource(type, sourceKind) {
 }
 
 // ── ROOMS ─────────────────────────────────────────────────────────────────
-export const ROOMS = ['Sanctuary', 'Fellowship Hall', 'Library', 'Room 4', 'MDO Wing', 'Whole campus', 'Kitchen', 'Lawn'];
+export const ROOMS = ['Sanctuary', 'Gym', 'Youth Room', '3rd Floor Classroom', 'Multipurpose Room', 'Kitchen', 'Parking Lot'];
 
 // ── SOURCES ───────────────────────────────────────────────────────────────
 // Four now, one more than the mock's three: `gym` joins `gcal`/`news`/`local`
