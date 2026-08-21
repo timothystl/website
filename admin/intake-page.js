@@ -55,7 +55,7 @@ import {
   TYPES, TYPE_KEYS, TYPE_FIELDS, CHECKLISTS, ROOMS, SOURCE_LABEL, SOURCE_COLOR,
   intakeKeyFor, sourceKindOfKey, checklistFor, openCountOf, isReady,
   mergeIntakeItems, QUEUE_TOP, filterQueue, queueCounts, QUEUE_TITLES,
-  deferredFieldsSource,
+  deferredFieldsSource, VALUE_LABELS, VALUE_ORDER, typesForValue, typesWithNoValue,
 } from './intake.js';
 // ⚠ isValidTypeField()/isValidChecklistKey() are NOT imported here. The save
 // route below never trusts a posted FIELD NAME at all — it iterates
@@ -127,7 +127,13 @@ const INTAKE_CSS = `<link href="https://fonts.googleapis.com/css2?family=Bricola
 .ei-mid-list{flex:1;min-height:0;overflow:auto;padding:0 16px 24px;display:flex;flex-direction:column;gap:8px;}
 .ei-empty{padding:40px 12px;text-align:center;font-size:16px;color:#8A8898;}
 
-.ei-row{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:start;width:100%;text-align:left;cursor:pointer;background:#fff;border:1px solid #DDE3ED;border-left:4px solid #DDE3ED;border-radius:10px;padding:13px 15px;text-decoration:none;color:inherit;}
+.ei-bulkbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 2px 4px;font-size:13px;color:#4A4860;}
+.ei-bulkall{display:flex;align-items:center;gap:6px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;cursor:pointer;}
+.ei-bulkbar select{border:1px solid #DDE3ED;border-radius:8px;padding:7px 9px;background:#fff;font-size:13px;}
+.ei-row-line{display:flex;align-items:flex-start;gap:8px;}
+.ei-row-checkwrap{flex:none;padding-top:16px;}
+.ei-row-check{width:16px;height:16px;cursor:pointer;}
+.ei-row{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:start;flex:1;min-width:0;text-align:left;cursor:pointer;background:#fff;border:1px solid #DDE3ED;border-left:4px solid #DDE3ED;border-radius:10px;padding:13px 15px;text-decoration:none;color:inherit;}
 .ei-row:hover{border-color:#C9C2AE;}
 .ei-row-on{background:#FFFDF9;border-color:#1E2D4A;box-shadow:0 0 0 1px #1E2D4A inset;}
 .ei-row-date{display:flex;flex-direction:column;align-items:center;}
@@ -285,18 +291,27 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
       // nothing to sync. event_date is refreshed on every visit so the
       // sidebar badge (a DB-only count — see intakeOpenCount) stays roughly
       // current without ever fetching Google itself.
+      //
+      // ⚠ RUN IN PARALLEL, NOT ONE-AT-A-TIME. This used to be a serial
+      // `for…await` loop, and every GET of /event-intake runs it — including
+      // the redirect target after every single action, so picking a type on
+      // one event meant re-syncing the whole window (recurring services over
+      // ~63 days plus news/gym/local can genuinely run to 100+ rows) as one
+      // D1 round trip per row, awaited before the next began. Reported as the
+      // screen "hanging up" when assigning a type — it wasn't hung, it was
+      // waiting on a hundred-plus sequential writes it did not need to be
+      // sequential. Each row's key is distinct, so nothing here can collide
+      // with another row in the same batch; there is no reason two INSERTs
+      // for two different events have to wait on each other.
       async function syncIntakeRows(raw) {
         const dayOf = (iso) => String(iso || '').slice(0, 10);
-        for (const ev of raw) {
-          if (ev.source === 'local') continue;
+        await Promise.all(raw.filter((ev) => ev.source !== 'local').map((ev) => {
           const kind = ev.source === 'gcal' ? 'gcal' : ev.source === 'news' ? 'news' : 'gym';
-          try {
-            await env.DB.prepare(
-              `INSERT INTO event_intake (source_kind, source_key, event_date) VALUES (?, ?, ?)
-               ON CONFLICT(source_key) DO UPDATE SET event_date = excluded.event_date`
-            ).bind(kind, ev.id, dayOf(ev.start)).run();
-          } catch (_) {}
-        }
+          return env.DB.prepare(
+            `INSERT INTO event_intake (source_kind, source_key, event_date) VALUES (?, ?, ?)
+             ON CONFLICT(source_key) DO UPDATE SET event_date = excluded.event_date`
+          ).bind(kind, ev.id, dayOf(ev.start)).run().catch(() => {});
+        }));
       }
 
       async function readIntakeRows(raw) {
@@ -446,6 +461,37 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
         return new Response('', { status: 302, headers: { Location: '/event-intake?queue=inbox' } });
       }
 
+      // ── BULK TYPE — set a type on many events in one submit, instead of
+      // one type-pill click per event. Andrew, looking at 135 unclassified
+      // imports: "can we just bulk assign them?"
+      //
+      // ⚠ TWO SHAPES, ONE ROUTE, THE SAME WAY /event-intake/type ALREADY
+      // WORKS FOR ONE. `keys` (a checked row's own checkbox) is read with
+      // `getAll`, so this works whether the office ticked three rows by hand
+      // or used "Select all shown" — that control just checks every box on
+      // the page before the browser submits; it needs no server-side idea of
+      // "everything in this queue" at all, and cannot silently apply to a row
+      // that scrolled off screen or that a filter had already excluded.
+      // ⚠ EVERY KEY IS VALIDATED AGAINST WHAT `mergeIntakeItems` ACTUALLY
+      // PRODUCED FOR THIS REQUEST, not trusted as a bare id. A posted key with
+      // no matching item (a stale page, a crafted form) is silently skipped
+      // rather than handed to writeIntakePatch with no row behind it.
+      if (path === '/event-intake/bulk-type' && method === 'POST') {
+        const form = await request.formData();
+        const queue = String(form.get('queue') || 'inbox');
+        const type = TYPE_KEYS.includes(String(form.get('type') || '')) ? String(form.get('type')) : null;
+        const keys = new Set(form.getAll('keys').map(String));
+        if (type && keys.size) {
+          const { raw } = await loadIntakeRaw();
+          await syncIntakeRows(raw);
+          const rows = await readIntakeRows(raw);
+          const items = mergeIntakeItems(raw, rows);
+          const targets = items.filter((it) => keys.has(it.key) && it.dbId != null);
+          await Promise.all(targets.map((it) => writeIntakePatch(it.dbId, { event_type: type })));
+        }
+        return redirectTo(queue, '');
+      }
+
       if (path === '/event-intake' && method === 'GET') {
         const { raw, gymExtra, googleOk } = await loadIntakeRaw();
         await syncIntakeRows(raw);
@@ -511,9 +557,29 @@ function intakeQueueLink(id, label, count, active, dotColor) {
   </a>`;
 }
 
+// ⚠ GROUPED BY THE FOUR CORE VALUES, NOT A FLAT "By calendar" LIST ANY MORE.
+// Andrew asked for this once there were eleven types to scan rather than
+// four. Each of admin/values.js's own four value keys (worship / acceptance
+// / education / outreach — the same ones PARTNER_SEED already ties Word of
+// Life to 'education' and CFNA to 'outreach' with) gets its own labeled
+// group, in the order this repo's own Core Values section states them.
+// typesWithNoValue() — News, Meetings, Special event — is deliberately its
+// own unlabeled group rather than forced under one of the four; see the note
+// above TYPE_VALUE in admin/intake.js for why.
+function intakeValueGroup(value, queue, counts) {
+  const keys = typesForValue(value);
+  if (!keys.length) return '';
+  const rows = keys.map((t) => intakeQueueLink(t, TYPES[t].label, counts[t] || 0, queue === t, TYPES[t].color)).join('');
+  return `<div class="ei-rail-group">
+    <span class="ei-rail-label">${intakeEsc(VALUE_LABELS[value])}</span>
+    ${rows}
+  </div>`;
+}
+
 function intakeLeftRail(queue, counts) {
   const top = QUEUE_TOP.map((q) => intakeQueueLink(q, QUEUE_TITLES[q][0], counts[q] || 0, queue === q)).join('');
-  const types = TYPE_KEYS.map((t) => intakeQueueLink(t, TYPES[t].label, counts[t] || 0, queue === t, TYPES[t].color)).join('');
+  const valueGroups = VALUE_ORDER.map((v) => intakeValueGroup(v, queue, counts)).join('');
+  const other = typesWithNoValue().map((t) => intakeQueueLink(t, TYPES[t].label, counts[t] || 0, queue === t, TYPES[t].color)).join('');
   const sources = Object.keys(SOURCE_LABEL).map((s) =>
     `<span class="ei-src-row"><span class="ei-dot" style="background:${intakeEsc(SOURCE_COLOR[s])}"></span>${intakeEsc(SOURCE_LABEL[s])}</span>`).join('');
   return `<div class="ei-rail">
@@ -521,9 +587,10 @@ function intakeLeftRail(queue, counts) {
       <span class="ei-rail-label">Needs a decision</span>
       ${top}
     </div>
+    ${valueGroups}
     <div class="ei-rail-group">
-      <span class="ei-rail-label">By calendar</span>
-      ${types}
+      <span class="ei-rail-label">Other</span>
+      ${other}
     </div>
     <div class="ei-rail-sources">
       <span class="ei-rail-title">Sources</span>
@@ -544,28 +611,54 @@ function intakeListRow(item, queue, selectedKey) {
   const chips = openLabels.slice(0, 3).map((l) => `<span class="ei-chip">${intakeEsc(l)}</span>`).join('');
   const statusLabel = ready ? 'Ready' : (open == null ? 'Needs a type' : `${open} open`);
   const href = `/event-intake?queue=${encodeURIComponent(queue)}&selected=${encodeURIComponent(item.key)}`;
-  return `<a class="ei-row${on ? ' ei-row-on' : ''}" href="${href}" style="border-left-color:${intakeEsc(typeColor)}">
-    <span class="ei-row-date"><span class="ei-row-dow">${intakeEsc(d.dow)}</span><span class="ei-row-day">${d.day}</span></span>
-    <span class="ei-row-mid">
-      <span class="ei-row-title">${intakeEsc(item.title)}</span>
-      <span class="ei-row-meta"><span class="ei-dot" style="background:${intakeEsc(SOURCE_COLOR[item.sourceKind])}"></span>${intakeEsc(SOURCE_LABEL[item.sourceKind])} · ${intakeEsc(intakeTimeLabel(item.start, item.allDay))}${item.location ? ' · ' + intakeEsc(item.location) : ''}</span>
-      ${chips ? `<span class="ei-row-chips">${chips}</span>` : ''}
-    </span>
-    <span class="ei-status${ready ? ' ei-status-ready' : ''}">${intakeEsc(statusLabel)}</span>
-  </a>`;
+  // ⚠ THE CHECKBOX SITS BESIDE THE ROW, NOT INSIDE IT. `.ei-row` is an anchor
+  // — the office clicks anywhere on it to open the record — and a checkbox
+  // nested inside an <a> is invalid HTML and would toggle selection on every
+  // ordinary click instead of navigating. The two are siblings in one flex
+  // line, wired to the same event by the checkbox's own `value`.
+  return `<div class="ei-row-line">
+    <label class="ei-row-checkwrap"><input type="checkbox" class="ei-row-check" name="keys" value="${intakeEsc(item.key)}" aria-label="Select ${intakeEsc(item.title)} for bulk assignment"></label>
+    <a class="ei-row${on ? ' ei-row-on' : ''}" href="${href}" style="border-left-color:${intakeEsc(typeColor)}">
+      <span class="ei-row-date"><span class="ei-row-dow">${intakeEsc(d.dow)}</span><span class="ei-row-day">${d.day}</span></span>
+      <span class="ei-row-mid">
+        <span class="ei-row-title">${intakeEsc(item.title)}</span>
+        <span class="ei-row-meta"><span class="ei-dot" style="background:${intakeEsc(SOURCE_COLOR[item.sourceKind])}"></span>${intakeEsc(SOURCE_LABEL[item.sourceKind])} · ${intakeEsc(intakeTimeLabel(item.start, item.allDay))}${item.location ? ' · ' + intakeEsc(item.location) : ''}</span>
+        ${chips ? `<span class="ei-row-chips">${chips}</span>` : ''}
+      </span>
+      <span class="ei-status${ready ? ' ei-status-ready' : ''}">${intakeEsc(statusLabel)}</span>
+    </a>
+  </div>`;
 }
 
+// ⚠ ONE FORM WRAPS THE WHOLE LIST, so every visible row's checkbox posts
+// together with whichever type was chosen in the toolbar — the same
+// full-reload-per-action shape the rest of this screen already uses, not a
+// new AJAX mechanism. "Select all shown" is the one place this screen uses
+// more than a bare `confirm()`: there is no way to link one checkbox's state
+// to a dozen others without it, and it touches nothing else on the page.
+// The submit itself also confirms, naming how many events are about to
+// change — the one bulk action on this screen with the power to silently
+// misfile 135 events at once if clicked with the wrong type selected.
 function intakeMiddle(list, queue, selectedKey) {
   const [title, sub] = QUEUE_TITLES[queue] || QUEUE_TITLES.inbox;
   const rows = list.map((it) => intakeListRow(it, queue, selectedKey)).join('');
+  const typeOptions = TYPE_KEYS.map((k) => `<option value="${intakeEsc(k)}">${intakeEsc(TYPES[k].label)}</option>`).join('');
+  const toolbar = list.length ? `<div class="ei-bulkbar">
+      <label class="ei-bulkall"><input type="checkbox" onclick="this.form.querySelectorAll('.ei-row-check').forEach(function(c){c.checked=this.checked}.bind(this))"> Select all shown</label>
+      <select name="type" required><option value="">Assign type…</option>${typeOptions}</select>
+      <button type="submit" class="ei-btn ei-btn-ghost">Assign to selected</button>
+    </div>` : '';
   return `<div class="ei-mid">
     <div class="ei-mid-head">
       <span class="ei-mid-title">${intakeEsc(title)}</span>
       <span class="ei-mid-sub">${intakeEsc(sub)}</span>
     </div>
-    <div class="ei-mid-list">
+    <form method="POST" action="/event-intake/bulk-type" class="ei-mid-list"
+      onsubmit="var n=this.querySelectorAll('.ei-row-check:checked').length; if(!n){alert('Select at least one event first.');return false;} return confirm('Assign this type to '+n+' event'+(n===1?'':'s')+'?');">
+      <input type="hidden" name="queue" value="${intakeEsc(queue)}">
+      ${toolbar}
       ${rows || '<div class="ei-empty">Nothing waiting here. That’s the goal.</div>'}
-    </div>
+    </form>
   </div>`;
 }
 

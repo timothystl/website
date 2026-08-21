@@ -32,32 +32,109 @@
 // the design never actually wired up. One fixed checklist per TYPE, matching
 // the majority (and only) agreeing pair for each.
 
-// ── THE FOUR TYPES ───────────────────────────────────────────────────────────
-// Colors are the mock's own hex values. Three land on existing admin PALETTE
-// entries exactly (navyInk, blue, gold); the fourth — the moss the mock uses
-// for both the News type and the "Entered here" source swatch — has no match
-// in the shared admin PALETTE at all, so it is kept as its own literal rather
-// than force-fit onto a nearby color that means something else on every other
-// screen.
+// ── THE ELEVEN TYPES ─────────────────────────────────────────────────────────
+// Started as the mock's four (Worship/Education/Rental/News); Andrew asked for
+// seven more once he was actually working the queue — Meetings, Word of Life,
+// MDO, Music, Youth & Family, Special event, Fellowship — because "Education"
+// alone was covering a teacher-led class, a confirmation program, a WOL chapel
+// visit and an MDO parent event, and one checklist could never fit all four.
+//
+// ⚠ COLORS ARE `CALENDAR_PALETTE` KEYS NOW, NOT HAND-PICKED HEXES. The
+// original four were the mock's own literal hex values, and three of them —
+// education #2E7EA6, rental #C9973A, news #7A8B5F — failed 4.5:1 white-text
+// contrast on a filled pill (2.40:1 for rental) the moment they were checked,
+// the identical WCAG gap the calendar's own palette had until 2026-08-20 (see
+// admin/calendar.js). Rather than invent an eighth, ninth, tenth ad hoc color
+// system for one more screen, every type here reuses the calendar's own
+// contrast-verified swatch keys — the SAME ones `CAL_SEED_PALETTE` in
+// tlc-admin-worker.js already assigns to the matching Google-color category
+// (worship→navy, learn→teal, facility→stone, youth→amber, wol→slate,
+// mdo→sand, music→plum, meetings→steel, special→gold). Type and category are
+// still two separate ideas — picking a type here never writes
+// calendar_category — but there is no reason for "Worship" to be one color on
+// this screen and a different navy on the public calendar. `news` and
+// `fellowship` have no calendar-category equivalent, so they take the two
+// CALENDAR_PALETTE keys ('moss', 'brick') nothing else here uses; 'gray' is
+// left alone, since on the calendar it means "uncategorized" and no type here
+// is that.
 export const TYPES = {
   worship: {
-    key: 'worship', label: 'Worship', color: '#1E2D4A',
+    key: 'worship', label: 'Worship', color: '#1E2D4A', palette: 'navy',
     note: 'Goes on the Worship calendar and into the bulletin build.',
   },
   education: {
-    key: 'education', label: 'Education', color: '#2E7EA6',
-    note: 'Classes, MDO, WOL, confirmation — anything with a teacher and a room.',
+    key: 'education', label: 'Education', color: '#276C8E', palette: 'teal',
+    note: 'Adult Bible classes and studies — anything with a teacher and a room that is not Youth & Family, WOL or MDO.',
+  },
+  youth: {
+    key: 'youth', label: 'Youth & Family', color: '#93571F', palette: 'amber',
+    note: 'Sunday School, VBS, family events — anything the Youth Director runs.',
+  },
+  wol: {
+    key: 'wol', label: 'Word of Life', color: '#3A4E5C', palette: 'slate',
+    note: 'Word of Life School on our campus or calendar — chapel, programs, joint use.',
+  },
+  mdo: {
+    key: 'mdo', label: 'MDO', color: '#776422', palette: 'sand',
+    note: "Timothy's Mother's Day Out — chapel time, programs, and parent events.",
+  },
+  music: {
+    key: 'music', label: 'Music', color: '#7A5A7A', palette: 'plum',
+    note: 'Choir, handbells, cantors, special music — feeds the worship calendar.',
   },
   rental: {
-    key: 'rental', label: 'Rental', color: '#C9973A',
+    key: 'rental', label: 'Rental', color: '#68655F', palette: 'stone',
     note: 'Outside groups and building use. Nothing publishes until the paperwork is in.',
   },
+  fellowship: {
+    key: 'fellowship', label: 'Fellowship', color: '#8C3A28', palette: 'brick',
+    note: 'Potlucks, socials, coffee hour extras — building community, not a class.',
+  },
+  meetings: {
+    key: 'meetings', label: 'Meetings', color: '#576876', palette: 'steel',
+    note: 'Council, elders, committees, staff meetings — nothing publicly facing.',
+  },
+  special: {
+    key: 'special', label: 'Special event', color: '#646B1F', palette: 'gold',
+    note: 'Christmas Market, VBS kickoff, one-off congregational events — the big ones.',
+  },
   news: {
-    key: 'news', label: 'News', color: '#7A8B5F',
+    key: 'news', label: 'News', color: '#4A5E3A', palette: 'moss',
     note: 'Needs a description, photo, or signup — the richer record wins on the public calendar.',
   },
 };
 export const TYPE_KEYS = Object.keys(TYPES);
+
+// ── GROUPED BY THE FOUR CORE VALUES ─────────────────────────────────────────
+// Andrew: "we can organize by the 4 core values." The four are
+// admin/values.js's own stored keys (acceptance/worship/education/outreach —
+// see PARTNER_SEED in admin/db.js, which already pairs Word of Life with
+// 'education' and CFNA with 'outreach'), in the order this repo's own Core
+// Values section already states them: Worship, Acceptance, Christian
+// Education, Outreach.
+//
+// ⚠ THREE TYPES DO NOT MAP TO A VALUE, ON PURPOSE. News, Meetings and Special
+// event are administrative/cross-cutting — a council meeting or "the
+// Christmas Market kickoff" is not itself an act of worship, education,
+// outreach or acceptance the way a Sunday service or a confirmation class is.
+// Forcing a value onto them would be inventing an answer nobody asked for;
+// they render in their own unlabeled group instead, same as the mock's flat
+// list, so the four value groups only ever contain a type that genuinely
+// belongs to one.
+export const VALUE_LABELS = { worship: 'Worship', acceptance: 'Acceptance', education: 'Christian Education', outreach: 'Outreach' };
+export const VALUE_ORDER = ['worship', 'acceptance', 'education', 'outreach'];
+export const TYPE_VALUE = {
+  worship: 'worship', music: 'worship',
+  fellowship: 'acceptance',
+  education: 'education', youth: 'education', wol: 'education', mdo: 'education',
+  rental: 'outreach',
+};
+export function typesForValue(value) {
+  return TYPE_KEYS.filter((k) => TYPE_VALUE[k] === value);
+}
+export function typesWithNoValue() {
+  return TYPE_KEYS.filter((k) => !TYPE_VALUE[k]);
+}
 
 // A type an intake row has never been given. Not one of TYPES on purpose — an
 // unclassified item is not a fifth kind of event, it is the absence of the one
@@ -124,11 +201,53 @@ export const CHECKLISTS = {
     { key: 'materials', label: 'Materials copied', who: 'Office' },
     { key: 'listed', label: 'Listed on the website', who: 'Communications' },
   ],
+  youth: [
+    { key: 'leader', label: 'Leader confirmed', who: 'Youth Director' },
+    { key: 'room', label: 'Room reserved on Google', who: 'Office' },
+    { key: 'materials', label: 'Materials or registration ready', who: 'Youth Director' },
+    { key: 'listed', label: 'Listed on the website', who: 'Communications' },
+  ],
+  wol: [
+    { key: 'contact', label: 'Word of Life contact confirmed', who: 'Office' },
+    { key: 'room', label: 'Room reserved on Google', who: 'Office' },
+    { key: 'custodian', label: 'Custodian told about setup', who: 'Facilities' },
+    { key: 'listed', label: 'Listed on the website, if public', who: 'Communications' },
+  ],
+  mdo: [
+    { key: 'contact', label: 'MDO director confirmed', who: 'Office' },
+    { key: 'room', label: 'Room reserved on Google', who: 'Office' },
+    { key: 'materials', label: 'Materials ready', who: 'Office' },
+    { key: 'parents', label: 'Parents notified', who: 'Communications' },
+  ],
+  music: [
+    { key: 'leader', label: 'Director or leader confirmed', who: 'Music' },
+    { key: 'selected', label: 'Music selected', who: 'Music' },
+    { key: 'rehearsal', label: 'Rehearsal scheduled', who: 'Music' },
+    { key: 'worship', label: 'Coordinated with the worship service', who: 'Pastor' },
+  ],
   rental: [
     { key: 'agreement', label: 'Signed use agreement on file', who: 'Office' },
     { key: 'insurance', label: 'Certificate of insurance current', who: 'Office' },
     { key: 'custodian', label: 'Custodian told about setup', who: 'Facilities' },
     { key: 'fee', label: 'Fee or waiver recorded', who: 'Bookkeeper' },
+  ],
+  fellowship: [
+    { key: 'organizer', label: 'Organizer confirmed', who: 'Office' },
+    { key: 'setup', label: 'Setup or food arranged', who: 'Facilities' },
+    { key: 'announced', label: 'Announced to the congregation', who: 'Communications' },
+    { key: 'signup', label: 'Signup live, if it needs one', who: 'Communications' },
+  ],
+  meetings: [
+    { key: 'agenda', label: 'Agenda sent', who: 'Office' },
+    { key: 'room', label: 'Room and setup confirmed', who: 'Facilities' },
+    { key: 'minutes', label: 'Minutes taken', who: 'Office' },
+    { key: 'followup', label: 'Action items followed up', who: 'Pastor' },
+  ],
+  special: [
+    { key: 'coordinator', label: 'Coordinator confirmed', who: 'Office' },
+    { key: 'budget', label: 'Budget approved', who: 'Bookkeeper' },
+    { key: 'promotion', label: 'Promotion planned', who: 'Communications' },
+    { key: 'volunteers', label: 'Volunteers scheduled', who: 'Office' },
   ],
   news: [
     { key: 'description', label: 'Description written', who: 'Communications' },
@@ -155,11 +274,58 @@ export const TYPE_FIELDS = {
     { key: 'ages', label: 'Who it’s for', kind: 'text', hint: 'Adults · Ages 2–4 · Parents' },
     { key: 'materials', label: 'Materials to prepare', kind: 'area', hint: 'Handouts, copies, supplies' },
   ],
+  youth: [
+    { key: 'program', label: 'Program', kind: 'select',
+      options: ['Sunday School', 'Confirmation', 'VBS', 'Family Event', 'Other'], required: true },
+    { key: 'leader', label: 'Leader', kind: 'text', required: true },
+    { key: 'ages', label: 'Who it’s for', kind: 'text', hint: 'Grade, or “whole family”' },
+    { key: 'materials', label: 'Materials or registration', kind: 'area', hint: 'Handouts, sign-up link, supplies' },
+  ],
+  wol: [
+    { key: 'contact', label: 'Word of Life contact', kind: 'text', required: true },
+    { key: 'what', label: 'What it is', kind: 'select',
+      options: ['Chapel', 'Program', 'Joint use', 'Other'], required: true },
+    { key: 'space', label: 'Room or space needed', kind: 'text' },
+    { key: 'notes', label: 'Notes for facilities', kind: 'area' },
+  ],
+  mdo: [
+    { key: 'contact', label: 'MDO staff contact', kind: 'text', required: true },
+    { key: 'what', label: 'What it is', kind: 'select',
+      options: ['Chapel time', 'Program', 'Parent event', 'Other'], required: true },
+    { key: 'space', label: 'Room', kind: 'text', hint: 'MDO Wing, usually' },
+    { key: 'notes', label: 'Notes', kind: 'area' },
+  ],
+  music: [
+    { key: 'group', label: 'Group', kind: 'select',
+      options: ['Choir', 'Handbells', 'Cantors', 'Instrumentalists', 'Other'], required: true },
+    { key: 'leader', label: 'Director or leader', kind: 'text', required: true },
+    { key: 'occasion', label: 'Rehearsal or performance', kind: 'text' },
+    { key: 'music', label: 'Music selected', kind: 'area' },
+  ],
   rental: [
     { key: 'renter', label: 'Renter or group', kind: 'text', required: true },
     { key: 'contact', label: 'Contact', kind: 'text', hint: 'Phone or email', required: true },
     { key: 'fee', label: 'Fee and deposit', kind: 'text', hint: '$650 — deposit $200 received', required: true },
     { key: 'setup', label: 'Setup, teardown, access', kind: 'area', hint: 'Tables, chairs, doors, times' },
+  ],
+  fellowship: [
+    { key: 'what', label: 'What it is', kind: 'text', hint: 'Potluck, coffee hour, game night', required: true },
+    { key: 'host', label: 'Host or organizer', kind: 'text', required: true },
+    { key: 'food', label: 'Food or setup needs', kind: 'area' },
+    { key: 'signup', label: 'Signup needed?', kind: 'text', hint: 'timothystl.org/… or “no”' },
+  ],
+  meetings: [
+    { key: 'body', label: 'Meeting', kind: 'select',
+      options: ['Council', 'Elders', 'Staff', 'Committee', 'Other'], required: true },
+    { key: 'chair', label: 'Called by / chair', kind: 'text', required: true },
+    { key: 'agenda', label: 'Agenda items due', kind: 'text' },
+    { key: 'minutes', label: 'Minutes owner', kind: 'text' },
+  ],
+  special: [
+    { key: 'name', label: 'Event name', kind: 'text', required: true },
+    { key: 'lead', label: 'Lead / coordinator', kind: 'text', required: true },
+    { key: 'needs', label: 'What it needs', kind: 'area', hint: 'Staffing, budget, promotion' },
+    { key: 'budget', label: 'Budget or fee', kind: 'text' },
   ],
   news: [
     { key: 'description', label: 'Description', kind: 'area', hint: 'Two or three sentences for the website', required: true },
@@ -268,7 +434,14 @@ export const QUEUE_TITLES = {
   imported: ['Imported from Google', 'Pulled from the office calendars — confirm what the feed can’t know'],
   ready: ['Ready to publish', 'Everything checked off'],
   worship: ['Worship', 'Services, funerals, weddings, rehearsals'],
-  education: ['Education', 'Bible studies, confirmation, MDO, WOL'],
+  education: ['Education', 'Adult Bible classes and studies'],
+  youth: ['Youth & Family', 'Sunday School, confirmation, VBS, family events'],
+  wol: ['Word of Life', 'Word of Life School on our campus or calendar'],
+  mdo: ['MDO', "Timothy's Mother's Day Out"],
+  music: ['Music', 'Choir, handbells, cantors, special music'],
   rental: ['Rentals', 'Outside groups and building use'],
+  fellowship: ['Fellowship', 'Potlucks, socials, coffee hour extras'],
+  meetings: ['Meetings', 'Council, elders, committees, staff'],
+  special: ['Special events', 'Christmas Market, VBS kickoff, one-off events'],
   news: ['News & Events', 'Public-facing entries with copy and photos'],
 };
