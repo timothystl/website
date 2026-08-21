@@ -399,6 +399,58 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   Andrew asked for his own copy of every report, deduped against the
   bookkeeper's address in case they're ever the same.
 
+### Every push notification logs to a Push Log screen (v5.40.0, 2026-08-21)
+
+Dinger got a push about someone replying — Leah Seveking, about the LCEF
+proposal — tapped it, and landed on the plain dashboard with no way to find
+what it was actually about. That traced back to something documented, not a
+bug in the click target: the "every delivered contact/prayer message" trigger
+(see "The admin is a PWA, with web push" above) points at `/dashboard` on
+purpose, because a **delivered** submission's content was never stored
+anywhere — only a *held* one is, in `form_submissions`, so it can be reviewed
+and released. His answer, once that was explained: *"every push notification
+should log in the admin panel, not just filtered message."*
+
+**`push_log` is a new table, and it is written from exactly one place.**
+Every trigger in this codebase — held mail, a delivered contact/prayer
+message, a new gym hold or recurring request, a payroll period turning ready,
+a Christmas Market vendor application, an event sign-up, a newsletter
+awaiting approval, the ChMS/scheduler relay, and the `/notify` office
+broadcast — already funnels through `pushToAllSubscribers()` /
+`pushToPublicSubscribers()` in `admin/webpush.js`. Logging there, once,
+covers all of them; logging at each of the dozen call sites instead would be
+one more place a future trigger forgets to add it.
+
+- **Written AFTER the sends, not before, and best-effort.** A logging failure
+  must never look like a lost push, and a row here only ever describes
+  something that already went out (or was genuinely attempted) — the same
+  `try { } catch (_) {}` shape every write in this path already uses.
+- **⚠ It is not a bigger version of `form_submissions`.** That table's whole
+  design point — a delivered message's content is never stored — is
+  untouched. `push_log` stores the *notification*: the title and body that
+  were actually pushed (already truncated to 200/500 characters by whichever
+  route built the payload), not the full form submission behind it. For a
+  contact or prayer message the office inbox is still the only place with the
+  complete text; the log just makes the fact that a message arrived, and
+  roughly what it said, no longer something a scrolled-away notification was
+  the only record of.
+- **`/push-log`**, gated on `settings_manage` — the same permission Filtered
+  Mail sits behind, and for the same reason: this is a system-wide record
+  spanning every domain in the admin (gym, payroll, market, forms, the
+  newsletter, a cross-app relay), not one team's business to see. On the
+  shared list pattern (`renderListSection`), filterable by audience (Staff /
+  Public), searchable by title or body, newest first.
+- **Reach is `sent/total`, not just a count.** A push counted against the
+  audience it actually reached at send time — a device that later
+  unsubscribes does not retroactively shrink an old row's total, because the
+  row is a record of what happened then, not a live query against
+  `push_subscriptions` now.
+
+Run: the `every push notification leaves a trail in the Push Log, whatever
+triggered it` group in `test/admin-redesign.test.mjs`, verified against the
+bug — reverting the logging insert fails it with the real symptom, zero rows
+where two are expected.
+
 ### Three more editor tools: Countdown, Documents, Embed (v5.36.0, 2026-08-20)
 
 The remaining three items from the original "exhaustive drag-and-drop builder

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_PUSH_LOG, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
          DB_INIT_CALENDAR_CATEGORIES, DB_INIT_CALENDAR_CATEGORIES_COLOR,
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
@@ -1998,7 +1998,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-10'; // bumped: event_intake table, for the office's own event checklist screen (on top of push_subscriptions.audience, merged from main)
+    const SCHEMA_VERSION = '2026-08-21-1'; // bumped: push_log table, so every push notification (not just held mail) leaves a readable trail in the admin
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2591,6 +2591,8 @@ export default {
     try { await env.DB.prepare("ALTER TABLE push_subscriptions ADD COLUMN audience TEXT NOT NULL DEFAULT 'staff'").run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_audience ON push_subscriptions(audience)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PAYROLL_READY_NOTIFIED).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PUSH_LOG).run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_log_created ON push_log(created_at DESC)').run(); } catch (_) {}
 
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
@@ -10592,6 +10594,62 @@ ${sidebarShell('notify', currentUser, '', await pageBadges())}
         });
       }
     } // end push alert
+
+    // ── PUSH LOG ───────────────────────────────────────────────
+    // Every trigger that calls pushToAllSubscribers() (held mail, a delivered
+    // contact/prayer message, a gym request, payroll turning ready, a market
+    // application, an event sign-up, the newsletter approval nudge, the
+    // ChMS/scheduler relay, and the /notify broadcast above) writes one row
+    // here from inside that single function — see admin/webpush.js. This
+    // screen is just reading it. Gated on settings_manage, the same as
+    // Filtered Mail beside it: this is a system-wide record spanning every
+    // domain in the admin, not one team's business.
+    if (path === '/push-log' && !hasPermission(currentUser, 'settings_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if (path === '/push-log' && method === 'GET') {
+      const rows = await env.DB.prepare(
+        'SELECT * FROM push_log ORDER BY created_at DESC LIMIT 200'
+      ).all();
+      const when = (iso) => {
+        if (!iso) return '';
+        // Stored as UTC (datetime('now')); SQLite's default has no 'Z', so a
+        // bare `new Date()` on it is parsed as LOCAL time in some engines and
+        // UTC in others. Appending 'Z' pins it to what it actually is.
+        const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
+        return isNaN(d) ? iso : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      };
+      const listRows = rows.results.map((r) => {
+        const reachNote = r.gone > 0 ? `${r.sent}/${r.total} · ${r.gone} gone` : `${r.sent}/${r.total}`;
+        return {
+          filter: r.audience,
+          search: `${r.title || ''} ${r.body || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(r.title || '(no title)', r.body || ''),
+            `<span>${escapeHtml(r.audience === 'public' ? 'Public' : 'Staff')}${r.tag ? ` <span style="color:var(--gray);">· ${escapeHtml(r.tag)}</span>` : ''}</span>`,
+            `<span title="${escapeHtml(String(r.sent))} sent of ${escapeHtml(String(r.total))} subscribed">${escapeHtml(reachNote)}</span>`,
+            `<span>${escapeHtml(when(r.created_at))}</span>`,
+          ],
+          actions: r.url ? `<a class="tlc-edit" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">Opens ${escapeHtml(r.url)}</a>` : '',
+        };
+      });
+      return html(`
+${sidebarShell('pushLog', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+  ${renderListSection({
+    key: 'pushLog',
+    title: sectionCfg('pushLog').title,
+    purpose: sectionCfg('pushLog').purpose,
+    search: sectionCfg('pushLog').search,
+    filters: filtersOf('pushLog'),
+    columns: columnsOf('pushLog'),
+    rows: listRows,
+    noun: 'notification',
+    empty: 'No push notification has gone out yet.',
+    note: sectionCfg('pushLog').note,
+  })}
+</div>`, 'Push Log');
+    }
 
     // ── STAFF TAB ──────────────────────────────────────────────
     if (path.startsWith('/staff') && !hasPermission(currentUser, 'staff_edit')) {
