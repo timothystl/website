@@ -1356,6 +1356,39 @@ function canEditsCheck(row) {
   return !(row.status === 'sent' || row.sent_at || row.beehiiv_id || row.brevo_campaign_id);
 }
 
+group('a corrected duplicate removes the sent issue it replaces, but only once IT is sent');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status,sent_at) VALUES (30,'This week at Timothy','<p>Original.</p>','2026-08-20','published','2026-08-20T10:00:00Z')").run();
+
+  await post(env, '/newsletter/duplicate/30', cookie, '');
+  const copy = db.prepare('SELECT * FROM newsletters WHERE id <> 30 ORDER BY id DESC LIMIT 1').get();
+  eq(copy.supersedes_id, 30, 'the copy remembers which sent issue it is meant to replace');
+
+  // Still just a draft — the original is untouched everywhere a visitor reads it.
+  let archive = await (await call(env, '/api/newsletters')).json();
+  ok(archive.some((n) => n.id === 30), 'the original stays in the public archive while its correction is only a draft');
+  eq((await call(env, '/api/newsletter/30')).status, 200, 'and its own detail page still resolves');
+
+  // Send the correction — the same fields the real send route would set.
+  db.prepare("UPDATE newsletters SET status='published', sent_at=?, subject=? WHERE id=?")
+    .run('2026-08-20T11:00:00Z', 'This week at Timothy — updated', copy.id);
+
+  archive = await (await call(env, '/api/newsletters')).json();
+  ok(!archive.some((n) => n.id === 30), 'once the correction is actually sent, the original drops out of the public archive');
+  ok(archive.some((n) => n.id === copy.id), 'and the correction is the one now shown in its place');
+  eq((await call(env, '/api/newsletter/30')).status, 404, 'a bookmarked link to the superseded letter no longer resolves either');
+  eq((await call(env, `/api/newsletter/${copy.id}`)).status, 200, 'the correction itself resolves normally');
+
+  // The admin's own list is the audit trail — nothing vanishes from it, and
+  // the original row is labeled so a superseded letter reads as accounted
+  // for rather than as the admin having lost track of it.
+  const adminList = await (await call(env, '/newsletters', { cookie })).text();
+  has(adminList, 'This week at Timothy', 'the original subject is still in the admin list');
+  has(adminList, 'superseded', 'and the row says why it is no longer public');
+}
+
 group('block switches survive a save');
 {
   const { db, env } = await boot();
