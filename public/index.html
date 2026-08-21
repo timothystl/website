@@ -2376,6 +2376,18 @@ async function loadNewsletterDetail(id) {
         : '';
       tertiaryHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);"><div style="background:var(--linen);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:16px 18px;"><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+n.tertiary_note+'</div>'+ctaBtn+'</div></div>';
     }
+    // Extra notes — a fourth/fifth free-form block a week may carry, same
+    // order buildEmailHtml() (admin/email.js) uses: after the tertiary note,
+    // before Bible classes. Body is already sanitized server-side.
+    let extrasHtml = '';
+    if (n.extras && n.extras.length) {
+      extrasHtml = n.extras.map(function (note) {
+        return '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">' +
+          (note.title ? '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">'+escText(note.title)+'</div>' : '') +
+          '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+note.body+'</div>' +
+          '</div>';
+      }).join('');
+    }
     // Featured / additional news items selected for this newsletter
     let newsHtml = '';
     if (n.news_items && n.news_items.length) {
@@ -2418,7 +2430,7 @@ async function loadNewsletterDetail(id) {
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
         '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+(n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>'))+'</div>' : '') +
-        secHtml + newsHtml + evHtml + wolLasmHtml + tertiaryHtml + bibleHtml +
+        secHtml + newsHtml + evHtml + wolLasmHtml + tertiaryHtml + extrasHtml + bibleHtml +
       '</div>';
   } catch(e) {
     content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Newsletter not found.</div>';
