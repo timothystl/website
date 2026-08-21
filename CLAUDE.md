@@ -399,6 +399,39 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   Andrew asked for his own copy of every report, deduped against the
   bookkeeper's address in case they're ever the same.
 
+### The block palette regrouped: Countdown was hiding in "Dates" (2026-08-21)
+
+Dinger, on the palette screenshot: *"i missed it because it was under dates"* — Countdown,
+the block added the same week, sat under a tab named **Dates** alongside Map & address, File
+download, Documents, Embed and Info tiles. None of those five are dates. **"Dates" had drifted
+into meaning "everything else practical,"** which is exactly how a block goes missing — the tab
+it's actually filed under no longer says what's in it.
+
+- **Split into six groups instead of four.** `Dates` → **Schedule** (servicetimes, chips,
+  countdown, events, times, calendar — every one of these draws a date, a time, or a countdown
+  to one) and **Info** (tiles, map, contact, download, documents, embed — practical, but never
+  about *when*). `Sign up` split the same way: **Sign up** keeps the forms (form, signup,
+  newsletter, letter, newsletterarchive, portal, registration, marketapp, marketfacts — a market
+  application is a form like any other, even though the word "market" suggests money) and
+  **Giving** is new (give, giving, amounts — nothing in it asks for anything but an amount).
+- **The rule going forward**: a group's name has to be true of everything in it, or the name
+  stops being a place to look. If a new block doesn't fit any existing group's name, that is a
+  sign to make a new group rather than to widen an old one back into a junk drawer.
+- **Nothing else about a block changed** — no def, no render branch, no permission. `GROUPS` is
+  the only thing edited; the palette, the inspector's tab list and every test that reads it are
+  driven off that one array, so nothing needed touching twice. `admin/blocks.test.mjs`'s own
+  `GROUPS` assertion (every type in exactly one group, no type in two, nothing unknown) is what
+  made the reorg safe to do quickly — it would have caught a type left stranded outright.
+- `public/manual.html`'s "five things to know" step 3 named the four old group labels by hand;
+  updated to the six current ones.
+
+Run: the rewritten `the block library groups, and why Countdown moved` group in
+`node admin/blocks.test.mjs`, which pins Countdown to Schedule and asserts it shares no group
+with Map/File download/Documents/Embed/Info tiles — the exact five neighbors that buried it —
+plus `node test/editor.test.mjs`, `node test/editor-dnd.test.mjs` and
+`node test/site-editor.test.mjs` (all fully data-driven off `GROUPS`, so none needed edits) and
+every `admin/*.test.mjs` suite.
+
 ### Three more editor tools: Countdown, Documents, Embed (v5.36.0, 2026-08-20)
 
 The remaining three items from the original "exhaustive drag-and-drop builder
