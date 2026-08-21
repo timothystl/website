@@ -206,24 +206,20 @@ async function goToFixtureMonth(p) {
   eq(await count(), CHIPS_WORSHIP, 'the category filter leaves only the two services');
   eq(await p.$eval('.tlc-cal-pill[data-val="worship"]', (e) => e.getAttribute('aria-pressed')), 'true', 'and the pill says so');
 
-  // ⚠ The filters compose. Worship is entirely a Google category here, so
-  // asking for Worship AND News & Events must yield the empty state rather
-  // than quietly widening one of the two.
-  await p.click('.tlc-cal-pill[data-cal="src"][data-val="news"]');
-  await p.waitForTimeout(120);
-  eq(await count(), 0, 'the two filters are ANDed');
-  ok(await p.$('.tlc-cal-empty'), 'and a combination with nothing in it says so rather than showing a blank month');
-
   await p.click('.tlc-cal-pill[data-cal="cat"][data-val="all"]');
   await p.waitForTimeout(120);
-  eq(await count(), CHIPS_NEWS, 'News & Events alone leaves the News entries — the picnic, plus five days of VBS');
-  await p.click('.tlc-cal-pill[data-cal="src"][data-val="all"]');
-  await p.waitForTimeout(120);
-  eq(await count(), all, 'clearing both filters restores the month');
+  eq(await count(), all, 'clearing the filter restores the month');
   await ctx.close();
 }
 
-// ── building use is its own source, and only when there is some ─
+// ── the Source band is gone, and a rental never names the renter ─
+// Andrew: "I dont need on this view to see the source of info" — the pills
+// (All sources / Google Calendar / News & Events / Building use) and the
+// color key beside them are retired. Category filtering (below) already
+// covers "just the rentals" via the Facility/rentals pill, so nothing was
+// lost that a source-only filter could still do. `tlc-cal-srcdot` — the small
+// per-event dot with a hover title — is deliberately left alone: it is not a
+// filter band, and removing it was not asked for.
 {
   const withRental = FEED.events.concat([
     ev({ id: 'b:1', title: 'Gym rented', location: 'Gym', start: day(21) + 'T18:00:00', end: day(21) + 'T20:00:00',
@@ -231,24 +227,10 @@ async function goToFixtureMonth(p) {
   ]);
   const { p, ctx } = await open({ feed: { ...FEED, events: withRental } });
   await goToFixtureMonth(p);
-  const srcPills = await p.$$eval('.tlc-cal-src .tlc-cal-pill', (b) => b.map((x) => x.getAttribute('data-val')));
-  ok(srcPills.includes('building'), 'a month with a rental in it offers the building-use filter');
-  await p.click('.tlc-cal-pill[data-cal="src"][data-val="building"]');
-  await p.waitForTimeout(120);
-  const shown = await p.$$eval('.tlc-cal-chip .tlc-cal-name', (n) => n.map((x) => x.textContent));
-  eq(shown.length, 1, 'and filtering to it leaves the booking alone');
-  eq(shown[0], 'Gym rented', 'which names the room, and never the renter');
-  await ctx.close();
-}
-
-{
-  // ⚠ Most months have no rentals at all, and a pill whose only outcome is the
-  // empty state is the dead control this site is held to everywhere else.
-  const { p, ctx } = await open();
-  await goToFixtureMonth(p);
-  const srcPills = await p.$$eval('.tlc-cal-src .tlc-cal-pill', (b) => b.map((x) => x.getAttribute('data-val')));
-  ok(!srcPills.includes('building'), 'a month with no rentals does not offer the filter');
-  ok(srcPills.includes('gcal') && srcPills.includes('news'), 'but still offers the sources it does have');
+  eq(await p.$$eval('.tlc-cal-src', (x) => x.length), 0, 'no Source band renders at all, with or without a rental in the month');
+  const rental = await p.$$eval('.tlc-cal-chip .tlc-cal-name', (n) => n.map((x) => x.textContent)).then((t) => t.filter((x) => x === 'Gym rented'));
+  eq(rental.length, 1, 'the booking is still on the month');
+  eq(rental[0], 'Gym rented', 'which names the room, and never the renter');
   await ctx.close();
 }
 
@@ -456,6 +438,99 @@ async function goToFixtureMonth(p) {
   const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   eq(pages, 1, 'the busiest possible month still prints as one landscape sheet');
   ok(pdf.length > 5000, 'and the sheet has real content on it (' + pdf.length + ' bytes)');
+  await ctx.close();
+}
+
+// ── a day with more on it than its row can hold says so, rather than being
+// clipped mid-line ────────────────────────────────────────────────────────
+// Reported plainly: "on long days things are cut off." The fixed cell was
+// always going to clip SOMETHING — that is the whole mechanism that keeps the
+// sheet to one page — but it used to clip mid-row with no explanation. This
+// drives the real beforeprint fallback (tlcPrintFitCells, index.html), not
+// just the CSS, because only that code knows how many events actually fit and
+// turns the rest into an honest "+N more" line.
+{
+  // ⚠ THE VIEWPORT IS THE PAPER, same as the DOM-level print-sheet group
+  // above — at the default (much taller) viewport the sheet's `height:100vh`
+  // has room to spare and nothing overflows a row sized for it.
+  //
+  // ⚠ SEVEN SHORT EVENTS — the BUSY_SUNDAY fixture — turned out NOT to
+  // overflow a real print row: that fixture exists to prove the sheet stays
+  // ONE PAGE with it, which only holds if it fits. A church Wednesday with a
+  // full evening's activities (real titles, some genuinely long — "Maplewood
+  // Richmond Heights" is a real gym renter's name from the report) is what
+  // actually forces the case this feature exists for.
+  const stacked = day(15) + 'T18:00:00';
+  const OVERSTUFFED = Array.from({ length: 12 }, (_, i) => ev({
+    id: 'stk' + i, start: stacked, end: stacked,
+    title: ['Bible Class', 'Sing a long', "Children's Choir", 'Maplewood Richmond Heights', 'Handbells',
+      'Timothy Choir', 'Council Meeting', 'Elders Meeting', 'Gym rented', 'Adult Confirmation',
+      'Property Committee', 'Finance Committee'][i],
+  }));
+  const { p, ctx } = await open({ width: 989, height: 749, feed: { ...FEED, events: OVERSTUFFED } });
+  await goToFixtureMonth(p);
+  // Found before printing, while the sheet is still display:none but its DOM
+  // (event count included) is queryable regardless.
+  const idx = await p.evaluate(() => {
+    const cells = Array.from(document.querySelectorAll('.tlc-print-cell'));
+    return cells.findIndex((c) => c.querySelectorAll('.tlc-print-ev').length === 12);
+  });
+  ok(idx >= 0, 'the twelve-event Wednesday is on the print sheet before anything is trimmed');
+
+  await p.evaluate(() => window.print());
+  await p.waitForTimeout(150);
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+
+  const after = await p.evaluate((i) => {
+    const cell = document.querySelectorAll('.tlc-print-cell')[i];
+    const evs = Array.from(cell.querySelectorAll('.tlc-print-ev'));
+    const visible = evs.filter((e) => getComputedStyle(e).display !== 'none');
+    const more = cell.querySelector('.tlc-print-more');
+    return {
+      total: evs.length, visible: visible.length,
+      moreText: more ? more.textContent : null,
+      cellFits: Math.round(cell.getBoundingClientRect().bottom) <= Math.round(cell.parentElement.getBoundingClientRect().bottom) + 1,
+    };
+  }, idx);
+  eq(after.total, 12, 'no event was removed from the DOM, only hidden');
+  ok(after.visible < 12, 'and not all twelve are shown once the row cannot hold them (' + after.visible + ' visible)');
+  ok(after.moreText, 'a "+N more" line explains the rest, instead of the last visible one being cut mid-line');
+  eq(after.moreText, '+' + (12 - after.visible) + ' more', 'and the count on it matches exactly what is hidden: ' + after.moreText);
+
+  const pdf = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  eq(pages, 1, 'and the sheet this trims for is still one page');
+  await ctx.close();
+}
+
+// ── a day that DOES fit is untouched ─────────────────────────
+// ⚠ Verified against the bug on the way in: an earlier draft of this hid
+// events on every cell, not only the ones that overflow, because the "does it
+// already fit" short-circuit was written after the loop that removes rows
+// rather than before it.
+{
+  const { p, ctx } = await open({ width: 989, height: 749 });
+  await goToFixtureMonth(p);
+  await p.evaluate(() => window.print());
+  await p.waitForTimeout(150);
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+  const quiet = await p.evaluate(() => {
+    const cells = Array.from(document.querySelectorAll('.tlc-print-cell'));
+    // The 10th carries exactly one event (Trustees meeting) — nowhere near
+    // enough to overflow a row sized for a whole month's worst day.
+    const cell = cells.find((c) => c.querySelectorAll('.tlc-print-ev').length === 1 &&
+      Array.from(c.querySelectorAll('.tlc-print-ev .tx')).some((t) => t.textContent.includes('Trustees')));
+    if (!cell) return null;
+    return {
+      hidden: Array.from(cell.querySelectorAll('.tlc-print-ev')).filter((e) => getComputedStyle(e).display === 'none').length,
+      more: !!cell.querySelector('.tlc-print-more'),
+    };
+  });
+  ok(quiet, 'the Trustees meeting day is found on the sheet');
+  eq(quiet.hidden, 0, 'a day that already fits has nothing hidden on it');
+  eq(quiet.more, false, 'and carries no "+N more" line it does not need');
   await ctx.close();
 }
 

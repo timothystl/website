@@ -1735,6 +1735,105 @@ assertions with the real symptom, and the detail-pane check specifically was
 caught passing vacuously on its first draft and rewritten before being
 trusted.
 
+### A checked box that never looked checked, and three more from the same screenshot (v5.43.0, 2026-08-21)
+
+Four reports off one screenshot of `/event-intake`, all fixed together:
+
+> "move the info box on right side up to the top so i cna see it for the
+> event, adn these check boxes are all unable to be ticked. and when i do
+> assing fields it doesnt always change it. and then print calendar is
+> better but on long days things are cut off. I dont need on this view to
+> see the source of info."
+
+**The checkboxes were never unable to be ticked — clicking one just produced
+no visible change, which is a worse bug because nothing on screen tells you
+it worked.** `intakeChecklistPanel()` wrote the tick glyph and the
+`ei-check-done` fill **only** into whatever the server already knew from
+`checks_json` at render time — `${c.done ? '✓' : ''}` and
+`${c.done ? ' ei-check-done' : ''}`. Clicking the checkbox genuinely toggles
+the underlying `<input>`'s checked state (it still had to, for Save to submit
+it correctly), but nothing was watching that state to repaint the glyph or
+the fill, so a ticked box looked exactly like an unticked one until the whole
+page reloaded. That is very likely also most of "when i assign fields it
+doesnt always change it" — the field itself was changing; the screen just
+never said so.
+
+- **Fixed with CSS alone, no script.** The ✓ glyph is in the markup
+  unconditionally now; a `:has()` rule (`.ei-check:has(input:checked)`,
+  the same mechanism this admin already uses elsewhere) is what decides
+  whether it's visible, keyed off the input's own live state rather than a
+  second, stale copy of it. The server-rendered `ei-check-done` class stays
+  too — it's what makes the very first paint honest before anyone has
+  clicked anything.
+
+**"Move the info box... up to the top" was the same panel, for a different
+reason.** On a Rental item — the type with the tallest extra block, the
+deferred Gym Rentals note — "Before it publishes" rendered *after* that
+block, low enough in the scrollable pane that reaching it took real
+scrolling. The checklist now renders first, right after Room, on every type:
+it's the reason anybody opens an item in the first place, and a type's own
+detail fields are work that can wait.
+
+**The print calendar's cutoff was real and is now an honest "+N more."**
+The fixed six-row grid (`admin/BLOCK-EDITOR-ROLLOUT.md`'s cousin note, "The
+print sheet's own isolation had a documented gap," already explains why the
+row height is fixed at all — it's what keeps the sheet to one page) clips
+with `overflow:hidden`. That was always going to have to clip *something*
+on a genuinely busy day; what it clipped was whichever event happened to sit
+across the cell's bottom edge, mid-line, with nothing on the page saying why
+part of a line was missing. `tlcPrintFitCells()` (`public/index.html`) runs
+at print time, measures what a cell's real print-sized height actually
+holds, and turns whatever doesn't fit into a plain "+N more" line instead —
+the same shape Google's old month-view cap used, legitimate here and nowhere
+else on this site because the print sheet is the one place this repo has
+already decided a hard cap is the right call.
+
+- **⚠ `beforeprint` FIRES TOO EARLY TO MEASURE BY.** Confirmed directly: at
+  the instant `beforeprint`'s own synchronous handler runs, the print
+  stylesheet is not yet the one being evaluated — a `getComputedStyle()`
+  read inside that handler still answers with the screen value. Geometry
+  read there is worthless; on a `.tlc-print-cell` still under screen rules
+  (`display:none` on its ancestor `.tlc-print-sheet`), it's actually `0`,
+  which made an earlier draft of this silently truncate nothing on any cell,
+  ever. `tlcPrintFitCells()` runs off `window.matchMedia('print')`'s own
+  `change` event instead — the moment the engine itself says print rules are
+  now active, verified the same direct way. It's still called from inside
+  `tlcPreparePrint()` (bound to `beforeprint`) too, harmlessly: a cell an
+  earlier, luckier-timed pass already trimmed correctly is a same-height
+  no-op the second time, and a browser where `matchMedia` isn't available at
+  all still gets whatever `beforeprint`'s own timing happens to give it.
+- **⚠ THE "+N MORE" LINE TAKES ROOM OF ITS OWN.** Hiding events until the
+  remaining ones fit, then appending the line, can tip the cell back over —
+  so the loop keeps hiding one more real event, shrinking the label's own
+  count to match, until the label itself fits too.
+- Hidden via `style.display='none'` and undone through the same
+  `TLC_PRINT_UNDO` list `tlcPreparePrint()`'s chrome-hiding already uses
+  (a `'REMOVE'` sentinel added for the line itself) — one restore mechanism,
+  not two.
+
+**The calendar's Source band is gone.** *"I dont need on this view to see the
+source of info"* — `tlcCalSourceBand()` (the "All sources / Google Calendar /
+News & Events / Building use" pills and their color key) is deleted outright,
+not hidden. Nothing it did is lost: the Facility/rentals category pill
+already isolates rentals the same way the Building-use source pill did, so
+there was no real capability behind it that category filtering doesn't
+already cover. The small per-event source dot on each chip (`tlc-cal-srcdot`,
+with its own hover title) is deliberately untouched — it isn't a filter band,
+and removing it wasn't asked for.
+
+Run: the `the checklist renders before the type's own fields, and a tick
+shows without a reload` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1547), two new groups in `NODE_PATH=$(npm root -g) node
+test/public-calendar.test.mjs` (115) covering a real overflowing day and a
+real day that doesn't need trimming, and the rewritten Source-band group in
+the same file. Every new assertion was verified non-vacuous by reverting the
+fix it guards: the checkbox glyph fix fails with three of four boxes showing
+no tick mark at all; the reorder fix fails with the checklist's own position
+1600+ characters after the type block's; the print truncation fix, disabled,
+fails with all events visible and no "+N more" line on a cell built to
+overflow.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all

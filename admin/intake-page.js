@@ -177,9 +177,22 @@ const INTAKE_CSS = `<link href="https://fonts.googleapis.com/css2?family=Bricola
 .ei-checklist-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
 .ei-check{position:relative;display:grid;grid-template-columns:20px 1fr;gap:11px;align-items:start;width:100%;text-align:left;cursor:pointer;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:11px 12px;}
 .ei-check input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;width:100%;height:100%;}
-.ei-check-box{width:20px;height:20px;border-radius:5px;border:1.5px solid #C9C2AE;background:transparent;color:#fff;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
-.ei-check-done{background:#EDF0E4;border-color:#B9C7A4;}
-.ei-check-done .ei-check-box{background:#3F5424;border-color:#3F5424;}
+.ei-check-box{width:20px;height:20px;border-radius:5px;border:1.5px solid #C9C2AE;background:transparent;color:transparent;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+/* Do not put a backtick in this comment — it lives inside a JS template
+   literal and one has broken this module before.
+   DRIVEN BY the live checked state, not only by the server-rendered class.
+   The done flag from the database sets the box's INITIAL paint (the checked
+   attribute and this class, so a reload shows the truth) — but clicking the
+   box only ever changed the input's checked state, and nothing here was
+   reading that afterward, so the tick and the fill silently never appeared
+   until the whole page reloaded. Reported as the checkboxes being "unable to
+   be ticked" — they were being ticked, the screen just never said so. Both
+   selectors below are kept: the class keeps the very first paint honest
+   before any script has run, and the checked-state rule (via the same
+   has-selector mechanism already used elsewhere in this admin) is what makes
+   every click after that visible with no page reload. */
+.ei-check-done,.ei-check:has(input:checked){background:#EDF0E4;border-color:#B9C7A4;}
+.ei-check-done .ei-check-box,.ei-check:has(input:checked) .ei-check-box{background:#3F5424;border-color:#3F5424;color:#fff;}
 .ei-check-text{display:flex;flex-direction:column;gap:2px;}
 .ei-check-text>span:first-child{font-size:16px;line-height:1.35;color:#1A1A2A;}
 .ei-check-who{font-size:13px;color:#8A8898;}
@@ -725,9 +738,14 @@ function intakeChecklistPanel(item) {
   }
   const list = checklistFor(item.type, item.checks);
   const doneCount = list.filter((c) => c.done).length;
+  // ⚠ THE ✓ IS ALWAYS IN THE MARKUP NOW, NOT CONDITIONAL ON `c.done`. Its
+  // color is what CSS toggles (transparent unticked, white ticked, via the
+  // :checked rule above) — the same mechanism that makes the fill and border
+  // update live. A ✓ present in the DOM but invisible is what lets a click
+  // reveal it with no re-render; one only ever added server-side never would.
   const rows = list.map((c) => `<label class="ei-check${c.done ? ' ei-check-done' : ''}">
     <input type="checkbox" name="check_${intakeEsc(c.key)}" value="1"${c.done ? ' checked' : ''}>
-    <span class="ei-check-box" aria-hidden="true">${c.done ? '✓' : ''}</span>
+    <span class="ei-check-box" aria-hidden="true">✓</span>
     <span class="ei-check-text"><span>${intakeEsc(c.label)}</span><span class="ei-check-who">${intakeEsc(c.who)}</span></span>
   </label>`).join('');
   return `<div class="ei-checklist">
@@ -802,12 +820,19 @@ function intakeDetail(item, gymExtra, queue) {
             <select name="room"><option value="">—</option>${ROOMS.map((r) => `<option value="${intakeEsc(r)}"${r === item.room ? ' selected' : ''}>${intakeEsc(r)}</option>`).join('')}</select>
           </label>
         </div>
+        ${/* ⚠ THE CHECKLIST COMES BEFORE THE TYPE'S OWN FIELDS, DELIBERATELY —
+             it used to sit last, after a Rental's deferred-fields note or a
+             type's own 2-4 extra fields, which pushed it far enough down the
+             scrollable body that it read as missing. "Before it publishes" is
+             the reason anybody opens an item; the type's own fields are detail
+             work that can wait. Reported as wanting the info box "moved up to
+             the top so I can see it for the event." */ ''}
+        ${intakeChecklistPanel(item)}
         ${item.type ? `<div class="ei-basegroup">
           <span class="ei-rail-label" style="color:${intakeEsc(TYPES[item.type].color)}">${intakeEsc(TYPES[item.type].label)} only</span>
           <p class="ei-note">${intakeEsc(TYPES[item.type].note)}</p>
           ${deferred ? intakeDeferredPanel(item, gymExtra) : typeFields}
         </div>` : ''}
-        ${intakeChecklistPanel(item)}
         <div class="ei-actions">
           <button type="submit" name="action" value="save" class="ei-btn ei-btn-ghost">Save</button>
           <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary"${ready ? '' : ' disabled'}>${ready ? 'Publish to the calendar' : `Finish ${open == null ? 'classifying it' : open + ' item' + (open === 1 ? '' : 's') + ' first'}`}</button>
