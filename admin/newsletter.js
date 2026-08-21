@@ -166,6 +166,43 @@ export function canEdit(row) {
   return { ok: true, reason: '' };
 }
 
+// ── SUPERSEDING A SENT ISSUE ────────────────────────────────────────────────
+// "Duplicate as draft" is only ever offered on a sent issue (see canEdit
+// above), and the copy it makes carries `supersedes_id` pointing back at the
+// original — the office's own statement that this draft, once it too is
+// sent, is what the original should read as having been replaced by. Until
+// then the original is untouched: a half-written correction must never make
+// the letter it is fixing disappear out from under a visitor.
+//
+// ⚠ ONE STRING, SHARED BY EVERY PUBLIC READER OF THIS TABLE — the
+// newsletterarchive block (pageData()), /api/newsletters, /api/newsletter/:id
+// and the legacy /news page. A superseded issue is real history and the
+// admin's own list still shows it; this clause only ever belongs on a query
+// answering a VISITOR. Writing it once here is what stops one of those four
+// places quietly disagreeing with the other three — the same shape of bug
+// this file's own COR-1 finding was about, for the news table instead.
+//
+// `status = 'published'` — not the broader isSent() — is deliberate: it is
+// the exact condition the SEND route sets alongside `sent_at`, and every row
+// that can carry a `supersedes_id` was created by the Duplicate route below,
+// which always writes an explicit status. There is no legacy NULL-status row
+// to account for here the way there is for an issue sent before that column
+// existed.
+export const NEWSLETTER_PUBLIC_WHERE_SQL = `(status IS NULL OR status = 'published')
+  AND id NOT IN (SELECT supersedes_id FROM newsletters WHERE supersedes_id IS NOT NULL AND status = 'published')`;
+
+// The admin list's own pure half of the same rule, for rows already fetched
+// in JS rather than filtered in SQL — so the "Superseded" note on the
+// original's own row (it is never dropped from the admin's list — only from
+// what a visitor sees) can't drift from what the public query hides.
+export function supersededIds(rows) {
+  const hidden = new Set();
+  for (const r of rows || []) {
+    if (r.supersedes_id != null && r.status === 'published') hidden.add(Number(r.supersedes_id));
+  }
+  return hidden;
+}
+
 // ── APPROVAL ─────────────────────────────────────────────────
 // Two people: one writes and submits, a second approves and sends. The value is
 // entirely in the two being different — an approval step one person can

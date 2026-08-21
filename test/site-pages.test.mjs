@@ -283,6 +283,71 @@ group('the homepage is converted like any other page');
   await ctx.close();
 }
 
+group('a newsletter reads in place, without leaving the page');
+{
+  // ⚠ THE PLAIN <a href="/news/:id"> A PUBLISHED PAGE RENDERS USED TO BE A
+  // REAL NAVIGATION. The legacy hardcoded /news page's own "Read this
+  // letter" button has always called loadNewsletterDetail(id) directly and
+  // swallowed the click; the newsletterarchive BLOCK never did, so reading a
+  // letter from a published page reloaded the whole document — which reads
+  // as a window popping open rather than the page quietly changing.
+  //
+  // ⚠ loadNewsletterDetail ITSELF NOW BUILDS A BODY-APPENDED OVERLAY
+  // (#tlc-nl-overlay), NOT THE OLD IN-PAGE #newsletter-detail SECTION — a
+  // separate, independent fix (see its own comment in public/index.html) for
+  // the exact bug this group is also about: tlcTakeOverPage()'s "hide every
+  // child of #page-news" loop swallowed that old section whole. This group
+  // only has to prove the BLOCK now calls loadNewsletterDetail at all, which
+  // a plain <a href> never did — the overlay's own correctness is that
+  // function's problem, not this block's.
+  const rendered = { news: renderPage([newBlock('newsletterarchive')], {
+    slug: 'news', template: 'standard', children: [], withCss: false,
+    data: { newsletters: [{ id: 42, subject: 'This week at Timothy', published_at: '2026-08-20', pastor_note: 'A short preview.' }] },
+  }) };
+  const api = {
+    pages: [{ id: 'news', title: 'News', label: 'News', slug: 'news', parent: null, in_menu: true, template: 'standard', seo_description: '' }],
+    rendered, css: BLOCK_CSS, redirects: {}, details: DETAILS,
+  };
+  const detailPayload = {
+    id: 42, subject: 'This week at Timothy', published_at: '2026-08-20',
+    pastor_note: '<p>The full letter, in place.</p>', events: [], news_items: [], bible_classes: [],
+  };
+
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('https://admin.timothystl.org/**', (route) => {
+    const u = route.request().url();
+    if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(api) });
+    if (u.includes('/api/redirects')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"redirects":[]}' });
+    if (u.includes('/api/newsletter/42')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detailPayload) });
+    if (u.endsWith('/posts')) return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.goto(base + '/news', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+
+  // A marker on `window` survives an in-place transition and is wiped by a
+  // real navigation — exactly the difference this fix is about.
+  await page.evaluate(() => { window.__stayedInPlace = true; });
+  await page.click('.tlcb-nl-link');
+  // ⚠ A fixed sleep here is exactly the kind of flake this suite otherwise
+  // avoids — loadNewsletterDetail awaits a real fetch, and how long that
+  // takes depends on the machine, not the fix. Wait for the actual content
+  // to land instead of guessing how long that takes.
+  await page.locator('#tlc-nl-overlay-content:has-text("The full letter, in place.")').waitFor({ timeout: 5000 });
+
+  eq(await page.evaluate(() => window.__stayedInPlace === true), true, 'the click never reloaded the document');
+  eq(await page.locator('#tlc-nl-overlay').isVisible(), true, 'the detail overlay opens in place');
+  ok((await page.locator('#tlc-nl-overlay-content').innerText()).includes('The full letter, in place.'),
+    'and shows the real, full letter fetched for it — not the truncated block preview');
+  eq(new URL(page.url()).pathname, '/news/42', 'the address updates to the letter, for a bookmark or a refresh');
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 console.log(`\n${pass} passed, ${fail} failed`);

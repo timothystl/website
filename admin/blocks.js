@@ -4694,16 +4694,29 @@ function renderInner(b, opts) {
     const open = issues.slice(0, b.count);
     const rest = issues.slice(b.count);
 
+    // ⚠ A PLAIN <a href="/news/:id"> IS A FULL PAGE RELOAD, NOT THE IN-PLACE
+    // DETAIL VIEW public/index.html ALREADY BUILDS. The legacy hardcoded
+    // /news page's own "Read this letter" button has always called
+    // loadNewsletterDetail(id) and swallowed the click; this block never
+    // did, so reading a letter from a published page reloaded the whole
+    // document from scratch — a real navigation, which reads as a window
+    // popping up rather than the page quietly swapping to the letter. The
+    // href stays real (a working link if the script never loads, or the
+    // block is read outside a browser) and the handler only intercepts a
+    // click it can actually act on.
+    const detailClick = (n) => opts.editing
+      ? ' onclick="return false"'
+      : ` onclick="if(window.loadNewsletterDetail){event.preventDefault();window.loadNewsletterDetail(${Number(n.id) || 0})}"`;
     const card = (n) => {
       const note = (n.pastor_note || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
       return `<div class="tlcb-nl-item">
         <span class="tlcb-nl-date">${esc(fmtNewsDate(n.published_at))}</span>
         <span class="tlcb-nl-subj">${esc(n.subject || '')}</span>
         ${note ? `<p class="tlcb-nl-note">${esc(note)}${note.length >= 220 ? '…' : ''}</p>` : ''}
-        <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>Read this letter</a>
+        <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${detailClick(n)}>Read this letter</a>
       </div>`;
     };
-    const row = (n) => `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>
+    const row = (n) => `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${detailClick(n)}>
       <span class="tlcb-nl-row-d">${esc(fmtNewsDate(n.published_at, true))}</span>
       <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
     </a>`;

@@ -133,7 +133,8 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
          issueStatus, sendSummary, parseSubscriberCsv,
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
-         prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds } from './admin/newsletter.js';
+         prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
+         NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -695,10 +696,11 @@ async function pageData(env, reqKey) {
       // admin came out framed differently on the published page.
       q('SELECT name, title, email, photo_url, photo_position, photo_zoom ' +
         'FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 60'),
-      // Same "published" filter /api/newsletters itself uses (status IS NULL
-      // counts too — issues sent before the status column existed).
+      // Same public filter /api/newsletters itself uses — see
+      // NEWSLETTER_PUBLIC_WHERE_SQL: published, and not superseded by a
+      // later, corrected issue that has since been sent in its place.
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
-         WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC, id DESC LIMIT 12`),
+         WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC, id DESC LIMIT 12`),
       // The giving page's three moving parts. They are read here, with
       // everything else a block might need, so the Giving widget and the
       // Amount ladder can be SELF-FILLING blocks — the one property that
@@ -1999,7 +2001,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-21-1'; // bumped: push_log table, so every push notification (not just held mail) leaves a readable trail in the admin
+    const SCHEMA_VERSION = '2026-08-21-2'; // bumped: newsletters.supersedes_id, so a re-sent correction can replace the issue it corrects in the public archive (on top of push_log, merged from main)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2700,6 +2702,10 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN extra_notes TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_at TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_count INTEGER').run(); } catch (_) {}
+    // Which sent issue a later, corrected duplicate is meant to replace — see
+    // NEWSLETTER_PUBLIC_WHERE_SQL in admin/newsletter.js. Nullable and unset
+    // on every existing row, so nothing already sent is affected.
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN supersedes_id INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
@@ -3765,7 +3771,7 @@ export default {
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
       const [rows, allEvts] = await Promise.all([
-        env.DB.prepare("SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC").all(),
+        env.DB.prepare(`SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC`).all(),
         env.DB.prepare('SELECT * FROM events ORDER BY event_date, sort_order').all()
       ]);
       const evtsByNewsletter = {};
@@ -3807,7 +3813,7 @@ export default {
                 ministry_content, ministry_type, published_at, format,
                 cta_url, cta_label, bible_classes, news_item_ids
            FROM newsletters
-          WHERE id = ? AND (status IS NULL OR status = 'published')`
+          WHERE id = ? AND ${NEWSLETTER_PUBLIC_WHERE_SQL}`
       ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(id).all();
@@ -3842,7 +3848,7 @@ export default {
     // ── PUBLIC: newsletter archive page ──
     if (path === '/news' && method === 'GET') {
       const rows = await env.DB.prepare(
-        "SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, events FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC"
+        `SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, events FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY published_at DESC`
       ).all();
       const newsletters = [];
       for (const row of rows.results) {
@@ -8606,15 +8612,21 @@ ${classesJs}
       if (!row) return new Response('Not found', { status: 404 });
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(id).all();
       const copyPublishedAt = row.published_at || churchDate();
+      // Duplicate is only ever offered on a sent issue (canEdit refuses the
+      // regular edit form for anything else) — but this is checked rather
+      // than assumed, because a copy of a draft has nothing to supersede.
+      // See NEWSLETTER_PUBLIC_WHERE_SQL: once THIS copy is itself sent, the
+      // original drops out of the public archive; until then it is untouched.
+      const supersedesId = isNewsletterSent(row) ? row.id : null;
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
         row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
         row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
         // A copy carries the extra notes too — the whole point of duplicating a
         // sent issue is to start from what actually went out.
-        row.extra_notes || '[]'
+        row.extra_notes || '[]', supersedesId
       ).run();
       const newId = result.meta.last_row_id;
       for (const e of eventsRows.results) {
@@ -12903,7 +12915,7 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
-      "SELECT id, subject, published_at, format, status, created_at, approval_status, scheduled_send_at, sent_at, sent_count, beehiiv_id, brevo_campaign_id FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
+      "SELECT id, subject, published_at, format, status, created_at, approval_status, scheduled_send_at, sent_at, sent_count, beehiiv_id, brevo_campaign_id, supersedes_id FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
     ).all();
 
     const msgParam = url.searchParams.get('msg');
@@ -13003,21 +13015,28 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
       return `${sent ? 'Sent' : 'Sends'} ${escapeHtml(when)}`;
     };
 
+    // A sent issue a later, actually-sent duplicate has replaced — see
+    // NEWSLETTER_PUBLIC_WHERE_SQL. It is still real history, so it stays in
+    // this list; only the public archive drops it. The row says so, or a
+    // vanished letter reads as the admin having lost something.
+    const hiddenFromPublic = supersededIds(rows);
+
     const listRows = rows.map((r) => {
       const st = issueStatus(r);
       const sent = isNewsletterSent(r);
       const sends = sent
         ? (Number.isFinite(r.sent_count) && r.sent_count > 0 ? String(r.sent_count) : '—')
         : (audienceNow?.n > 0 ? String(audienceNow.n) : '—');
+      const label = hiddenFromPublic.has(r.id) ? `${st.label} · superseded` : st.label;
       return {
         href: `/edit/${r.id}`,
         filter: sent ? 'sent' : (r.approval_status === 'pending' ? 'awaiting-approval' : 'draft'),
-        search: `${r.subject || ''} ${st.label} ${sendSummary(r)}`.toLowerCase(),
+        search: `${r.subject || ''} ${label} ${sendSummary(r)}`.toLowerCase(),
         cells: [
           primaryCell(r.subject || 'Untitled issue'),
           escapeHtml(sends),
           dateCell(r, sent),
-          statusPill(st.tone, st.label),
+          statusPill(st.tone, label),
         ],
         // A sent issue offers Duplicate rather than Edit — the row's own action
         // says what is possible before anybody clicks into a locked screen.

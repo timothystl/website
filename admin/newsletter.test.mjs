@@ -4,6 +4,7 @@
 // that matter here are the ones that stop something going out wrong, or going
 // out twice: what counts as sent, what a sent issue may still allow, and what
 // happens to an issue written before any of these fields existed.
+import { DatabaseSync } from 'node:sqlite';
 import {
   BLOCKS, BLOCK_KEYS, parseBlocks, serializeBlocks, blockOn,
   AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
@@ -11,6 +12,7 @@ import {
   issueStatus, sendSummary, parseSubscriberCsv,
   parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
+  NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -300,6 +302,38 @@ group('a new issue does not start with an empty sidebar');
   eq(defaultUpcomingEventIds([], '2026-09-14').length, 0, 'no posts means nothing to tick');
   eq(defaultUpcomingEventIds(posts, '').length, 0, 'no cutoff — refuse rather than guess a window');
   eq(defaultUpcomingEventIds(posts, null).length, 0, 'and a missing cutoff is the same as an empty one');
+}
+
+// ── a corrected, re-sent issue supersedes the one it replaces ───────────────
+group('a corrected, re-sent issue supersedes the one it replaces');
+{
+  // Run against a real database, not a string comparison — this is a raw SQL
+  // fragment shared by four different queries, and what matters is what it
+  // actually filters, not what it looks like.
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE newsletters (id INTEGER PRIMARY KEY, subject TEXT, status TEXT, supersedes_id INTEGER)');
+  db.prepare("INSERT INTO newsletters (id, subject, status, supersedes_id) VALUES (1, 'Original', 'published', NULL)").run();
+  db.prepare("INSERT INTO newsletters (id, subject, status, supersedes_id) VALUES (2, 'Corrected copy', 'draft', 1)").run();
+  const visible = () => db.prepare(`SELECT id FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY id`).all().map((r) => r.id).join(',');
+
+  eq(visible(), '1', 'the original stays visible while its correction is still only a draft');
+  db.prepare("UPDATE newsletters SET status='published' WHERE id=2").run();
+  eq(visible(), '2', 'and drops out of the public archive the moment the correction is actually sent');
+
+  // A third, unrelated sent issue is never touched by any of this.
+  db.prepare("INSERT INTO newsletters (id, subject, status, supersedes_id) VALUES (3, 'Unrelated', 'published', NULL)").run();
+  eq(visible(), '2,3', 'an issue nothing supersedes is unaffected');
+
+  // The admin list's pure half agrees with the SQL, for rows already in hand.
+  eq([...supersededIds([
+    { id: 1, status: 'published' },
+    { id: 2, status: 'published', supersedes_id: 1 },
+  ])].join(','), '1', 'the ORIGINAL is what gets marked superseded, not the correction');
+  eq(supersededIds([
+    { id: 1, status: 'published' },
+    { id: 2, status: 'draft', supersedes_id: 1 },
+  ]).size, 0, 'not yet — the copy replacing it has not been sent');
+  eq(supersededIds([{ id: 1, status: 'published' }]).size, 0, 'an issue with nothing pointing at it stays unmarked');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
