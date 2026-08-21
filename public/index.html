@@ -3970,7 +3970,6 @@ function tlcCalRender(st) {
       tlcCalBar(st, monthName) +
       tlcCalSubPanel(st) +
       tlcCalNote(st) +
-      tlcCalSourceBand(st) +
       tlcCalCatBand(st) +
       body +
       tlcCalDetail(st) +
@@ -4066,34 +4065,6 @@ function tlcCalPill(act, val, active, label, dotColor) {
   return '<button class="tlc-cal-pill" data-cal="' + act + '" data-val="' + tlcCalEsc(val) + '" aria-pressed="' + (!!active) + '">' +
     (dotColor ? '<span class="tlc-cal-dot" style="background:' + tlcCalEsc(dotColor) + '"></span>' : '') +
     tlcCalEsc(label) + '</button>';
-}
-
-function tlcCalSourceBand(st) {
-  // ⚠ A SOURCE PILL IS ONLY OFFERED WHEN THE MONTH HAS THAT SOURCE IN IT. The
-  // building-use pill in particular: most months have no rentals at all, and a
-  // pill whose only possible outcome is the empty state is the dead control
-  // this site is held to everywhere else. The one currently selected is kept
-  // even if the new month has none of it, so a filter can never become
-  // impossible to clear.
-  var has = {};
-  st.events.forEach(function (e) {
-    if (e.source === 'both') { has.gcal = true; has.news = true; } else { has[e.source] = true; }
-  });
-  var pills = [tlcCalPill('src', 'all', st.src === 'all', 'All sources')];
-  [['gcal', 'Google Calendar'], ['news', 'News & Events'], ['building', 'Building use'], ['local', 'Entered here']].forEach(function (p) {
-    if (has[p[0]] || st.src === p[0]) pills.push(tlcCalPill('src', p[0], st.src === p[0], p[1]));
-  });
-  var keys = [];
-  if (has.gcal)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.gcal + '"></span>Google</span>');
-  if (has.news)     keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.news + '"></span>News &amp; Events</span>');
-  if (has.building) keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.building + '"></span>Building use</span>');
-  if (has.local)    keys.push('<span class="k"><span class="tlc-cal-swatch" style="background:' + TLC_CAL_SRC_COLOR.local + '"></span>Entered here</span>');
-  if (pills.length <= 1) return '';
-  return '<div class="tlc-cal-src">' +
-    '<span class="tlc-cal-eyebrow">Source</span>' +
-    '<div class="tlc-cal-pills">' + pills.join('') + '</div>' +
-    '<div class="tlc-cal-key">' + keys.join('') + '</div>' +
-  '</div>';
 }
 
 // ⚠ ONLY THE CATEGORIES THIS MONTH ACTUALLY HAS get a pill. All eleven would
@@ -4354,11 +4325,57 @@ function tlcPreparePrint() {
     }
     node = parent;
   }
+  tlcPrintFitCells();
   document.body.setAttribute('data-tlc-printing', '1');
+}
+// ── A day that does not fit says so, rather than clipping mid-line ─────────
+// ⚠ THE CELL STILL CLIPS — the fixed six-row grid dividing the page box is
+// what keeps the sheet to one page, and that does not change here. What
+// changed is what happens to the events that do not fit it: they used to just
+// be cut by `overflow:hidden`, often mid-row, so a busy Wednesday printed with
+// its last visible line sliced in half. Reported plainly: "on long days
+// things are cut off." This measures what the cell's real print height
+// actually holds and turns whatever does not fit into an honest "+N more"
+// line — the same shape Google's old embed used, before this whole feature
+// existed to get away from a cap ON SCREEN. It is the right call here and
+// nowhere else on this site: the print sheet is the one place this repo has
+// already decided a cap is correct, because the page box is the constraint,
+// not a number anybody chose.
+function tlcPrintFitCells() {
+  var cells = document.querySelectorAll('.tlc-print-cell');
+  for (var i = 0; i < cells.length; i++) {
+    var cell = cells[i];
+    var evs = cell.querySelectorAll('.tlc-print-ev');
+    if (!evs.length || cell.scrollHeight <= cell.clientHeight) continue;
+    var hidden = 0;
+    while (hidden < evs.length && cell.scrollHeight > cell.clientHeight) {
+      var row = evs[evs.length - 1 - hidden];
+      TLC_PRINT_UNDO.push([row, 'display', row.style.display]);
+      row.style.display = 'none';
+      hidden++;
+    }
+    if (!hidden) continue;
+    var more = document.createElement('div');
+    more.className = 'tlc-print-more';
+    more.textContent = '+' + hidden + ' more';
+    cell.appendChild(more);
+    TLC_PRINT_UNDO.push([more, 'REMOVE', null]);
+    // The "+N more" line takes room of its own — if adding it tips the cell
+    // back over, hide one further real event rather than let the line itself
+    // be the thing that ends up clipped.
+    while (hidden < evs.length && cell.scrollHeight > cell.clientHeight) {
+      var extra = evs[evs.length - 1 - hidden];
+      TLC_PRINT_UNDO.push([extra, 'display', extra.style.display]);
+      extra.style.display = 'none';
+      hidden++;
+      more.textContent = '+' + hidden + ' more';
+    }
+  }
 }
 function tlcRestorePrint() {
   for (var i = 0; i < TLC_PRINT_UNDO.length; i++) {
     var e = TLC_PRINT_UNDO[i];
+    if (e[1] === 'REMOVE') { if (e[0].parentNode) e[0].parentNode.removeChild(e[0]); continue; }
     e[0].style[e[1]] = e[2];
   }
   TLC_PRINT_UNDO = [];
@@ -4366,6 +4383,22 @@ function tlcRestorePrint() {
 }
 window.addEventListener('beforeprint', tlcPreparePrint);
 window.addEventListener('afterprint', tlcRestorePrint);
+// ⚠ beforeprint FIRES TOO EARLY TO MEASURE BY, verified directly: triggering
+// print does not make the browser's print stylesheet active at the moment
+// beforeprint's own synchronous handler runs — only matchMedia('print')
+// flipping does. tlcPrintFitCells() needs real print-sized cell heights to
+// know what fits, so it also runs off that signal, which is the actual
+// moment the engine says printing is under way, rather than assuming
+// beforeprint's timing is close enough. Safe to run twice: a cell a first,
+// earlier pass already trimmed correctly is a same-height no-op the second
+// time, so this costs nothing on a browser where beforeprint's timing was
+// fine to begin with.
+if (window.matchMedia) {
+  var tlcPrintMQ = window.matchMedia('print');
+  var tlcOnPrintMQ = function (e) { if (e.matches) tlcPrintFitCells(); };
+  if (tlcPrintMQ.addEventListener) tlcPrintMQ.addEventListener('change', tlcOnPrintMQ);
+  else if (tlcPrintMQ.addListener) tlcPrintMQ.addListener(tlcOnPrintMQ); // Safari < 14
+}
 // ⚠ THIS BLOCK HAS TO SIT ABOVE THE ROUTER, and it is the only reason it is
 // here rather than beside the other form handlers further down. The router
 // below runs at parse time and calls showPage() synchronously, which for

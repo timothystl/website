@@ -5690,6 +5690,48 @@ group('a deferred field set (a gym-sourced rental) is read-only against a crafte
   has(page, 'Managed on the Gym Rentals screen, not here.', 'saying so in as many words');
 }
 
+group("the checklist renders before the type's own fields, and a tick shows without a reload");
+{
+  // Reported plainly: "move the info box on right side up to the top so I can
+  // see it for the event" and "these checkboxes are all unable to be ticked."
+  // Both traced to the same panel — a Rental item is the one type whose extra
+  // block (the deferred Gym Rentals note) is tall enough that the checklist
+  // used to sit well below the fold.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Cub Scouts','Pat Reyes','preyes@example.org',1)").run();
+  const gymDate = churchDatePlus(9);
+  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:00','20:00','confirmed','')")
+    .run(gymDate);
+  await call(env, '/event-intake', { cookie, fresh: true });
+  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
+  const key = `b:${bookingId}`;
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
+  await call(env, '/event-intake/save', { cookie, method: 'POST',
+    form: { key, queue: 'rental', action: 'save', room: 'Gym', check_agreement: '1' } });
+
+  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
+  const checklistAt = page.indexOf('Before it publishes');
+  const typeBlockAt = page.indexOf('Rental only');
+  ok(checklistAt >= 0 && typeBlockAt >= 0, 'both the checklist and the type-specific block are on the page');
+  ok(checklistAt < typeBlockAt,
+    'the checklist ("Before it publishes") renders before the type’s own fields ("Rental only"), so it does not need scrolling past to reach: ' +
+    checklistAt + ' vs ' + typeBlockAt);
+
+  // ⚠ THE ROOT CAUSE OF "unable to be ticked": the tick glyph and the fill
+  // were only ever written into the markup by the SERVER, keyed on whatever
+  // was already saved — clicking a box toggled the underlying input just
+  // fine, but nothing on screen ever said so until a reload. The fix is that
+  // the glyph is in the DOM unconditionally now, and a live CSS rule (not a
+  // second server-side flag) decides whether it is visible.
+  const checkSpans = page.match(/class="ei-check-box" aria-hidden="true">[^<]*</g) || [];
+  eq(checkSpans.length, 4, 'the four Rental checklist items each render a box');
+  ok(checkSpans.every((s) => s.endsWith('>✓<')), 'and every one of them — ticked or not — carries the tick mark in the markup: ' + checkSpans.join(' | '));
+  const doneCount = (page.match(/class="ei-check ei-check-done"/g) || []).length;
+  eq(doneCount, 1, 'but only the one item actually saved as done gets the done class server-side, so an unopened page still shows the truth');
+  has(page, '.ei-check:has(input:checked)', 'and a CSS rule keyed off the checkbox’s own live checked state is what makes a click visible with no reload');
+}
+
 group('"+ New event" creates a local row with no other record, and it reaches the public calendar directly');
 {
   const { db, env } = await boot();

@@ -598,12 +598,8 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   font-size:calc(13px * var(--tlc-text-scale, 1));color:#8C3A28;}
 
 /* ── Filter bands ────────────────────────────────────────────────────────── */
-.tlc-cal-src{display:flex;align-items:center;gap:12px;padding:12px 24px;
-  border-bottom:1px solid var(--border);background:var(--white);flex-wrap:wrap;}
 .tlc-cal-cats{display:flex;gap:8px;padding:14px 24px;border-bottom:1px solid var(--border);
   background:#fff;flex-wrap:wrap;}
-.tlc-cal-eyebrow{font-family:var(--font-ui);font-size:calc(10px * var(--tlc-text-scale, 1));
-  font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);}
 .tlc-cal-pills{display:flex;gap:6px;flex-wrap:wrap;}
 .tlc-cal-pill{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-ui);
   font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:700;border-radius:999px;
@@ -613,10 +609,6 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-cal-pill[aria-pressed="true"]{background:var(--steel);border-color:var(--steel);color:#fff;}
 .tlc-cal-pill[aria-pressed="true"]:hover{background:var(--steel-dk);}
 .tlc-cal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.tlc-cal-key{display:flex;align-items:center;gap:14px;margin-left:auto;flex-wrap:wrap;}
-.tlc-cal-key span.k{display:flex;align-items:center;gap:6px;
-  font-size:calc(14px * var(--tlc-text-scale, 1));color:var(--text-muted);}
-.tlc-cal-swatch{width:7px;height:7px;border-radius:2px;flex-shrink:0;display:inline-block;}
 
 /* ── The month grid ──────────────────────────────────────────────────────── */
 /* ⚠ minmax(0,1fr) RATHER THAN 1fr, AND min-width:0 ON EVERY CELL AND SPAN.
@@ -731,12 +723,11 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 @media(max-width:900px){
   .tlc-cal-dows,.tlc-cal-grid{display:none;}
   .tlc-cal-seg{display:none;}
-  .tlc-cal-bar,.tlc-cal-src,.tlc-cal-cats{padding-left:16px;padding-right:16px;}
+  .tlc-cal-bar,.tlc-cal-cats{padding-left:16px;padding-right:16px;}
   .tlc-cal-weekhd{padding-left:16px;padding-right:16px;}
   .tlc-cal-listday{grid-template-columns:64px 1fr;gap:14px;padding:16px;}
   .tlc-cal-listdate .dn{font-size:calc(26px * var(--tlc-head-scale, 1));}
   .tlc-cal-listev{grid-template-columns:1fr;gap:2px;}
-  .tlc-cal-key{margin-left:0;}
   .tlc-cal-title{font-size:calc(21px * var(--tlc-head-scale, 1));}
   /* 44px on everything aimed at with a thumb, the rule the rest of the phone
      pass already holds the site to. */
@@ -792,6 +783,12 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-print-ev .tx{font-family:var(--font-body);font-size:9.5px;line-height:1.22;
   color:var(--charcoal);min-width:0;overflow-wrap:anywhere;}
 .tlc-print-ev .tx b{font-family:var(--font-ui);font-size:8.5px;font-weight:800;letter-spacing:.01em;}
+/* ⚠ ADDED ONLY BY THE beforeprint FALLBACK (index.html, tlcPrintFitCells), FOR
+   A DAY WITH MORE ON IT THAN ITS ROW CAN HOLD. Never present on screen, and
+   removed again on afterprint — see the comment there for why a busy day gets
+   this instead of a row silently clipped mid-line. */
+.tlc-print-more{font-family:var(--font-ui);font-size:8.5px;font-weight:700;
+  color:var(--gray);padding-top:1px;}
 .tlc-print-foot{display:flex;justify-content:space-between;font-family:var(--font-ui);
   font-size:9px;color:var(--text-muted);gap:16px;}
 
