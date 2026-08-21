@@ -1453,6 +1453,138 @@ tracks the database exactly. The two server-side refusal assertions were each
 verified by removing their guard and confirming the real symptom — a
 timestamp or a smuggled value landing where `null` belongs.
 
+### Event Intake: eleven types grouped by the four core values, a bulk assign, and the hang was a serial write loop (v5.40.0, 2026-08-21)
+
+Andrew, the moment he could actually reach `/event-intake` (see the section
+below on the permission gate): *"it is hanging up when i try to assign an
+event type. Also, i need more types, meetings, Word of Life, MDO, music,
+youth & family, special event"* — then, in the same breath, *"and fellowship
+can be a type. and we can organize by the 4 core values"* — then, looking at
+a queue of 135 unclassified imports: *"can we just bulk assign them?"* Four
+asks, and the first one was the one actually stopping him from doing the
+other three.
+
+**The hang was `syncIntakeRows()`, not the click.** Every GET of
+`/event-intake` — including the redirect target after *every single action*
+on this screen, since it does a full page reload per click by design — ran a
+plain `for…await` loop, one D1 `INSERT … ON CONFLICT` awaited before the
+next began, over every Google/News/gym row in the sync window. Over 63 days
+of recurring services plus News and gym rows that can genuinely run past a
+hundred, assigning a type meant sitting through 100+ sequential round trips
+before the redirect could even be requested. ⚠ **Not reproduced by timing it
+in this sandbox** — a local `node:sqlite` shim answers a query in
+microseconds, so the loop that is slow against real D1 is instant here.
+Found by reading the code against the reported symptom rather than by
+measuring it: every other write-heavy path in this file already fixed this
+exact shape (`Promise.all` over independent rows), and this one loop was the
+one that hadn't been. Fixed the same way — `Promise.all` over every row,
+since each carries its own `source_key` and none can collide with another in
+the same batch.
+
+**Eleven types now, not four.** Worship, Education, Rental and News stay;
+Meetings, Word of Life, MDO, Music, Youth & Family, Special event and
+Fellowship are new, each with its own four-item checklist and its own extra
+fields, on the same shape the original four already used — "Education" alone
+had been standing in for a Bible class, a WOL chapel visit, an MDO parent
+event and a confirmation program all at once, with one checklist that could
+never fit all four.
+
+- **⚠ COLORS ARE `CALENDAR_PALETTE` KEYS NOW, NOT A FIFTH HAND-PICKED PALETTE.**
+  Checked against the mock's original four hex values before touching
+  anything: `education` `#2E7EA6` and `news` `#7A8B5F` were both under 5.3:1,
+  and `rental` `#C9973A` cleared only **2.40:1** against the white text its
+  own "selected" pill state puts on it — the identical WCAG gap
+  `CALENDAR_PALETTE` itself had until the fix two sections above, on a screen
+  that had never been checked at all. Rather than invent a third ad hoc color
+  system for one more screen, every type now names one of `CALENDAR_PALETTE`'s
+  own already-contrast-verified keys — the same ones `CAL_SEED_PALETTE` in
+  `tlc-admin-worker.js` already assigns to the matching Google-color category
+  (worship→navy, learn→teal, facility→stone, youth→amber, wol→slate,
+  mdo→sand, music→plum, meetings→steel, special→gold). `news` and
+  `fellowship` take the two palette keys nothing else here uses (`moss`,
+  `brick`); `gray` is left alone, since on the calendar it means
+  "uncategorized" and no type here is that. Type and category stay two
+  separate ideas — picking a type here still never writes
+  `calendar_category` — there is simply no reason for "Worship" to be one
+  color on this screen and a different navy on the public calendar.
+  `admin/intake.test.mjs` asserts every type's color is exactly its named
+  palette entry's color (not a hand-typed near-miss), clears 4.5:1 against
+  the pill's cream text, and that no two types share a color — verified
+  non-vacuous by reverting `rental` to its old `#C9973A` and watching both
+  the color-match and the contrast assertion fail with the real numbers.
+
+**Grouped by the four core values.** The left rail's flat "By calendar" list
+becomes four labeled groups — **Worship** (Worship, Music), **Christian
+Education** (Education, Youth & Family, Word of Life, MDO), **Outreach**
+(Rental), **Acceptance** (Fellowship) — plus an unlabeled **Other** group for
+the three types that do not belong to a value.
+
+- **⚠ NEWS, MEETINGS AND SPECIAL EVENT ARE DELIBERATELY LEFT OUT OF ALL FOUR
+  GROUPS.** A council meeting or "the Christmas Market kickoff" is not
+  itself an act of worship, education, outreach or acceptance the way a
+  Sunday service or a confirmation class is — forcing one onto them would be
+  answering a question nobody asked. `typesForValue()`/`typesWithNoValue()`
+  in `admin/intake.js` partition `TYPE_KEYS` exactly once each; a test walks
+  both and asserts every type is accounted for in exactly one place, never
+  two, never zero.
+- **The four value keys are `admin/values.js`'s own** —
+  `acceptance`/`worship`/`education`/`outreach` — not a name invented for
+  this screen. `wol`→`education` and `rental`→`outreach` are the identical
+  pairings `PARTNER_SEED` in `admin/db.js` already makes (Word of Life is
+  the partner ministry tied to `'education'`, CFNA to `'outreach'`), read
+  from that file rather than re-decided here, so the two screens cannot come
+  to disagree about what Word of Life "is."
+- **⚠ "Christian Education" IS THE VALUE'S DISPLAY LABEL, "education" IS ITS
+  STORED KEY** — same split this repo already holds `admin/values.js`'s own
+  short names to. `VALUE_LABELS.education` is where that gets said; nothing
+  stores the display string.
+
+**Bulk assign.** Andrew, looking at the 135-item backlog the hang had been
+hiding: a type + "Assign to selected" control now sits above the list, with
+a checkbox on every row.
+
+- **⚠ THE CHECKBOX SITS BESIDE THE ROW, NOT INSIDE IT.** `.ei-row` is an
+  anchor the office clicks anywhere on to open a record; a checkbox nested
+  inside an `<a>` is invalid HTML and would toggle selection on every
+  ordinary click instead of navigating. `.ei-row-line` is a small flex
+  wrapper with the checkbox and the anchor as siblings, wired together only
+  by the checkbox's own `value` (the event's key).
+- **`POST /event-intake/bulk-type`** takes `keys` (read with `getAll`, so it
+  works whether three rows were ticked by hand or "Select all shown" checked
+  every box first) and one `type`. ⚠ **Every posted key is checked against
+  what this request's own sync actually merged, not trusted as a bare id** —
+  a key with no matching item (a stale page, a crafted form, an id outside
+  the sync window) is silently skipped rather than handed to
+  `writeIntakePatch` with nothing real behind it. A bogus `type` is refused
+  exactly as `/event-intake/type` already refuses one for a single event —
+  same allowlist, same route family, not a second door that could drift from
+  the first's rule.
+- **"Select all shown" is the one place this screen reaches for more than a
+  bare `confirm()`.** There is no way to link one checkbox's state to a
+  dozen others without *some* script, and it touches nothing else on the
+  page — the rest of the screen is still plain links and plain forms, one
+  reload per action, exactly as documented in the section above. The submit
+  itself also confirms, naming how many events are about to change — the one
+  action on this screen that can misfile 135 events in a single click if the
+  wrong type is selected first.
+- **⚠ `call()` in `test/admin-redesign.test.mjs` had to learn to post an
+  array as repeated form fields.** `new URLSearchParams({keys: [a, b]})`
+  collapses an array into one comma-joined value rather than two `keys=`
+  entries — not what a real browser sends for several checkboxes sharing one
+  `name`, and not what `form.getAll('keys')` on the receiving end needs to
+  see more than one value. The helper now appends each array element
+  separately; every existing scalar caller is unaffected.
+
+Run: `node admin/intake.test.mjs` (196 — the four-values partition and the
+color/contrast checks are both new, each verified non-vacuous by reverting
+the fix it guards) and three new groups in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1508 total) — the rail renders "Christian Education" rather than the raw
+key and orders Word of Life/MDO/Youth & Family between it and Outreach, News/
+Meetings/Special event render only after the unlabeled Other heading, and
+bulk-assign sets a type across several events while leaving an unchecked one
+and an out-of-window key alone.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all

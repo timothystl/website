@@ -93,7 +93,18 @@ async function call(env, path, { cookie = '', method = 'GET', form = null, fresh
   if (accept) headers.set('accept', accept);
   let body;
   if (form) {
-    body = new URLSearchParams(form).toString();
+    // ⚠ BUILT BY HAND, NOT `new URLSearchParams(form)` — that constructor
+    // stringifies an array value into ONE comma-joined pair rather than
+    // repeating the key, which is not what a real browser posts for several
+    // checkboxes sharing one `name` (Event Intake's bulk-assign `keys[]`,
+    // for one). Appending each element separately is what `form.getAll(...)`
+    // on the receiving end actually needs to see more than one value.
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(form)) {
+      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
+      else params.append(k, v);
+    }
+    body = params.toString();
     headers.set('content-type', 'application/x-www-form-urlencoded');
   }
   const req = new Request('https://admin.timothystl.org' + path, { method, headers, body });
@@ -5225,9 +5236,13 @@ group('the newsletter picks its events from the posts, instead of retyping them'
   const today = new Date().toISOString().slice(0, 10);
   const soon = new Date(Date.now() + 12 * 864e5).toISOString().slice(0, 10);
 
+  const far = new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 10);
   db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
               VALUES ('Council meeting','In the fellowship hall.',?,?,'19:00','Fellowship Hall','web')`).run(today, soon);
   const postId = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+  db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
+              VALUES ('Rummage sale','','2000-01-01',?,'','','web')`).run(far);
+  const farId = db.prepare("SELECT id FROM news_items WHERE title='Rummage sale'").get().id;
 
   // ⚠ THE LOOP THIS CLOSES. The composer used to offer a blank date/name/time
   // to type into, and those rows reached the email and NOTHING else.
@@ -5236,6 +5251,13 @@ group('the newsletter picks its events from the posts, instead of retyping them'
   ok(form.includes('Council meeting'), 'including the one just written');
   ok(!form.includes('name="event_ids"'), 'and no longer offers a blank row to type into');
   ok(!/addEvent\(\)/.test(form), 'the "+ Add an event" path is gone, not merely hidden');
+
+  // ⚠ A BRAND-NEW ISSUE STARTS WITH THE NEARBY EVENTS ALREADY TICKED, not
+  // with an empty sidebar the office has to remember to fill in every week.
+  ok(form.includes(`name="event_news_ids" value="${postId}" checked`),
+    'an event less than two weeks out is pre-ticked on a new issue');
+  ok(!form.includes(`name="event_news_ids" value="${farId}" checked`),
+    'one 40 days out is offered, but not pre-ticked');
 
   // ⚠ A DATED POST IS OFFERED WHETHER OR NOT IT IS TICKED FOR EMAIL. The email
   // channel means "worth a paragraph"; a date is a fact about the week, and
@@ -5685,6 +5707,77 @@ group('the sidebar badge counts open Intake items, from the database alone');
   const afterHtml = await dashAfter.text();
   lacks(afterHtml, `${openNow} item(s) need a decision`, 'the old count is gone');
   has(afterHtml, `${openNow - 1} item(s) need a decision`, 'and it dropped by exactly the one item that was just published');
+}
+
+group('the left rail is grouped by the four core values, not a flat "By calendar" list');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const res = await call(env, '/event-intake', { cookie, fresh: true });
+  const page = await res.text();
+  has(page, 'Christian Education', 'the value group heading renders, not the raw stored key "education"');
+  // Word of Life, MDO and Youth & Family sit under Christian Education —
+  // matching PARTNER_SEED's own Word-of-Life-is-'education' pairing.
+  const eduIdx = page.indexOf('Christian Education');
+  const outreachIdx = page.indexOf('Outreach');
+  for (const label of ['Word of Life', 'MDO', 'Youth &amp; Family']) {
+    const i = page.indexOf(`>${label}<`);
+    ok(i > eduIdx && i < outreachIdx, `${label} renders between Christian Education and Outreach`);
+  }
+  // News, Meetings and Special event render under "Other", never under any
+  // of the four value headings — the cross-cutting types this repo would not
+  // force a value onto (see the note above TYPE_VALUE in admin/intake.js).
+  const otherIdx = page.lastIndexOf('>Other<');
+  ok(otherIdx > -1, 'the ungrouped "Other" heading renders');
+  for (const label of ['News', 'Meetings', 'Special event']) {
+    ok(page.indexOf(`>${label}<`) > otherIdx, `${label} renders after Other, not folded into a value group`);
+  }
+}
+
+group('bulk type assignment sets one type on many events at once, and skips what does not belong to the office');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const d1 = churchDatePlus(12), d2 = churchDatePlus(13), d3 = churchDatePlus(14);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Fall Kickoff Sunday School', 'First day back.', churchDate(), d1, '2099-01-01', 'web');
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Confirmation Retreat', 'Overnight at camp.', churchDate(), d2, '2099-01-01', 'web');
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Deacon Meeting', 'Not a youth event.', churchDate(), d3, '2099-01-01', 'web');
+  await call(env, '/event-intake', { cookie, fresh: true }); // sync
+  const idOf = (title) => db.prepare('SELECT id FROM news_items WHERE title = ?').get(title).id;
+  const k1 = `n:${idOf('Fall Kickoff Sunday School')}`;
+  const k2 = `n:${idOf('Confirmation Retreat')}`;
+  const k3 = `n:${idOf('Deacon Meeting')}`;
+
+  // Andrew, looking at 135 unclassified imports: "can we just bulk assign
+  // them?" — two of three checked, one left alone, one type for both.
+  const res = await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'youth', keys: [k1, k2] } });
+  eq(res.status, 302, 'redirects back to the queue, same shape as every other action here');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k1).event_type, 'youth');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k2).event_type, 'youth');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
+    'the one not checked is untouched, even though it synced in the same visit');
+
+  // ⚠ AN UNRECOGNIZED TYPE DOES NOTHING, THE SAME REFUSAL /event-intake/type
+  // ALREADY ENFORCES FOR ONE EVENT — a crafted POST can't smuggle a bogus
+  // value into the column via the bulk door just because the single-item
+  // door checks it.
+  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'not-a-real-type', keys: [k3] } });
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
+    'a bogus type on the bulk route is refused exactly like on the single-item route');
+
+  // ⚠ A KEY WITH NO MATCHING ITEM IN THIS REQUEST'S OWN MERGE IS SKIPPED, NOT
+  // TRUSTED AS A BARE ID. A stale page or a crafted form posting a key for an
+  // event outside the sync window (or that never existed) must not reach
+  // writeIntakePatch with nothing real behind it.
+  const before = db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n;
+  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'meetings', keys: ['n:999999'] } });
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
 }
 
 group('push notifications have two audiences, and the six existing triggers stay in the staff one');
