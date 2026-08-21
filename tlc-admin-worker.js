@@ -288,6 +288,7 @@ export const PAYROLL_RPC_FNS = [
   'payroll_get_mdo_period_approval',
   'payroll_get_mdo_rate_snapshot',
   'payroll_get_year_totals',
+  'payroll_backfill_total',
   'payroll_approve_period',
   'payroll_unapprove_period',
   'payroll_save_hours',

@@ -638,6 +638,23 @@ async function onPeriodChange(value) {
 
   renderEntry(periodStart);
   renderReport(periodStart, periodEnd);
+
+  // A period approved before the rate-freeze fix shipped has a real, signed-off
+  // total that was simply never stamped onto payroll_periods.total_gross_cents —
+  // loadYtd() filters those rows out, which is why real historical pay data
+  // looked missing from Year to date. Heal it here, the first time anybody
+  // opens that period: compute it from the SAME reportGroups()/subtotal() the
+  // report already rendered above, and write it with payroll_backfill_total,
+  // which only ever fills a currently-null column and can never clobber a
+  // total the new approve flow already wrote.
+  if (periodApproval && (periodApproval.total_gross_cents === null || periodApproval.total_gross_cents === undefined)) {
+    const healedCents = cents(reportGroups().reduce((n, g) => n + fromCents(cents(subtotal(g.people))), 0));
+    const { error: healErr } = await sb.rpc('payroll_backfill_total', { p_period_start: periodStart, p_total_gross_cents: healedCents });
+    if (!healErr) {
+      periodApproval.total_gross_cents = healedCents;
+      loadYtd();
+    }
+  }
 }
 
 async function loadMdoData(periodStart, periodEnd) {
