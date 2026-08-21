@@ -358,3 +358,24 @@ export function orderEventRows(rows) {
     })
     .map(({ r }, i) => ({ ...r, sort_order: i }));
 }
+
+// A brand-new issue starts with nothing typed and nothing ticked. Before the
+// picker existed, an event was TYPED into the issue, so the sidebar was never
+// empty. After it, the office has to remember to tick a box every single
+// week — forget once and "Upcoming" quietly collapses to just the calendar
+// link, which is silent in exactly the way this repo's own rule warns
+// about: a wrong-looking result that reads as correct. Pre-ticking whatever
+// is genuinely coming up soon restores the old behavior without taking the
+// choice away — every box is still individually removable before Save, and
+// an EDIT of an already-saved issue is untouched, because that draft's own
+// ticks (or lack of them) are a decision somebody already made.
+//
+// `cutoffDate` is a church-date string (YYYY-MM-DD), compared lexically —
+// the same convention `orderEventRows` and the rest of this file already
+// use, so this never has to parse a date to compare one.
+export function defaultUpcomingEventIds(posts, cutoffDate) {
+  if (!cutoffDate) return [];
+  return (posts || [])
+    .filter((p) => p.event_date && p.event_date <= cutoffDate)
+    .map((p) => String(p.id));
+}

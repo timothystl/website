@@ -5225,9 +5225,13 @@ group('the newsletter picks its events from the posts, instead of retyping them'
   const today = new Date().toISOString().slice(0, 10);
   const soon = new Date(Date.now() + 12 * 864e5).toISOString().slice(0, 10);
 
+  const far = new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 10);
   db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
               VALUES ('Council meeting','In the fellowship hall.',?,?,'19:00','Fellowship Hall','web')`).run(today, soon);
   const postId = db.prepare("SELECT id FROM news_items WHERE title='Council meeting'").get().id;
+  db.prepare(`INSERT INTO news_items (title, summary, publish_date, event_date, event_time, event_location, channels)
+              VALUES ('Rummage sale','','2000-01-01',?,'','','web')`).run(far);
+  const farId = db.prepare("SELECT id FROM news_items WHERE title='Rummage sale'").get().id;
 
   // ⚠ THE LOOP THIS CLOSES. The composer used to offer a blank date/name/time
   // to type into, and those rows reached the email and NOTHING else.
@@ -5236,6 +5240,13 @@ group('the newsletter picks its events from the posts, instead of retyping them'
   ok(form.includes('Council meeting'), 'including the one just written');
   ok(!form.includes('name="event_ids"'), 'and no longer offers a blank row to type into');
   ok(!/addEvent\(\)/.test(form), 'the "+ Add an event" path is gone, not merely hidden');
+
+  // ⚠ A BRAND-NEW ISSUE STARTS WITH THE NEARBY EVENTS ALREADY TICKED, not
+  // with an empty sidebar the office has to remember to fill in every week.
+  ok(form.includes(`name="event_news_ids" value="${postId}" checked`),
+    'an event less than two weeks out is pre-ticked on a new issue');
+  ok(!form.includes(`name="event_news_ids" value="${farId}" checked`),
+    'one 40 days out is offered, but not pre-ticked');
 
   // ⚠ A DATED POST IS OFFERED WHETHER OR NOT IT IS TICKED FOR EMAIL. The email
   // channel means "worth a paragraph"; a date is a fact about the week, and
