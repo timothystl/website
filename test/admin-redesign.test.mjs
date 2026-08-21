@@ -3167,7 +3167,16 @@ group('per-screen, part two');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
+  // ⚠ A LITERAL DATE HERE IS THE SAME TRAP THE COMMENT ABOVE ALREADY WARNS
+  // ABOUT, ONE FIELD OVER: this was hardcoded '2026-08-20' and passed for
+  // months, then started failing the moment real calendar time reached that
+  // date — "a past event drops off entirely" (the assertion two lines below
+  // this one) is exactly the rule that then correctly removed VBS from the
+  // feed, breaking the "still leads Christmas Market" ordering check that
+  // depends on it being present. churchDatePlus(3) is always soonest-but-one
+  // (after "today", safely before Christmas Market's Dec 1), on any day this
+  // ever runs.
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', churchDatePlus(3), '2099-01-01');
   // A past event, still inside its (generous) expire_date — must not appear.
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
   const apiNews = await (await call(env, '/api/news')).json();
