@@ -1921,6 +1921,60 @@ filter/select-all-shown interaction was verified directly in Chromium against
 the real rendered page rather than only pinning the markup, since a Node-only
 harness has no way to fire a real `input` or `click` event.
 
+### Nothing on this screen is required any more (v5.45.0, 2026-08-21)
+
+Andrew, on the same screen: *"not every event needs a room, or the checklist,
+things like first day of school is just a note of first day of school, no
+room, no janitor, dont make any field required, you can jsut leave it with a
+publish button. same iwth classes, material copied is pointless for a
+calendar function."*
+
+**⚠ THE CHECKLIST WAS NEVER WHAT PUT AN EVENT ON THE PUBLIC CALENDAR, AND THE
+GATE REMOVED HERE NEVER ACTUALLY PROTECTED THAT.** A Google-sourced or
+News-sourced event reaches `/calendar` through its own path — Google's own
+feed, or the News post's own publish flow — with no idea Event Intake exists
+at all. A `local` row (`admin/calendar.js`'s `readLocalIntakeEvents()`) reaches
+it the instant it is entered with a date, with no `published_at` check
+anywhere in that query. So `openCountOf(type, checks) === 0` gating the
+`Publish` button was **always** gating something else: not "is this on the
+calendar," but "has the office finished its own paperwork" — a real and
+useful distinction for a rental's insurance and signed agreement, and a
+fiction for a plain note like "First day of school" or a routine Bible class,
+where "materials copied" has nothing to do with whether the date belongs on
+the calendar.
+
+- **`/event-intake/save`'s `action === 'publish'` branch no longer checks
+  `openCountOf` or even whether a type was ever picked.** It sets
+  `published_at`/`published_by` unconditionally. The checklist and the room
+  are both still saved exactly as typed — they are a **record**, not a
+  **requirement** — so a rental's coordinator can still tick off insurance and
+  the signed agreement as reminders to herself; she is simply never blocked
+  from publishing before she does.
+- **The Publish button is unconditional now too** — no `disabled` attribute,
+  no "Finish 3 items first" label. It just says "Publish."
+- **The footnote under the form was rewritten**, because the old line —
+  "Nothing reaches the public calendar with an open item" — was already
+  describing something that had never actually been true (see above), and
+  saying so plainly now that the gate it described is gone would have been
+  worse than saying nothing.
+- **⚠ Room stayed genuinely optional the whole time — there was never an HTML
+  `required` on it.** The gate was entirely the checklist-completeness check;
+  nothing about this change touches the standalone "+ New event" form's own
+  `local_title`/`local_event_date` requirements, which stay required because a
+  calendar entry with no date is not a calendar entry.
+- **Deliberately did NOT touch `isReady()`/`openCountOf()` themselves**, or
+  the status pill ("Ready" / "N open" / "Needs a type") that reads them. Those
+  stay exactly as informative as before — a coordinator still sees at a glance
+  that a rental has two items outstanding — the only thing that changed is
+  that seeing it is no longer the same thing as being allowed to publish.
+
+Run: two new groups replacing the old gated-publish group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1571) — one publishes a News-sourced item with one of four checklist items
+ticked and no room, one publishes a bare item with no type ever picked at
+all. Verified non-vacuous by reintroducing the old `openCountOf`/`type` gate
+and confirming both fail with the real symptom, `published_at` staying null.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all

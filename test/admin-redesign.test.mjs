@@ -5625,8 +5625,15 @@ group('picking a type never touches calendar_category, and the checklist is pure
     'a bogus type clears the classification rather than storing garbage');
 }
 
-group('Publish is refused server-side when the checklist is incomplete, even via a crafted POST');
+group('Publish is never gated on the checklist or the room — reported as "dont make any field required"');
 {
+  // Andrew: "not every event needs a room, or the checklist... dont make any
+  // field required, you can just leave it with a publish button." The
+  // checklist was already never what put anything ON the public calendar —
+  // a Google/News/gym-sourced event reaches it through its own path
+  // regardless, and a local one reaches it the instant it is entered — so
+  // gating Publish on it was only ever an internal courtesy that got in the
+  // way of a routine class or a plain note like "First day of school."
   const { db, env } = await boot();
   const { cookie } = signIn(db, ['intake_manage'], 'office');
   const newsDate = churchDatePlus(3);
@@ -5637,24 +5644,36 @@ group('Publish is refused server-side when the checklist is incomplete, even via
   const key = `n:${newsId}`;
   await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
 
-  // Claim action=publish with only ONE of the four education checklist items
-  // ticked — the disabled button on screen is a courtesy, not the rule.
+  // Publish with only ONE of the four education checklist items ticked, and
+  // no room at all — this used to be refused server-side.
   const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'education', action: 'publish', room: 'Youth Room', check_teacher: '1' } });
-  eq(res.status, 302, 'still redirects — a refusal here is silent, not an error page');
-  const row = db.prepare("SELECT published_at, checks_json, room FROM event_intake WHERE source_key = ?").get(key);
-  eq(row.published_at, null, 'NOT marked ready — three of four items were never ticked');
-  ok(JSON.parse(row.checks_json).teacher === true, 'the one real tick is still saved');
-  eq(row.room, 'Youth Room', 'and so is the room — Save happens whether or not Publish succeeds');
+    form: { key, queue: 'education', action: 'publish', check_teacher: '1' } });
+  eq(res.status, 302, 'redirects on success');
+  const row = db.prepare("SELECT published_at, published_by, checks_json, room FROM event_intake WHERE source_key = ?").get(key);
+  ok(row.published_at, 'published even though three of four checklist items were never ticked and no room was set');
+  eq(row.published_by, 'office', 'and records who');
+  ok(JSON.parse(row.checks_json).teacher === true, 'the one real tick is still saved alongside it — the checklist is a record now, not a gate');
+  eq(row.room, '', 'no room was required either');
+}
 
-  // Now tick the rest and publish for real.
-  const res2 = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'education', action: 'publish', room: 'Youth Room',
-      check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1' } });
-  eq(res2.status, 302, 'redirects on success too');
-  const row2 = db.prepare("SELECT published_at, published_by FROM event_intake WHERE source_key = ?").get(key);
-  ok(row2.published_at, 'every box ticked — Publish is allowed');
-  eq(row2.published_by, 'office', 'and records who');
+group('a bare item — no type, no room, no checklist ticked — can still be published, "materials copied" is not a calendar requirement');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  const newsDate = churchDatePlus(5);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('First day of school', 'No description needed.', churchDate(), newsDate, '2099-01-01', 'web');
+  await call(env, '/event-intake', { cookie, fresh: true });
+  const newsId = db.prepare("SELECT id FROM news_items WHERE title='First day of school'").get().id;
+  const key = `n:${newsId}`;
+  // No /event-intake/type call at all — Publish is pressed on an item that
+  // is still "Needs a type."
+  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
+    form: { key, queue: 'inbox', action: 'publish' } });
+  eq(res.status, 302, 'redirects on success');
+  const row = db.prepare("SELECT published_at, event_type FROM event_intake WHERE source_key = ?").get(key);
+  ok(row.published_at, 'a plain note publishes with nothing filled in at all');
+  eq(row.event_type, null, 'and never picked up a type it was never given');
 }
 
 group('a deferred field set (a gym-sourced rental) is read-only against a crafted POST, not just hidden');
