@@ -619,14 +619,26 @@ const NEWS_WHERE_SQL = `WHERE publish_date <= ?
   AND (event_date IS NULL OR event_date >= ?)
   AND (channels IS NULL OR channels LIKE '%web%')`;
 
-// An uploaded image is stored as a root-relative /images/… path, which only
-// resolves on this Worker's own origin. Every rendered page is consumed
-// somewhere else — timothystl.org for /api/pages, give.timothystl.org for the
-// giving page — so the path is made absolute on the way out. One definition,
-// because a page rendered for one hostname and not the other would show broken
-// images on exactly one surface, which is the kind of thing nobody notices
-// until a visitor mentions it.
-const fixImageUrls = (s) => (s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s);
+// A genuinely R2-uploaded image (/api/upload-image, the market photo upload)
+// is stored as an ABSOLUTE https://admin.timothystl.org/images/<key> URL
+// already — the upload route builds it from the request's own origin — so it
+// never needs fixing up here. What DOES still show up as a root-relative
+// /images/… path in stored content is a legacy STATIC asset: a staff photo, a
+// ministry image, anything seeded from public/images/. Those resolve fine as
+// root-relative on whichever hostname is actually serving the page
+// (timothystl.org, give.timothystl.org — same Worker, same public/ assets) and
+// must NOT be rewritten to admin.timothystl.org, which has no public/images/
+// of its own and 404s on them.
+//
+// So the only paths this rewrites are ones matching an actual R2 upload key
+// shape (the "news-" / "market-" prefixes those two routes generate) — never a
+// bare /images/<subfolder>/<file> path. One definition, because a page
+// rendered for one hostname and not the other would show broken images on
+// exactly one surface, which is the kind of thing nobody notices until a
+// visitor mentions it.
+const fixImageUrls = (s) => (s
+  ? s.replace(/src="\/images\/((?:news|market)-[^"/]+)"/g, 'src="https://admin.timothystl.org/images/$1"')
+  : s);
 
 // ── FX-04, THE LEGACY HALF ───────────────────────────────────────────────────
 // Sanitizing on write protects everything saved from now on. It does nothing
@@ -3676,15 +3688,13 @@ export default {
         const rows = await env.DB.prepare(
           'SELECT id, ministry_slug, title, post_date, event_date, expire_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? AND (expire_date IS NULL OR expire_date >= ?) ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug, today2).all();
-        const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
-        const fixed = rows.results.map(r => ({ ...r, body: fixUrl(r.body) }));
+        const fixed = rows.results.map(r => ({ ...r, body: fixImageUrls(r.body) }));
         return new Response(JSON.stringify(fixed), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
         });
       }
       const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, hero_image_url, ministry_image_url, vid_1_url, vid_1_title, vid_2_url, vid_2_title, vid_3_url, vid_3_title, updated_at, published_blocks, page_status FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
-      const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
       // Block-rendered pages: hand the public site finished HTML from the very
       // same templates the editor canvas draws, so what staff saw is what
       // visitors get. Pages still on the legacy renderer send no blocks_html
@@ -3695,10 +3705,10 @@ export default {
       // back out because /api/pages had already shipped the one copy the page
       // uses. The client now awaits that copy before injecting this markup.
       const blocksHtml = pubBlocks.length
-        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx), withCss: false }))
+        ? fixImageUrls(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx), withCss: false }))
         : '';
       const { published_blocks, ...publicRow } = row;
-      return new Response(JSON.stringify({ ...publicRow, content: fixUrl(row.content), blocks_html: blocksHtml }), {
+      return new Response(JSON.stringify({ ...publicRow, content: fixImageUrls(row.content), blocks_html: blocksHtml }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
