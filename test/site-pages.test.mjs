@@ -283,26 +283,27 @@ group('the homepage is converted like any other page');
   await ctx.close();
 }
 
-group('a newsletter reads in place, without leaving the page');
+group('a newsletter reads in place, without leaving the page — and never in an overlay');
 {
   // ⚠ THE PLAIN <a href="/news/:id"> A PUBLISHED PAGE RENDERS USED TO BE A
   // REAL NAVIGATION. The legacy hardcoded /news page's own "Read this
   // letter" button has always called loadNewsletterDetail(id) directly and
   // swallowed the click; the newsletterarchive BLOCK never did, so reading a
-  // letter from a published page reloaded the whole document — which reads
-  // as a window popping open rather than the page quietly changing.
+  // letter from a published page reloaded the whole document.
   //
-  // ⚠ loadNewsletterDetail ITSELF NOW BUILDS A BODY-APPENDED OVERLAY
-  // (#tlc-nl-overlay), NOT THE OLD IN-PAGE #newsletter-detail SECTION — a
-  // separate, independent fix (see its own comment in public/index.html) for
-  // the exact bug this group is also about: tlcTakeOverPage()'s "hide every
-  // child of #page-news" loop swallowed that old section whole. This group
-  // only has to prove the BLOCK now calls loadNewsletterDetail at all, which
-  // a plain <a href> never did — the overlay's own correctness is that
-  // function's problem, not this block's.
+  // ⚠ AND ONCE THAT WAS FIXED BY CALLING loadNewsletterDetail(), IT WAS
+  // WRONG A SECOND WAY: that function builds a body-appended overlay
+  // (#tlc-nl-overlay) — a real modal — and it was reported directly against
+  // this exact screen: "it still does a pop up window... i dont want the
+  // overlay." This block does not call loadNewsletterDetail() at all now;
+  // NEWSLETTER_ARCHIVE_SCRIPT (admin/blocks.js) expands the letter inline,
+  // inside the card that was clicked. This group asserts the overlay never
+  // appears at all, not merely that the click stayed on the page.
   const rendered = { news: renderPage([newBlock('newsletterarchive')], {
     slug: 'news', template: 'standard', children: [], withCss: false,
-    data: { newsletters: [{ id: 42, subject: 'This week at Timothy', published_at: '2026-08-20', pastor_note: 'A short preview.' }] },
+    data: { newsletters: [
+      { id: 42, subject: 'This week at Timothy', published_at: '2026-08-20', pastor_note: 'A short preview.' },
+    ] },
   }) };
   const api = {
     pages: [{ id: 'news', title: 'News', label: 'News', slug: 'news', parent: null, in_menu: true, template: 'standard', seo_description: '' }],
@@ -310,7 +311,14 @@ group('a newsletter reads in place, without leaving the page');
   };
   const detailPayload = {
     id: 42, subject: 'This week at Timothy', published_at: '2026-08-20',
-    pastor_note: '<p>The full letter, in place.</p>', events: [], news_items: [], bible_classes: [],
+    // ⚠ AN ENTITY IN THE STORED BODY, deliberately — the reported "junk
+    // characters coming through" (you&rsquo;ve) was pastor_note's own
+    // named entities surviving the block's tag-strip and then being
+    // escaped a second time. The full letter is HTML and goes in as HTML
+    // (unescaped, same as loadNewsletterDetail always did); nothing about
+    // that path double-escapes.
+    pastor_note: '<p>The full letter, in place. You&rsquo;ve read it.</p>',
+    events: [], news_items: [], bible_classes: [],
   };
 
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -331,20 +339,30 @@ group('a newsletter reads in place, without leaving the page');
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 
   // A marker on `window` survives an in-place transition and is wiped by a
-  // real navigation — exactly the difference this fix is about.
+  // real navigation — the same check that pins the click never reloads.
   await page.evaluate(() => { window.__stayedInPlace = true; });
+  eq(await page.locator('#tlc-nl-overlay').count(), 0, 'no overlay exists in the document before the click');
   await page.click('.tlcb-nl-link');
   // ⚠ A fixed sleep here is exactly the kind of flake this suite otherwise
-  // avoids — loadNewsletterDetail awaits a real fetch, and how long that
-  // takes depends on the machine, not the fix. Wait for the actual content
-  // to land instead of guessing how long that takes.
-  await page.locator('#tlc-nl-overlay-content:has-text("The full letter, in place.")').waitFor({ timeout: 5000 });
+  // avoids — the script awaits a real fetch, and how long that takes
+  // depends on the machine, not the fix. Wait for the actual content to
+  // land instead of guessing how long that takes.
+  await page.locator('.tlcb-nl-full:has-text("The full letter, in place.")').waitFor({ timeout: 5000 });
 
   eq(await page.evaluate(() => window.__stayedInPlace === true), true, 'the click never reloaded the document');
-  eq(await page.locator('#tlc-nl-overlay').isVisible(), true, 'the detail overlay opens in place');
-  ok((await page.locator('#tlc-nl-overlay-content').innerText()).includes('The full letter, in place.'),
-    'and shows the real, full letter fetched for it — not the truncated block preview');
-  eq(new URL(page.url()).pathname, '/news/42', 'the address updates to the letter, for a bookmark or a refresh');
+  eq(await page.locator('#tlc-nl-overlay').count(), 0, 'and it never opened the shared overlay either');
+  const panelText = await page.locator('.tlcb-nl-full').innerText();
+  ok(panelText.includes('The full letter, in place.'),
+    'the panel shows the real, full letter fetched for it — not the truncated block preview');
+  ok(panelText.includes('You’ve read it.') || panelText.includes("You've read it."),
+    'a named entity in the letter decodes to a real apostrophe, not literal "&rsquo;" text');
+  ok(!panelText.includes('&rsquo;') && !panelText.includes('&amp;'), 'and nothing is left double-escaped');
+  eq(new URL(page.url()).pathname, '/news', 'the address stays put — this is an in-page panel, not a navigated view');
+
+  // Clicking again closes the very panel it opened.
+  await page.click('.tlcb-nl-link');
+  await page.waitForTimeout(150);
+  eq(await page.locator('.tlcb-nl-full').isVisible(), false, 'a second click on the same letter closes it');
   await ctx.close();
 }
 
