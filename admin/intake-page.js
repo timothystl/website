@@ -314,16 +314,32 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
         }));
       }
 
+      // ⚠ CHUNKED AT 99, NOT ONE `IN (...)` OVER EVERY KEY — D1 refuses a
+      // prepared statement with too many bound parameters, and this window
+      // (recurring Google services over 63 days, plus News and gym) clears
+      // that on its own the moment a real church's calendar has more than a
+      // handful of weekly services. The failure was SILENT: `.catch(() =>
+      // ({results: []}))` swallowed the error, so every non-local item read
+      // back with no matching row — `dbId` null, `type` null — however many
+      // times a type had actually been written. That is the reported "I
+      // assign a type, it spins, and nothing is saved, forever": the write
+      // itself went through `/event-intake/type`'s own single-row
+      // `WHERE source_key = ?` query and landed every time; it was THIS read,
+      // on the very next page load, that lost it — and bulk-type reads the
+      // same way before it writes, so `dbId` was null there too and its
+      // `Promise.all` had nothing to act on. Same limit, same fix as the gym
+      // module's multi-booking invoice fetch (`admin/gym.js`) — chunk to 99.
       async function readIntakeRows(raw) {
         const rows = [];
         const local = await env.DB.prepare("SELECT * FROM event_intake WHERE source_kind = 'local'")
           .all().catch(() => ({ results: [] }));
         rows.push(...(local.results || []));
         const keys = raw.filter((ev) => ev.source !== 'local').map((ev) => ev.id);
-        if (keys.length) {
-          const placeholders = keys.map(() => '?').join(',');
+        for (let i = 0; i < keys.length; i += 99) {
+          const chunk = keys.slice(i, i + 99);
+          const placeholders = chunk.map(() => '?').join(',');
           const r = await env.DB.prepare(`SELECT * FROM event_intake WHERE source_key IN (${placeholders})`)
-            .bind(...keys).all().catch(() => ({ results: [] }));
+            .bind(...chunk).all().catch(() => ({ results: [] }));
           rows.push(...(r.results || []));
         }
         return rows;
