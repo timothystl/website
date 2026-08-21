@@ -3167,7 +3167,16 @@ group('per-screen, part two');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
+  // ⚠ A LITERAL DATE HERE IS THE SAME TRAP THE COMMENT ABOVE ALREADY WARNS
+  // ABOUT, ONE FIELD OVER: this was hardcoded '2026-08-20' and passed for
+  // months, then started failing the moment real calendar time reached that
+  // date — "a past event drops off entirely" (the assertion two lines below
+  // this one) is exactly the rule that then correctly removed VBS from the
+  // feed, breaking the "still leads Christmas Market" ordering check that
+  // depends on it being present. churchDatePlus(3) is always soonest-but-one
+  // (after "today", safely before Christmas Market's Dec 1), on any day this
+  // ever runs.
+  db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('VBS','s',?,?,?,0)").run('2026-01-01', churchDatePlus(3), '2099-01-01');
   // A past event, still inside its (generous) expire_date — must not appear.
   db.prepare("INSERT INTO news_items (title,summary,publish_date,event_date,expire_date,pinned) VALUES ('Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
   const apiNews = await (await call(env, '/api/news')).json();
@@ -5811,6 +5820,97 @@ group('bulk type assignment sets one type on many events at once, and skips what
   await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
     form: { queue: 'inbox', type: 'meetings', keys: ['n:999999'] } });
   eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
+}
+
+// ⚠ Reported live: "when i assign type, it pops up the confirmation screen,
+// i click ok, then the wheel spins, and then back to the screen with nothing
+// changed, or saved or assigned." The write landed every time — /event-intake
+// /type's own single-row `WHERE source_key = ?` query has no scale problem at
+// all. What was losing it was the very next READ: readIntakeRows() built one
+// `IN (...)` over EVERY non-local key in the sync window, and D1 refuses a
+// prepared statement with too many bound parameters — a real church calendar
+// with recurring weekly services over the 63-day window, plus News and gym,
+// clears that easily (the office's own screenshot showed 86 "Imported from
+// Google" alone). The failure was silent (`.catch(() => ({results: []}))`),
+// so every non-local item read back with dbId:null, type:null, forever.
+//
+// node:sqlite's own bound-parameter ceiling is far above D1's real one, so
+// this cannot be reproduced by just seeding enough rows — the same gap the
+// print sheet's :has()-fallback test hit with a production browser
+// constraint this sandbox's own engine does not share. Simulated the only
+// honest way available: wrap the D1 shim to throw exactly the way D1 does
+// once a single bind() call is handed more than 99 parameters, and seed a
+// window genuinely larger than that so an unchunked query would trip it.
+group('a large intake window is read back in chunks, so D1’s bound-parameter limit cannot silently blank every type');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+
+  const rawPrepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    const s = rawPrepare(sql);
+    return {
+      first: s.first, all: s.all, run: s.run,
+      bind: (...a) => {
+        const bound = s.bind(...a);
+        return {
+          first: bound.first, run: bound.run,
+          all: async () => {
+            if (a.length > 99) throw new Error('D1_ERROR: too many SQL variables to bind (max 99 per statement)');
+            return bound.all();
+          },
+        };
+      },
+    };
+  };
+
+  // 130 News & Events posts, all inside the sync window — comfortably more
+  // than one 99-parameter chunk.
+  for (let i = 0; i < 130; i++) {
+    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+      .run(`Intake Scale Test ${i}`, 'Seeded for the bound-parameter test.', churchDate(), churchDatePlus(1 + (i % 55)), '2099-01-01', 'web');
+  }
+  const idOf = (i) => db.prepare('SELECT id FROM news_items WHERE title = ?').get(`Intake Scale Test ${i}`).id;
+  const keyOf = (i) => `n:${idOf(i)}`;
+
+  const first = await call(env, '/event-intake', { cookie, fresh: true }); // syncs all 130 placeholders
+  eq(first.status, 200, 'the sync itself never trips the bind limit — syncIntakeRows binds one row at a time');
+
+  // A single-item assign, exactly the reported gesture — pick an event well
+  // past the 99th chunked query, so an unchunked read would have missed it.
+  const farKey = keyOf(120);
+  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key: farKey, type: 'meetings', queue: 'inbox' } });
+  const stored = db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(farKey);
+  eq(stored.event_type, 'meetings', 'the write itself always lands — it is a single-row query with no scale problem');
+
+  const page = await (await call(env, `/event-intake?queue=inbox&selected=${encodeURIComponent(farKey)}`, { cookie, fresh: true })).text();
+  ok(page.includes('Intake Scale Test 120'), 'the selected event renders in the list');
+  // The direct symptom, exactly as reported: a chunked read shows the type
+  // that was just set — its "Meetings" pill in the detail pane renders with
+  // `class="ei-pill ei-pill-on"`, which only appears when `item.type === k`
+  // for the selected item. An unchunked read silently forgets the write
+  // happened, on every single visit, however many times the type is set
+  // again — no pill is ever `on`, whatever was just clicked and confirmed.
+  // ⚠ Checked as the exact rendered class ATTRIBUTE, not a bare substring —
+  // `.ei-pill-on{...}` is also a CSS rule name in this same page's own
+  // stylesheet, so `page.includes('ei-pill-on')` alone is always true and
+  // was caught passing against the unfixed code on the first attempt.
+  ok(page.includes('class="ei-pill ei-pill-on"'), 'the type just assigned to the selected item actually shows as assigned, not "Needs a type" forever');
+
+  // The unambiguous check: bulk-assign a type across two events, one inside
+  // the first chunk and one past it, and confirm BOTH actually wrote — bulk-
+  // type reads before it writes, so a truncated read means dbId:null for
+  // anything past the first chunk and Promise.all([]) silently does nothing.
+  const nearKey = keyOf(10), farBulkKey = keyOf(125);
+  const res = await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
+    form: { queue: 'inbox', type: 'youth', keys: [nearKey, farBulkKey] } });
+  eq(res.status, 302, 'redirects back to the queue');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(nearKey).event_type, 'youth',
+    'an event inside the first 99-key chunk gets the bulk type');
+  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(farBulkKey).event_type, 'youth',
+    'and so does one past it — this is the assertion an unchunked read fails, with dbId read back as null');
+
+  env.DB.prepare = rawPrepare;
 }
 
 group('push notifications have two audiences, and the six existing triggers stay in the staff one');

@@ -1670,6 +1670,71 @@ Meetings/Special event render only after the unlabeled Other heading, and
 bulk-assign sets a type across several events while leaving an unchecked one
 and an out-of-window key alone.
 
+### Assigning a type spun and forgot it — a large window was silently unread (v5.42.0, 2026-08-21)
+
+Andrew, straight after the section above shipped, with a screenshot of the
+live queue (86 imported from Google, both sample rows still "Needs a type"):
+*"on this page, when i assign type, it pops up the confirmation screen, i
+click ok, then the wheel spins, and then back to the screen with nothing
+changed, or saved or assigned."*
+
+**The write always landed. It was the very next read that lost it, and it lost
+it silently, on every visit, however many times a type was set.**
+`/event-intake/type` writes through `findIntakeRow(key)` — a single-row
+`WHERE source_key = ?` query — which has no scale problem at all, whatever
+the window holds. But every render of the queue, and `bulk-type` before it
+ever writes, calls `readIntakeRows(raw)`, which built **one `IN (...)` clause
+over every non-local key in the whole sync window** — Google's recurring
+weekly services over 63 days, plus News and gym, comfortably clears a
+hundred rows on a real church calendar (the office's own screenshot showed
+86 from Google alone, before News and gym were even counted). **D1 refuses a
+prepared statement with too many bound parameters**, that query threw, and
+`.catch(() => ({results: []}))` — written for an unreachable database, not
+for a query too large to run — turned the failure into "nothing here,"
+silently, on the read the whole screen depends on. `mergeIntakeItems()` then
+had no row to match against any non-local key, so every one of them read
+back `dbId: null, type: null` — indistinguishable from having never been
+touched, no matter how many times the pill was clicked and confirmed.
+
+- **This codebase had already hit this exact ceiling once**, in the gym
+  module's multi-booking invoice fetch (`admin/gym.js`, "fetch in chunks to
+  avoid D1 bind limit"), chunked at 99. `readIntakeRows()` is fixed the same
+  way — a `for` loop over the keys in slices of 99, one `IN (...)` per
+  slice — rather than inventing a second convention for the identical limit.
+- **⚠ NOT REPRODUCIBLE BY SEEDING ENOUGH ROWS IN THIS SANDBOX.** The test
+  harness runs Node's built-in `node:sqlite`, whose own bound-parameter
+  ceiling sits far above D1's real one — seeding even several hundred synced
+  events here would run the unchunked query without ever tripping it, the
+  same gap the print sheet's `:has()`-fallback fix hit with a real browser
+  constraint headless Chromium does not share (see "The print sheet's own
+  isolation had a documented gap" above). Simulated the only honest way
+  available: the test wraps the D1 shim to throw exactly the way D1 does the
+  moment a single `bind()` call carries more than 99 parameters, then seeds
+  130 News & Events posts — genuinely more than one chunk — so an unchunked
+  read is forced to fail the same way a real deploy's would.
+- **⚠ THE FIRST VERSION OF THE TEST WAS PARTLY VACUOUS.** It checked the
+  selected item's detail pane for the class `ei-pill-on` as a bare substring
+  — which is *also* the name of a CSS rule (`.ei-pill-on{color:…}`) already
+  present in this page's own `<style>` block on every render, whether or not
+  anything is assigned. That made the check pass even against the unfixed
+  code. Tightened to the exact rendered attribute,
+  `class="ei-pill ei-pill-on"`, which only appears when the selected item's
+  type genuinely matches — verified by reverting the fix a second time and
+  watching it fail with the real symptom before trusting it.
+- **The bulk-assign assertions were the ones that caught it honestly the
+  first time**: an event past the 99th key read back `dbId: null` under the
+  unfixed code, so `Promise.all(targets…)` had nothing to act on and the
+  type never wrote at all — not merely a display problem for bulk-assign,
+  a real silent no-op.
+
+Run: the `a large intake window is read back in chunks, so D1's
+bound-parameter limit cannot silently blank every type` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1540 total), verified non-vacuous twice — reverting the chunking fails three
+assertions with the real symptom, and the detail-pane check specifically was
+caught passing vacuously on its first draft and rewritten before being
+trusted.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all
