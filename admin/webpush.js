@@ -202,6 +202,22 @@ export async function pushToAllSubscribers(env, payloadObj, audience = 'staff') 
       }
     } catch (_) { /* one bad subscription must never block the rest */ }
   }));
+
+  // Every push this app sends passes through here, whatever triggered it —
+  // this is the one place to log it so nothing rings a phone and leaves no
+  // trace. Best-effort and after the sends, never before: a logging failure
+  // must never cost a real notification, and a row here only ever describes
+  // something that already went out (or was already attempted).
+  try {
+    await env.DB.prepare(
+      `INSERT INTO push_log (audience, tag, title, body, url, sent, gone, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      audience, payloadObj?.tag || null, String(payloadObj?.title || '').slice(0, 200),
+      payloadObj?.body != null ? String(payloadObj.body).slice(0, 500) : null,
+      payloadObj?.url || null, sent, gone, rows.length
+    ).run();
+  } catch (_) { /* logging must never be why a push looks like it failed */ }
+
   return { sent, gone, total: rows.length };
 }
 

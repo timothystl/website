@@ -5952,6 +5952,55 @@ group('Push Alert composes a message for the OTHER audience, and only that one')
   eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
 }
 
+group('every push notification leaves a trail in the Push Log, whatever triggered it');
+{
+  // Dinger: a push arrived about a reply from a real person and tapping it
+  // just opened the dashboard — because a *delivered* contact/prayer message
+  // was never stored anywhere, only emailed. The fix isn't the click target,
+  // it's that nothing about the push itself was ever recorded either. Every
+  // caller of pushToAllSubscribers()/pushToPublicSubscribers() funnels
+  // through one function, so logging there covers all of them at once.
+  const { db, env } = await boot();
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+  const admin = signIn(db, ['settings_manage'], 'office2');
+  const outsider = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'settings_manage'), 'noaccess2');
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('', { status: 201 });
+
+  const k1 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (1, ?, ?, ?, 'staff')")
+    .run('https://fcm.example/plog-staff', k1.p256dh, k1.auth);
+  const k2 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')")
+    .run('https://fcm.example/plog-public', k2.p256dh, k2.auth);
+
+  await pushToAllSubscribers(envWithVapid, { title: 'New message from Leah Seveking', body: 'Re: the LCEF proposal — thanks for...', tag: 'contact-message', url: '/dashboard' });
+  await pushToPublicSubscribers(envWithVapid, { title: 'Worship is canceled', body: 'Ice on the lot.', tag: 'push-alert', url: '/news' });
+
+  const rows = db.prepare('SELECT * FROM push_log ORDER BY id ASC').all();
+  eq(rows.length, 2, 'both sends were logged — the staff trigger and the public broadcast');
+  eq(rows[0].audience, 'staff', 'the first row is the staff-audience push');
+  eq(rows[0].sent, 1, 'and it really counted the one staff device it reached');
+  eq(rows[0].total, 1, 'never counting the public row that was never sent to');
+  has(rows[0].title, 'Leah Seveking', 'the title survives into the log');
+  has(rows[0].body, 'LCEF', 'so does the body — this is the record a lost push used to leave nothing of');
+  eq(rows[1].audience, 'public', 'the second row is the broadcast');
+  eq(rows[1].sent, 1, 'reaching the one public device');
+
+  globalThis.fetch = realFetch;
+
+  const denied = await call(env, '/push-log', { cookie: outsider.cookie });
+  eq(denied.status, 403, 'gated on settings_manage, the same as Filtered Mail beside it');
+
+  const page = await call(env, '/push-log', { cookie: admin.cookie });
+  eq(page.status, 200, 'settings_manage can open it');
+  const body = await page.text();
+  has(body, 'Leah Seveking', 'the delivered-message push shows up by name');
+  has(body, 'Worship is canceled', 'so does the broadcast');
+  has(body, 'Push Log', 'the sidebar and title name the screen plainly');
+}
+
 group('Contact and Prayer are never rendered from blocks, even when published');
 {
   // Found live: both pages ship a seeded draft with a "Signup form" block in
