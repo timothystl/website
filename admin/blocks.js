@@ -1299,21 +1299,37 @@ export const APPEARABLE_TYPES = new Set(
 // Button color control.
 export const BTN_TYPES = new Set(['slideshow', 'download', 'documents', 'buttons', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
 
-// The design's own four groups, in its order. Structure leads because that is
-// what somebody reaches for first on an empty page — the banner and the shape
-// of it — and Content is what they fill it with afterwards.
+// Started as the design's own four groups. Dinger missed Countdown entirely
+// because it was filed under "Dates" alongside Map & address, File download
+// and Embed — none of which are dates, and Countdown is the one block in
+// that group whose whole job IS a date. "Dates" had become the name for
+// "everything else practical", which is exactly how a block goes missing:
+// the tab it's actually under doesn't say what's in it. Split in two —
+// Schedule for the blocks that show a date/time, Info for the practical
+// ones that don't — and Sign up split the same way, since Give/Giving
+// widget/Amount ladder are "hand over money", not "fill in a form".
+// Structure leads because that is what somebody reaches for first on an
+// empty page — the banner and the shape of it — and Content is what they
+// fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'jumplinks', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'lessons', 'sermon', 'sermonlist', 'classes', 'news', 'newsfeed', 'staff', 'posts'] },
-  // Contact sits beside Map & address, which is where somebody looking for
-  // "how do people reach us" already goes — the two answer the same question
-  // and one of them draws a map.
-  { name: 'Dates',     types: ['servicetimes', 'tiles', 'chips', 'countdown', 'map', 'contact', 'events', 'times', 'download', 'documents', 'calendar', 'embed'] },
-  // `giving` and `amounts` join the group that already holds `give` rather
-  // than starting a fifth. They belong to one page, and a group of two that
-  // only ever appears on the giving page would read on every other page as a
-  // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp', 'marketfacts', 'registration'] },
+  // Every one of these draws a date, a time, or a countdown to one. If it
+  // has none of those, it belongs in Info instead, not here.
+  { name: 'Schedule',  types: ['servicetimes', 'chips', 'countdown', 'events', 'times', 'calendar'] },
+  // The rest of what "Dates" used to hold — practical, but not about when
+  // something happens. Contact sits beside Map & address, which is where
+  // somebody looking for "how do people reach us" already goes — the two
+  // answer the same question and one of them draws a map.
+  { name: 'Info',      types: ['tiles', 'map', 'contact', 'download', 'documents', 'embed'] },
+  // Forms and things somebody signs up for or reads. `registration`,
+  // `marketapp` and `marketfacts` all live here too — a market application
+  // is a form like any other, even though the word "market" suggests money.
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'registration', 'marketapp', 'marketfacts'] },
+  // The actual money blocks — nothing here asks for anything but an amount.
+  // `giving` and `amounts` join `give` rather than starting a group of two
+  // that would read on every other page as a broken, near-empty section.
+  { name: 'Giving',    types: ['give', 'giving', 'amounts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
