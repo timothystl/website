@@ -676,7 +676,12 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-cal-listdate .dm{font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--text-muted);}
 .tlc-cal-listday--today .dw,.tlc-cal-listday--today .dn{color:var(--amber);}
 .tlc-cal-listevs{display:flex;flex-direction:column;gap:10px;min-width:0;}
-.tlc-cal-listev{display:grid;grid-template-columns:88px 1fr;gap:14px;align-items:baseline;
+/* ⚠ minmax(88px, max-content), not a fixed 88px — tlcCalSpan() prints a
+   START-END RANGE ("10:00 AM – 12:00 PM"), not the single start time the
+   mock's own 88px column was sized for. A fixed column with nowrap text
+   longer than it is overflows into the title next to it rather than
+   wrapping, which is silent in the markup and only visible on screen. */
+.tlc-cal-listev{display:grid;grid-template-columns:minmax(88px,max-content) 1fr;gap:14px;align-items:baseline;
   min-width:0;text-align:left;background:none;border:none;font:inherit;cursor:pointer;padding:0;}
 .tlc-cal-listev:hover .lt{text-decoration:underline;}
 .tlc-cal-listev .ltime{font-family:var(--font-ui);
@@ -832,6 +837,13 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   body:has(.tlc-print-sheet) :has(.tlc-print-sheet){
     padding:0 !important;margin:0 !important;max-width:none !important;
     background:#fff !important;box-shadow:none !important;border:none !important;}
+  /* ⚠ THE ONE PIECE THE JS FALLBACK IN index.html CANNOT REACH: a pseudo-
+     element has no box for style.display to touch. index.html's beforeprint
+     handler sets this attribute by hand-walking the DOM, for a browser that
+     does not understand :has() above — see the comment there for why this
+     exists at all. A plain attribute selector, so it needs no :has() support
+     of its own. */
+  body[data-tlc-printing]::before{display:none !important;}
   .tlc-print-sheet{display:flex !important;flex-direction:column;gap:14px;
     background:#fff;padding:0;box-shadow:none;border:none;
     /* The page box, so the grid below has a fixed height to divide. */

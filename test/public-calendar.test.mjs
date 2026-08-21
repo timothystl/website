@@ -459,6 +459,108 @@ async function goToFixtureMonth(p) {
   await ctx.close();
 }
 
+// ── the sheet still isolates itself without :has() support ──
+// ⚠ THE PRIMARY MECHANISM IS :has(), AND EVERY TEST ABOVE PROVES IT WORKS.
+// This is the fallback for the gap that CSS's own comment already admitted:
+// "a browser without :has() prints the page with its chrome above the sheet:
+// degraded, not broken... every current browser has it." Reported again,
+// verbatim, later: "the print calendar is just printing the full page not the
+// calendar on one page of paper" — a church office machine is exactly the
+// kind that goes years between browser updates, so "every current browser"
+// was optimistic rather than universal.
+//
+// There is no browser build in this sandbox that genuinely lacks :has(), so
+// this simulates one the only honest way available: serve styles.css with
+// every rule whose selector contains :has( stripped out before it reaches the
+// page. A selector list containing an unsupported pseudo-class is INVALID —
+// the whole rule is dropped by a real non-supporting browser too — so this
+// produces the identical CSSOM a real one would have, not an approximation.
+{
+  const stripHasRules = (css) => {
+    const lines = css.split('\n'), out = [];
+    let skipDepth = 0;
+    for (const line of lines) {
+      if (skipDepth > 0) {
+        skipDepth += (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+        continue;
+      }
+      if (/:has\(/.test(line) && line.includes('{')) {
+        if (line.trim().endsWith('}')) continue;
+        skipDepth = (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+        continue;
+      }
+      out.push(line);
+    }
+    return out.join('\n');
+  };
+
+  const ctx = await browser.newContext({ viewport: { width: 989, height: 749 } });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(String(e)));
+  await p.route(base + '/styles.css', async (route) => {
+    const res = await route.fetch();
+    const stripped = stripHasRules(await res.text());
+    await route.fulfill({ response: res, body: stripped, contentType: 'text/css' });
+  });
+  await p.route('https://admin.timothystl.org/**', (route) => {
+    const u = route.request().url();
+    if (u.includes('/api/calendar')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FEED) });
+    if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ pages: [], menu: null, rendered: {}, redirects: {}, css: '' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await p.goto(base + '/calendar', { waitUntil: 'domcontentloaded' });
+  await p.waitForSelector('#tlc-cal-main .tlc-cal', { timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(500);
+  ok(await goToFixtureMonth(p), 'the month can be navigated to');
+
+  const hasRuleCount = await p.evaluate(() => {
+    let n = 0;
+    for (const sheet of document.styleSheets) {
+      try { for (const rule of sheet.cssRules) if (rule.selectorText && rule.selectorText.includes(':has(')) n++; }
+      catch (e) {}
+    }
+    return n;
+  });
+  eq(hasRuleCount, 0, 'confirmed: the loaded stylesheet has no :has() rule left for the browser to fall back on');
+
+  // ⚠ TRIGGERED THE SAME WAY Ctrl/Cmd+P AND THE BROWSER'S OWN PRINT MENU ITEM
+  // ARE — window.print(), never the button. The button's handler is the same
+  // bare call (see tlcCalClick); binding this fallback to the click alone
+  // would miss both of those.
+  await p.evaluate(() => window.print());
+  await p.waitForTimeout(150);
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+
+  const stray = await p.evaluate(() => {
+    const sheet = document.querySelector('.tlc-print-sheet');
+    const out = [];
+    document.querySelectorAll('#page-calendar .tlc-cal, .nav, footer, #newsletter-band, #page-calendar .page-hero').forEach((el) => {
+      if (el.contains(sheet)) return;                       // on the path down to it
+      if (getComputedStyle(el).display !== 'none') out.push(el.className || el.tagName);
+    });
+    return out;
+  });
+  eq(stray.length, 0, 'the chrome is hidden even without :has() support: ' + stray.join(', '));
+
+  const box = await p.$eval('.tlc-print-sheet', (e) => {
+    const r = e.getBoundingClientRect();
+    return { top: Math.round(r.top), left: Math.round(r.left) };
+  });
+  eq(box.top, 0, 'and the sheet sits at the top of the page rather than pushed down by hidden chrome (' + box.top + 'px)');
+  eq(box.left, 0, 'and flush left (' + box.left + 'px)');
+
+  const pdf = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  eq(pages, 1, 'and it still prints as one page, not the whole document');
+
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
 // ── when Google cannot be read ──────────────────────────────
 {
   const { p, ctx } = await open({ feed: { ...FEED, events: OTHER_DAYS.filter((e) => e.source === 'news'),
@@ -548,6 +650,56 @@ async function goToFixtureMonth(p) {
   const chip = await p.$$eval('.tlc-cal-chip .tlc-cal-time', (e) => e.map((x) => x.textContent.trim()));
   ok(!chip.some((t) => t.includes('–')), 'the month grid keeps the start alone, for room: ' + chip.join(' | '));
 
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// ── the list view's time and its title never overlap ────────
+// Reported directly, with a screenshot: "on agenda view the time is printing
+// over the events in places." tlcCalSpan() prints a start–end RANGE, and one
+// crossing noon does not collapse to a single meridiem the way "8:00 – 9:15
+// AM" does — "10:00 AM – 12:00 PM" is nearly half again as wide. The .ltime
+// column was a FIXED 88px, sized for a single start time; a range wider than
+// that, with white-space:nowrap on it, overflowed into the title beside it
+// rather than wrapping — silent in the markup, and only visible on screen.
+//
+// ⚠ THIS ONLY REPRODUCES AT A DESKTOP WIDTH, WITH LIST EXPLICITLY CHOSEN. Under
+// 900px the phone rules collapse .tlc-cal-listev to a single column
+// (grid-template-columns:1fr) — time and title stack instead of sitting side
+// by side, so there is nothing to overlap there. And a wide window defaults to
+// the month grid; List is a toggle, not the default, and the report says
+// "agenda view" — somebody had clicked it. The first version of this test used
+// width:800 and never caught the bug it was written for, for exactly this
+// reason.
+{
+  const rental = [
+    ev({ id: 'b:wide', title: 'Gym rented', location: 'Gym', source: 'building', category: 'facility',
+         start: day(15) + 'T10:00:00', end: day(15) + 'T12:00:00' }),
+  ];
+  const { p, ctx, errors } = await open({ feed: { ...FEED, events: rental }, width: 1280 });
+  await goToFixtureMonth(p);
+  await p.click('.tlc-cal-seg [data-cal="view"][data-val="list"]');
+  await p.waitForTimeout(200);
+  const time = await p.textContent('.tlc-cal-listev .ltime');
+  eq(time.trim(), '10:00 AM – 12:00 PM', 'the reported case: a range crossing noon, unabbreviated');
+  // ⚠ MEASURED FROM THE RENDERED TEXT, NOT THE BOX. .ltime is blockified as a
+  // grid item and its box stays at the track's width even when its nowrap
+  // content is wider — overflow:visible content paints past the box without
+  // growing the rect getBoundingClientRect() reports for the box itself. A
+  // Range over the text finds where the glyphs actually land, which is the
+  // only thing "overlapping the title" can mean. Verified against the bug:
+  // this same measurement over the OLD 88px column reads the text out to
+  // 406px while the title starts at 381px — a real ~25px overlap; over the
+  // fixed column here they no longer touch.
+  const geom = await p.$eval('.tlc-cal-listev', (btn) => {
+    const range = document.createRange();
+    range.selectNodeContents(btn.querySelector('.ltime'));
+    const timeTextRight = range.getBoundingClientRect().right;
+    const titleLeft = btn.querySelector('.lt').getBoundingClientRect().left;
+    return { timeTextRight, titleLeft };
+  });
+  ok(geom.timeTextRight <= geom.titleLeft, 'the rendered time does not run into the title (time text ends at ' +
+    Math.round(geom.timeTextRight) + 'px, title starts at ' + Math.round(geom.titleLeft) + 'px)');
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
   await ctx.close();
 }

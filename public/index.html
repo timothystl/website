@@ -4273,6 +4273,69 @@ window.addEventListener('resize', function () {
     tlcCalViews.forEach(function (st) { if (st.host.offsetParent !== null) tlcCalRender(st); });
   }, 180);
 });
+
+// ── Print isolation, without depending on :has() ────────────────────────────
+// ⚠ THE CSS :has() RULES IN styles.css ARE STILL THE PRIMARY MECHANISM AND ARE
+// NOT REMOVED. This is the fallback for the gap that mechanism's own comment
+// already admits: "a browser without :has() prints the page with its chrome
+// above the sheet: degraded, not broken." Reported exactly that way — "the
+// print calendar is just printing the full page not the calendar on one page
+// of paper" — so "every current browser has it" was optimistic, not universal,
+// and a church office computer is exactly the kind of machine that goes years
+// between browser updates.
+//
+// ⚠ THIS WALKS THE DOM BY HAND RATHER THAN LEANING ON A SECOND SELECTOR TRICK,
+// because there is no selector-only way to express "hide everything except the
+// path down to one element" without :has() in the first place — that is the
+// whole reason the CSS needed :has() to begin with. From the sheet, walk up to
+// <body>; at each step, hide every sibling of the node just left (display:none
+// on the elements the :has() denylist-avoidance rule would also have hidden)
+// and flatten the parent's own padding/margin/width/background exactly as the
+// :has() rule two lines above it does, so the sheet's box is not pushed off
+// the page by a wrapper's padding. Every change is undone on `afterprint`, so
+// the visible page is untouched a moment later.
+//
+// ⚠ FIRES ON `beforeprint`/`afterprint`, NOT ON THE BUTTON CLICK. The button's
+// own handler is a bare `window.print()` (see `tlcCalClick`) — binding this to
+// the click would miss Ctrl/Cmd+P and the browser's own Print menu item, which
+// call window.print() without ever touching that button.
+var TLC_PRINT_UNDO = [];
+function tlcPreparePrint() {
+  var sheet = document.querySelector('.tlc-print-sheet');
+  if (!sheet || TLC_PRINT_UNDO.length) return; // already prepared, or nothing to isolate
+  var node = sheet;
+  while (node && node.parentNode && node !== document.body) {
+    var parent = node.parentNode;
+    if (parent.nodeType === 1) {
+      var kids = parent.children;
+      for (var i = 0; i < kids.length; i++) {
+        var sib = kids[i];
+        if (sib === node) continue;
+        TLC_PRINT_UNDO.push([sib, 'display', sib.style.display]);
+        sib.style.display = 'none';
+      }
+      if (parent !== document.body) {
+        ['padding', 'margin', 'maxWidth', 'background', 'boxShadow', 'border'].forEach(function (prop) {
+          TLC_PRINT_UNDO.push([parent, prop, parent.style[prop]]);
+        });
+        parent.style.padding = '0'; parent.style.margin = '0'; parent.style.maxWidth = 'none';
+        parent.style.background = '#fff'; parent.style.boxShadow = 'none'; parent.style.border = 'none';
+      }
+    }
+    node = parent;
+  }
+  document.body.setAttribute('data-tlc-printing', '1');
+}
+function tlcRestorePrint() {
+  for (var i = 0; i < TLC_PRINT_UNDO.length; i++) {
+    var e = TLC_PRINT_UNDO[i];
+    e[0].style[e[1]] = e[2];
+  }
+  TLC_PRINT_UNDO = [];
+  document.body.removeAttribute('data-tlc-printing');
+}
+window.addEventListener('beforeprint', tlcPreparePrint);
+window.addEventListener('afterprint', tlcRestorePrint);
 // ⚠ THIS BLOCK HAS TO SIT ABOVE THE ROUTER, and it is the only reason it is
 // here rather than beside the other form handlers further down. The router
 // below runs at parse time and calls showPage() synchronously, which for
