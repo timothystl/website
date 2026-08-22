@@ -2780,6 +2780,61 @@ group('a newsletter that has not been sent is not public (FX-07)');
   ok(!('approval_status' in row), 'so does who approved it');
 }
 
+group('a sent newsletter can be removed from the website without being unsent');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ['newsletter_approve', 'newsletter_edit'], 'admin');
+  const writer = signIn(db, ['newsletter_edit'], 'writer');
+
+  db.prepare(
+    `INSERT INTO newsletters (id, subject, status, published_at, pastor_note, sent_at, sent_count)
+     VALUES (903, 'Already mailed', 'published', '2026-08-01', '<p>Real content.</p>', '2026-08-01T09:00:00Z', 611)`
+  ).run();
+
+  // Refused for an account that can edit newsletters but was never given the
+  // approval permission — the same gate Delete already sits behind, because
+  // pulling a sent communication off the public archive is a bigger decision
+  // than drafting one.
+  let res = await call(env, '/newsletter/hide/903', { cookie: writer.cookie, method: 'POST', form: {} });
+  eq(res.status, 403, 'refused without newsletter_approve');
+  let stillUp = await call(env, '/api/newsletter/903');
+  eq(stillUp.status, 200, 'and nothing changed — still on the website');
+
+  // Visible before, gone after — through the real public endpoints, not just
+  // the shared SQL fragment (that half is covered in admin/newsletter.test.mjs).
+  res = await call(env, '/newsletter/hide/903', { cookie: admin.cookie, method: 'POST', form: {} });
+  eq(res.status, 302, 'the office account can hide it');
+  const gone = await call(env, '/api/newsletter/903');
+  eq(gone.status, 404, 'dropped from the single-issue endpoint');
+  const list = JSON.parse(await (await call(env, '/api/newsletters')).text());
+  ok(!list.some((n) => n.id === 903), 'and out of the archive list');
+
+  // ⚠ THE EMAIL ITSELF IS UNTOUCHED. Hiding is about the website, never about
+  // what already reached an inbox — sent_at and sent_count are exactly what
+  // they were, and canEdit() still refuses to change the words.
+  const row = db.prepare('SELECT status, sent_at, sent_count, pastor_note FROM newsletters WHERE id = 903').get();
+  eq(row.sent_at, '2026-08-01T09:00:00Z', 'sent_at is untouched');
+  eq(row.sent_count, 611, 'sent_count is untouched');
+  eq(row.pastor_note, '<p>Real content.</p>', 'and the content itself was never touched');
+  const editAttempt = await call(env, '/publish', {
+    cookie: admin.cookie, method: 'POST',
+    form: { newsletter_id: '903', subject: 'Rewritten', action: 'publish', email_send: 'none' },
+  });
+  eq(editAttempt.status, 302, 'the edit is refused (redirected, not applied)');
+  eq(db.prepare('SELECT subject FROM newsletters WHERE id = 903').get().subject, 'Already mailed',
+    'a hidden-but-sent issue is STILL locked — hiding it never reopens editing');
+
+  // And it can come back.
+  res = await call(env, '/newsletter/unhide/903', { cookie: admin.cookie, method: 'POST', form: {} });
+  eq(res.status, 302, 'unhide succeeds');
+  eq((await call(env, '/api/newsletter/903')).status, 200, 'back on the website');
+
+  const audited = db.prepare(
+    "SELECT action FROM audit_log WHERE entity_type='newsletter' AND entity_id='903' ORDER BY id"
+  ).all().map((r) => r.action);
+  eq(audited.join(','), 'unpublish,publish', 'both the hide and the unhide are in the audit log');
+}
+
 group('an upload needs a reason to be uploading (FX-08)');
 {
   // ⚠ Nothing ever deletes an R2 object, so this is not "can they write a

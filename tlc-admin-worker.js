@@ -1910,6 +1910,7 @@ export default {
       '/newsitems',                                // → News feed, News highlights
       '/market',                                   // → Market facts, Market application
       '/events',                                   // → Registration block
+      '/newsletter',                                // → the newsletterarchive block (/newsletter/hide, /unhide)
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(ctx);
@@ -2014,7 +2015,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-21-2'; // bumped: newsletters.supersedes_id, so a re-sent correction can replace the issue it corrects in the public archive (on top of push_log, merged from main)
+    const SCHEMA_VERSION = '2026-08-22-1'; // bumped: newsletters.hidden_from_site, so a sent issue can be taken off the public archive without unsending it
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2719,6 +2720,14 @@ export default {
     // NEWSLETTER_PUBLIC_WHERE_SQL in admin/newsletter.js. Nullable and unset
     // on every existing row, so nothing already sent is affected.
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN supersedes_id INTEGER').run(); } catch (_) {}
+    // "Remove from website" for an issue that has already been SENT — the
+    // one thing a sent issue's own lock (canEdit/isSent) has never covered,
+    // because that lock is about the WORDS staying honest, not about whether
+    // the issue is still shown. A separate column, not a repurposed `status`
+    // — see the note above NEWSLETTER_PUBLIC_WHERE_SQL in admin/newsletter.js
+    // for why. DEFAULT 0 backfills every existing row as still shown, with
+    // no migration script needed.
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN hidden_from_site INTEGER DEFAULT 0').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
@@ -7327,7 +7336,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
 
     // ── NEWSLETTER + NEWS PERMISSION GUARD ──
     // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission
-    const isNewsletterRoute = ['/new', '/publish', '/newsletter/preview'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/');
+    const isNewsletterRoute = ['/new', '/publish', '/newsletter/preview'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/') || path.startsWith('/newsletter/hide/') || path.startsWith('/newsletter/unhide/');
     const isNewsItemRoute = path === '/newsitems' || path.startsWith('/newsitems/');
     if (isNewsletterRoute && !hasPermission(currentUser, 'newsletter_edit') && !hasPermission(currentUser, 'newsletter_approve')) {
       return new Response('Access denied.', { status: 403 });
@@ -8003,6 +8012,39 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       return new Response('', { status: 302, headers: { Location: '/newsletters?msg=rejected' } });
     }
 
+    // ── REMOVE FROM WEBSITE / SHOW ON WEBSITE AGAIN ──
+    // The one thing "a sent issue is read-only" (canEditNewsletter/isSent)
+    // never covered: an issue that already reached ~600 inboxes cannot be
+    // un-sent, and this does not try to. It only decides whether the archived
+    // copy on timothystl.org still shows it — the words themselves, and the
+    // fact that it went out, are untouched. Gated the same way Delete already
+    // is (newsletter_approve), since removing a public record of a sent
+    // communication is a meaningfully bigger decision than editing a draft.
+    //
+    // ⚠ Deliberately NOT gated by canEditNewsletter()/isSent() — this is the
+    // one action that has to work on a SENT issue, which is the whole reason
+    // it exists. It also works on an unsent one without complaint, though
+    // "Save as draft" is the ordinary door for that case.
+    if (path.startsWith('/newsletter/hide/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      const existing = await env.DB.prepare('SELECT id, subject FROM newsletters WHERE id = ?').bind(id).first();
+      if (!existing) return new Response('', { status: 302, headers: { Location: '/newsletters' } });
+      await env.DB.prepare('UPDATE newsletters SET hidden_from_site = 1 WHERE id = ?').bind(id).run();
+      await logAudit(env.DB, currentUser, 'unpublish', 'newsletter', id, existing.subject || `Issue ${id}`, { hidden_from_site: 0 }, { hidden_from_site: 1 });
+      return new Response('', { status: 302, headers: { Location: `/edit/${id}?msg=hidden` } });
+    }
+
+    if (path.startsWith('/newsletter/unhide/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      const existing = await env.DB.prepare('SELECT id, subject FROM newsletters WHERE id = ?').bind(id).first();
+      if (!existing) return new Response('', { status: 302, headers: { Location: '/newsletters' } });
+      await env.DB.prepare('UPDATE newsletters SET hidden_from_site = 0 WHERE id = ?').bind(id).run();
+      await logAudit(env.DB, currentUser, 'publish', 'newsletter', id, existing.subject || `Issue ${id}`, { hidden_from_site: 1 }, { hidden_from_site: 0 });
+      return new Response('', { status: 302, headers: { Location: `/edit/${id}?msg=unhidden` } });
+    }
+
     // ── EDIT EXISTING NEWSLETTER (GET) ──
     if (path.startsWith('/edit/') && method === 'GET') {
       const editId = path.split('/').pop();
@@ -8095,6 +8137,11 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const preAdvice = preheaderAdvice(row.preheader || '');
       const lockedMsg = url.searchParams.get('msg') === 'locked'
         ? `<div class="alert alert-error">That issue has already been sent, so it cannot be changed. Duplicate it as a draft to work from a copy.</div>` : '';
+      const hiddenMsg = url.searchParams.get('msg') === 'hidden'
+        ? `<div class="alert alert-success">Removed from the website. The email that already went out is unaffected — this only stops it appearing in the archive.</div>`
+        : url.searchParams.get('msg') === 'unhidden'
+        ? `<div class="alert alert-success">Back on the website archive.</div>` : '';
+      const canHide = hasPermission(currentUser, 'newsletter_approve');
 
       // Every block gets a switch except the pastor's note, which is locked on:
       // an issue without it is not a newsletter. Switching one off hides it from
@@ -8139,9 +8186,16 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
     <p class="tlc-nl-when">${escapeHtml(nlSendLine)}</p>
     ${copiedNotice}
     ${lockedMsg}
+    ${hiddenMsg}
     ${nlLocked
       ? `<div class="alert alert-info"><strong>${escapeHtml(sendSummary(row))}.</strong> A sent issue is read-only — the archive on the website has to keep saying what was actually sent. To work from a copy, duplicate it as a draft.
-          <form method="POST" action="/newsletter/duplicate/${editId}" style="margin-top:10px;"><button type="submit" class="btn btn-sm btn-primary">Duplicate as draft</button></form></div>`
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <form method="POST" action="/newsletter/duplicate/${editId}" style="margin:0;"><button type="submit" class="btn btn-sm btn-primary">Duplicate as draft</button></form>
+          ${canHide ? (row.hidden_from_site
+            ? `<form method="POST" action="/newsletter/unhide/${editId}" style="margin:0;"><button type="submit" class="btn btn-sm btn-secondary">Show on the website again</button></form>`
+            : `<form method="POST" action="/newsletter/hide/${editId}" style="margin:0;" onsubmit="return confirm('Take this issue off timothystl.org/news? The email that already went out cannot be recalled — this only removes it from the website archive. You can put it back any time.')"><button type="submit" class="btn btn-sm btn-danger">Remove from website</button></form>`
+          ) : ''}
+          </div></div>`
       : ''}
   </div>
 
