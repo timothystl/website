@@ -338,20 +338,29 @@ group('a page missing its required native form block says so, and cannot publish
   eq(await page.locator('#edNeverLive').isVisible(), false, 'an ordinary page shows nothing');
   eq(await page.isEnabled('#edPublish'), true, 'and Publish is enabled');
 
-  // Add the real block back and the whole thing clears — proving the banner
-  // and the refusal both react to the block actually being there, not to a
-  // page id on a fixed list.
+  // Add the real block back and the whole thing clears IMMEDIATELY, with no
+  // reload — reported directly: the earlier version computed "is it missing"
+  // once at load and never again, so putting the block back left the banner
+  // and the disabled button sitting there lying about the page until it was
+  // reloaded. S.nativeFormRequired (a static fact about the page) is checked
+  // against the live S.blocks on every render now, which is what this proves.
   await open('contact');
   await page.click('.ed-pal-tab[data-group="Sign up"]');
   await page.click('.ed-chip[data-type="contactform"]');
   await page.waitForSelector('.ed-paper .tlcb--contactform');
-  await page.waitForTimeout(1800); // clears the autosave debounce
-  await open('contact');
-  eq(await page.locator('#edNeverLive').isVisible(), false, 'the banner is gone once the block is back');
-  eq(await page.isEnabled('#edPublish'), true, 'and Publish is enabled again');
+  eq(await page.locator('#edNeverLive').isVisible(), false, 'the banner clears the moment the block is added, no reload');
+  eq(await page.isEnabled('#edPublish'), true, 'and Publish re-enables the same moment');
   await page.click('#edPublish');
   await page.waitForSelector('.ed-toast');
   ok((await page.textContent('.ed-toast')).includes('timothystl.org/contact'), 'and publishing now actually works');
+
+  // And it reacts the other way too: delete the block and the banner comes
+  // right back, still with no reload — the check is live in both directions.
+  await page.click('.ed-paper .tlcb--contactform');
+  await page.click('.ed-paper .tlcb.is-sel [data-act="del"]');
+  await page.waitForSelector('.ed-paper .tlcb--contactform', { state: 'detached' });
+  eq(await page.locator('#edNeverLive').isVisible(), true, 'and removing it again brings the banner right back');
+  eq(await page.isEnabled('#edPublish'), false, 'with Publish disabled again');
 }
 
 eq(errors.length, 0, 'no page errors overall: ' + errors.join(' | '));

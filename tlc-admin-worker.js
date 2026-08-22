@@ -9474,13 +9474,19 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // rather than worked out in the browser, so the editor never draws
             // a button that would come back "there is no redesigned layout".
             hasRedesign: !!REDESIGN_BLOCKS[row.id],
-            // Set only for 'prayer'/'contact' when their required native-form
-            // block (see NATIVE_FORM_REQUIRED_TYPE, missingNativeForm) is
-            // currently missing from the DRAFT — the label of the block that
-            // has to come back before Publish will do anything but refuse.
-            // null the rest of the time, on every other page.
-            formIncomplete: missingNativeForm(row.id, blocks)
-              ? (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[row.id]] || {}).label || 'form'
+            // ⚠ THE RULE, NOT A YES/NO ANSWER. This used to send whether the
+            // required native-form block was missing AT THE MOMENT OF THIS
+            // GET — which was correct on load and then went stale the
+            // instant somebody added or removed a block, because nothing
+            // client-side ever re-asked the question. Reported directly: the
+            // block was added back, the banner and the disabled Publish
+            // button both just sat there until the page was reloaded. Sent
+            // now as a static fact about the PAGE (which type it needs, if
+            // any — null for every ordinary page and the ministries mount),
+            // so renderTop() can re-check it against S.blocks on every
+            // render instead of trusting a snapshot from load time.
+            nativeFormRequired: NATIVE_FORM_REQUIRED_TYPE[row.id]
+              ? { type: NATIVE_FORM_REQUIRED_TYPE[row.id], label: (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[row.id]] || {}).label || 'form' }
               : null,
             media: media.results || [],
             html: renderPage(blocks, {

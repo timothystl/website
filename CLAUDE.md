@@ -240,13 +240,14 @@ hand.
     "published, but missing the block" some other way (a direct DB write, a
     migration) still must not render. Costs one `Array.some()` per page.
   - **The editor's own banner is a courtesy on top of both, not the
-    guard itself.** `formIncomplete` (renamed from `neverLive`, sent by the
-    page editor's GET) carries the missing block's own label — `null` on
-    every ordinary page and on the ministries mount, which never had this
-    field at all. The banner names the block by that label and Publish is
-    disabled client-side, but the comment on both says outright: the route
-    refuses the same POST regardless, so a stale tab or a crafted request is
-    caught either way.
+    guard itself.** `nativeFormRequired` (renamed from `neverLive`, then
+    from `formIncomplete` — see the follow-up entry below for why it moved a
+    second time) is sent by the page editor's GET and names which block a
+    page needs — `null` on every ordinary page and on the ministries mount,
+    which never had this field at all. Publish is disabled client-side when
+    it is missing, but the comment on both says outright: the route refuses
+    the same POST regardless, so a stale tab or a crafted request is caught
+    either way.
 - **Both pages keep their hardcoded fallback markup in `public/index.html`,
   untouched** — the same rule every other converted page follows. A page
   with nothing published still renders exactly what it always rendered; the
@@ -268,6 +269,47 @@ refused with the missing block named in the error, and confirms a published
 row missing the block some other way still does not render). The write-path
 refusal was caught missing by exactly this suite — reverting it back out
 reproduces the original 200-where-400-belongs failure.
+
+### The missing-form banner didn't know a block had been added back (2026-08-22)
+
+Dinger, right after the above shipped: he added the Prayer request form block
+back after the banner told him it was gone, and the banner and the disabled
+Publish button just sat there anyway — *"i added the new prayer form back in
+but get this error [...] and the publish button is greyed out."*
+
+**`formIncomplete` was a yes/no answer computed once, at the page editor's
+GET, and never asked again.** Adding the block back changed `S.blocks` in the
+browser; nothing ever told `renderTop()` to recheck it, so the banner and the
+disabled button both went on describing the page as it was at load time,
+correctly, right up until the moment that stopped being true.
+
+- **The fix sends the RULE instead of an ANSWER.** `nativeFormRequired`
+  (`tlc-admin-worker.js`, renamed again from `formIncomplete`) is a static
+  fact about the page — `{ type, label }` or `null` — not a snapshot of
+  whether the block happens to be there right now. `renderTop()`
+  (`admin/ministry-editor.html`) checks it against the live `S.blocks` on
+  every single render, the same array every add/delete/undo/redo already
+  keeps current for everything else on the screen. Add the block back and
+  the very next `renderTop()` — the one the add itself triggers — sees it,
+  with nothing to reload.
+- **⚠ Still reactive in the other direction, on purpose.** Deleting the block
+  again brings the banner right back immediately, for the same reason: the
+  check runs fresh every time, it does not remember the answer from the last
+  time it ran.
+- **The server-side refusal on Publish is completely unchanged.** This was
+  always a courtesy layered on top of it, never the guard itself — see
+  `missingNativeForm()` above. A crafted POST or a stale tab was never able
+  to get past it and still can't; what was broken was only the *display*
+  telling a real person, looking right at a page they had just fixed, that
+  it was still broken.
+
+Run: the rewritten group in `node test/site-editor.test.mjs` — adds the block
+through the palette and asserts the banner and Publish clear **without a
+reload**, then deletes it again and asserts both come back, still with no
+reload. Verified against the bug: reverting to the load-time snapshot leaves
+the banner and the disabled button in whatever state they were in when the
+page opened, regardless of what happens afterward — which is the exact
+symptom reported.
 
 ### Giving Tab (added 2026-07-27)
 Consolidates everything related to giving/payment links, previously either hardcoded in
