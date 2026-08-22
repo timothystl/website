@@ -271,6 +271,15 @@ export function createEditorServer(seed = {}) {
         return json(res, { ok: true, status: 'live', url: 'https://timothystl.org/' + slug, saved_at: row.updated_at });
       }
 
+      if (action === 'unpublish' && req.method === 'POST') {
+        if (row.published_blocks == null) return json(res, { error: 'This page is not published.' }, 400);
+        row.published_blocks = null;
+        row.page_status = 'draft';
+        row.publish_at = null;
+        row.updated_at = new Date().toISOString();
+        return json(res, { ok: true, status: 'draft', saved_at: row.updated_at });
+      }
+
       if (action === 'revisions' && req.method === 'GET') {
         return json(res, { revisions: revisions.filter((r) => r.slug === slug).map((r, i) => ({ id: i + 1, published_at: r.published_at, published_by: r.published_by, count: parseBlocks(r.blocks).length })).reverse() });
       }

@@ -162,6 +162,29 @@ group('scheduled pages are promoted when due');
   eq(again.promoted, 0, 'a second run does not republish it');
 }
 
+group('unpublish takes the page down, and the draft survives');
+await load();
+eq(await page.textContent('#edPill'), 'Published', 'freshly loaded, the pill reads Published');
+await page.click('#edMore');
+await page.waitForSelector('#edUnpublish');
+page.once('dialog', (d) => d.accept());
+await page.click('#edUnpublish');
+await page.waitForSelector('.ed-toast');
+ok((await page.textContent('.ed-toast')).includes('Taken off'), 'the toast confirms it came down');
+await page.waitForTimeout(300);
+eq(await page.textContent('#edPill'), 'Draft', 'the pill goes back to Draft');
+eq(row().page_status, 'draft', 'server marks the page a draft again');
+eq(row().published_blocks, null, 'nothing is published any more');
+ok(JSON.stringify(parseBlocks(row().blocks)).includes('scheduled version'), 'but the draft itself is untouched — nothing was lost');
+
+// A second visit, with nothing live: no button offering to take down
+// something that is not there.
+await load();
+await page.click('#edMore');
+await page.waitForTimeout(200);
+eq(await page.locator('#edUnpublish').count(), 0, 'no Unpublish button once nothing is published');
+ok((await page.textContent('.ed-panel')).includes('Not on the site'), 'the status note says so plainly');
+
 eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 
 await browser.close();

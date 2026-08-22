@@ -9562,6 +9562,31 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           return jsonResponse({ ok: true, status: 'live', saved_at: nowIso, url: 'https://timothystl.org' + row.slug });
         }
 
+        // Unpublish: the reverse of Publish, for exactly the case Publish has
+        // no undo for on its own — pressed by accident, or before the page
+        // was actually ready. Clears published_blocks and takes the page back
+        // to 'draft', which is the same state a page is in before it has ever
+        // been published — the DRAFT (row.blocks) is untouched, so nothing
+        // typed is lost and Publish works again once the page is ready.
+        //
+        // ⚠ THIS REMOVES THE PAGE FROM /api/pages ENTIRELY, NOT JUST ITS
+        // RENDERED HTML. That endpoint's own query is `WHERE status =
+        // 'published'` — an unpublished page drops out of the menu, the
+        // sitemap-adjacent page list, and any section landing's child list,
+        // and its address stops resolving until it is published again. That
+        // is the honest shape of "take this off the site," not a surprise;
+        // the confirm dialog in the editor says so in as many words.
+        if (action === '/unpublish' && method === 'POST') {
+          if (row.published_blocks == null) return jsonResponse({ error: 'This page is not published.' }, 400);
+          const nowIso = new Date().toISOString();
+          await env.DB.prepare(
+            "UPDATE pages SET published_blocks = NULL, status = 'draft', publish_at = NULL, updated_at = ?, updated_by = ? WHERE id = ?"
+          ).bind(nowIso, currentUser?.username || '', pageId).run();
+          await logAudit(env.DB, currentUser, 'unpublish', 'page', pageId, row.title,
+            { blocks: sanitizeBlocks(parseBlocks(row.published_blocks)).length }, null);
+          return jsonResponse({ ok: true, status: 'draft', saved_at: nowIso });
+        }
+
         // Schedule: the cron handler promotes the draft when it comes due.
         if (action === '/schedule' && method === 'POST') {
           const body = await request.json().catch(() => ({}));
@@ -9756,6 +9781,26 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           .bind(slug, json, nowIso, currentUser?.username || 'staff').run();
         await logAudit(env.DB, currentUser, 'publish', 'ministry_page', slug, row.title || slug, null, { blocks: blocks.length });
         return jsonResponse({ ok: true, status: 'live', saved_at: nowIso, url: 'https://timothystl.org/' + slug });
+      }
+
+      // Unpublish: the reverse of Publish. See the identical route on the
+      // `pages` table above for the full reasoning — same shape here, just
+      // page_status rather than status, and no menu/route removal to warn
+      // about: a ministry page's public content beyond published_blocks
+      // (its legacy `content` field, if any) is untouched, so this only ever
+      // takes back what Publish added.
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/unpublish') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/unpublish'.length)));
+        const row = await env.DB.prepare('SELECT slug, title, published_blocks FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        if (row.published_blocks == null) return jsonResponse({ error: 'This page is not published.' }, 400);
+        const nowIso = new Date().toISOString();
+        await env.DB.prepare(
+          "UPDATE youth_pages SET published_blocks = NULL, page_status = 'draft', publish_at = NULL, updated_at = ? WHERE slug = ?"
+        ).bind(nowIso, slug).run();
+        await logAudit(env.DB, currentUser, 'unpublish', 'ministry_page', slug, row.title || slug,
+          { blocks: sanitizeBlocks(parseBlocks(row.published_blocks)).length }, null);
+        return jsonResponse({ ok: true, status: 'draft', saved_at: nowIso });
       }
 
       // Schedule: the draft is promoted by the cron handler when it comes due.

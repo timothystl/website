@@ -511,6 +511,13 @@ var S = {
   linkTargets: [],
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
+  // How many blocks are on the LIVE page right now — 0 means there is
+  // genuinely nothing published to unpublish, which is what decides whether
+  // the Unpublish button appears at all. Distinct from S.status: 'draft' is
+  // ALSO what a page reads once it has been published and then edited again
+  // (see pageEditorStatus in tlc-admin-worker.js), so status alone cannot
+  // tell "never published" from "published, with changes since."
+  publishedCount: 0,
   template: '', siblings: [], railOpen: true, blocksOpen: true, leaving: false, tab: 'block',
   role: 'office', editors: [],
   pageMeta: null, savingPage: false,
@@ -3343,6 +3350,7 @@ async function publish() {
       { method: 'POST', body: JSON.stringify({ blocks: S.blocks }) });
     S.changes = [];
     S.status = 'live';
+    S.publishedCount = S.blocks.length;
     S.publishAt = null;
     S.saved = now();
     S.dirty = false;
@@ -3352,6 +3360,28 @@ async function publish() {
     say('Published');
   } catch (err) {
     if (String(err && err.message) !== 'auth') toast('Could not publish — ' + (err.message || 'try again'));
+  }
+}
+
+// The reverse of publish() — for the page that went live by accident, or
+// before it was ready. Takes the page off the site; the draft is untouched,
+// so nothing typed is lost and Publish works again once it is ready.
+async function unpublish() {
+  if (!confirm('Take ' + (S.path || '/' + S.slug) + ' off timothystl.org? ' +
+    'The page stops appearing on the site — it comes out of the menu and its address stops working — ' +
+    'until you publish it again. Your draft is not touched.')) return;
+  try {
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/unpublish', { method: 'POST' });
+    S.status = out.status;
+    S.publishedCount = 0;
+    S.publishAt = null;
+    S.saved = now();
+    closePublishPanel();
+    renderTop(); renderChanges();
+    toast('Taken off timothystl.org' + S.path);
+    say('Unpublished');
+  } catch (err) {
+    if (String(err && err.message) !== 'auth') toast('Could not unpublish — ' + (err.message || 'try again'));
   }
 }
 
@@ -3409,9 +3439,15 @@ function renderPublishPanel() {
     '<div class="ed-panel-sec"><span class="ed-lab">Status</span>' +
       '<span class="ed-note">' + (scheduled
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
-        : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
+        : (S.publishedCount === 0 ? 'Not on the site — nothing here has been published'
+           : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published'))) + '</span>' +
       '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org' + esc(S.path) + '" target="_blank" rel="noopener">Compare with the live page</a>' +
       '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
+      // Only when there is something actually live to take down — S.status
+      // alone can't say that (see the note on S.publishedCount).
+      (S.publishedCount > 0
+        ? '<button type="button" class="ed-danger" id="edUnpublish">Unpublish — take this page off the site</button>'
+        : '') +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
       '<input class="ed-field" type="datetime-local" id="edWhen" value="' + esc(S.publishAtLocal || '') + '">' +
@@ -3492,6 +3528,7 @@ function bindPublish() {
     }
     if (e.target.closest('#edUnschedule')) return schedulePublish(null);
     if (e.target.closest('#edSavePage')) { closePublishPanel(); return saveSection(S.blocks, S.title); }
+    if (e.target.closest('#edUnpublish')) return unpublish();
   });
   document.addEventListener('click', function (e) {
     if (!S.publishPanel) return;
@@ -3976,6 +4013,7 @@ async function boot() {
     var data = await api(API + '/page/' + encodeURIComponent(S.slug));
     S.title = data.page.title;
     S.status = data.page.status;
+    S.publishedCount = data.page.published_count || 0;
     S.publishAt = data.page.publish_at || null;
     S.publishAtLocal = toLocalInput(S.publishAt);
     S.blocks = data.page.blocks;
