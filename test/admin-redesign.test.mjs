@@ -3760,6 +3760,68 @@ group('The sidebar can be pushed down to line up with the content beside it');
   has(pub.rendered.worship, '<aside class="tlcb-side" style="margin-top:24px">', 'and the published page carries the same offset');
 }
 
+// ── unpublish, the reverse of publish ────────────────────────────────────────
+group('Unpublish takes an accidentally-published page back off the site');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const jsonPost = async (path, body) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }), env, ctx);
+
+  // Refusing to unpublish something that was never published is the same
+  // rule the button's own visibility follows client-side (published_count),
+  // enforced here too so a crafted POST can't skip the check.
+  db.prepare("UPDATE pages SET published_blocks = NULL, status = 'draft' WHERE id = 'worship'").run();
+  let res = await jsonPost('/pages/api/page/worship/unpublish');
+  eq(res.status, 400, 'refused — nothing is published');
+
+  // Publish it for real, confirm it reached the public API, then take it back.
+  await jsonPost('/pages/api/page/worship/publish', {});
+  let pub = await (await call(env, '/api/pages')).json();
+  ok(pub.pages.some((p) => p.id === 'worship'), 'published: worship is in the page list');
+  ok('worship' in pub.rendered, 'and its blocks are rendered');
+
+  res = await jsonPost('/pages/api/page/worship/unpublish');
+  eq(res.status, 200, 'unpublish succeeds');
+  let out = await res.json();
+  eq(out.status, 'draft', 'reports the page as a draft again');
+
+  const row = db.prepare("SELECT status, published_blocks, blocks FROM pages WHERE id = 'worship'").get();
+  eq(row.status, 'draft', 'stored as a draft');
+  eq(row.published_blocks, null, 'nothing published in the database');
+  ok(row.blocks && row.blocks !== '[]', 'the draft itself is untouched — nothing was lost');
+
+  // ⚠ THE WHOLE PAGE COMES OFF /api/pages, NOT JUST ITS RENDERED HTML — that
+  // endpoint's own query is `WHERE status = 'published'`. This is the load-
+  // bearing assertion: unpublishing a page is "take it off the site," not
+  // merely "stop showing its blocks."
+  pub = await (await call(env, '/api/pages')).json();
+  ok(!pub.pages.some((p) => p.id === 'worship'), 'unpublished: worship drops out of the page list entirely');
+  ok(!('worship' in pub.rendered), 'and out of the rendered map');
+
+  // A second unpublish refuses, same as the first check — nothing to undo.
+  res = await jsonPost('/pages/api/page/worship/unpublish');
+  eq(res.status, 400, 'refused a second time — already unpublished');
+
+  const audited = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='unpublish' AND entity_type='page' AND entity_id='worship'").get().n;
+  eq(audited, 1, 'the unpublish is in the audit log');
+
+  // A ministry leader who may only edit their own pages can still take one
+  // of their own down — same permission Publish already allows them.
+  db.prepare("UPDATE pages SET owner_username = 'leah' WHERE id = 'worship'").run();
+  await jsonPost('/pages/api/page/worship/publish', {});
+  const leah = signIn(db, ['pages_edit_own'], 'leah');
+  const leahPost = async (path) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST', headers: { cookie: leah.cookie, origin: 'https://admin.timothystl.org' },
+  }), env, ctx);
+  res = await leahPost('/pages/api/page/worship/unpublish');
+  eq(res.status, 200, 'a ministry leader can unpublish their own page');
+}
+
 // ── the whole staff directory reaches the page ───────────────────────────────
 group('⚠ The staff grid shows every member of staff');
 {
