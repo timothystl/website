@@ -6413,38 +6413,70 @@ group('every push notification leaves a trail in the Push Log, whatever triggere
   has(body, 'Push Log', 'the sidebar and title name the screen plainly');
 }
 
-group('Contact and Prayer are never rendered from blocks, even when published');
+group('Contact and Prayer publish through the block editor now, but never without their real form');
 {
-  // Found live: both pages ship a seeded draft with a "Signup form" block in
-  // place of the real form — a Google Form embed with no URL, which the
-  // office can (and, on the real site, did) Publish without noticing it
-  // replaces a working, spam-screened, Turnstile-checked form with two dead
-  // <span>s. No block on this site can express that behavior, the same
-  // reason give.timothystl.org is kept off the block editor entirely — so
-  // these two ids must never appear in `rendered`, however their own
-  // published_blocks reads.
+  // Used to be a blanket exclusion: no block on the site could express the
+  // real form's honeypot/token/Turnstile screening, so both pages were
+  // permanently withheld from `rendered`, however their published_blocks
+  // read — found live after both had been published once with a generic
+  // "Signup form" block (a Google Form embed with no URL) standing in for
+  // the real form, invisibly, until compared to the live site by hand.
+  //
+  // `prayerform`/`contactform` (admin/blocks.js) close that gap with a real,
+  // fixed block instead of a blanket ban — so these are ordinary editable,
+  // publishable pages now, and what has to keep holding is narrower: the
+  // required block cannot be missing from what actually goes live. See
+  // NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in tlc-admin-worker.js.
   const { db, env } = await boot();
+  const { cookie } = signIn(db, ['pages_edit'], 'siteeditor');
 
-  // The default seed's own draft has exactly this trap already in it —
-  // confirmed directly, not assumed: contact-2 / prayer-2 are type:'form'
-  // with url:''. Publishing is copying draft to published_blocks, so that is
-  // exactly what this does.
-  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id IN ('contact','prayer')").run();
-  // A control page, published with a block stack of its own, proves the
-  // exclusion is scoped to these two ids and not a general regression.
-  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id = 'about' AND blocks IS NOT NULL AND blocks != '[]'").run();
+  // The seeded draft (admin/native-form-page-seed.js, via ALL_SEEDED_PAGES)
+  // already carries the real block, not the generic one — publish it exactly
+  // as the office would, through the real route, not a direct DB write.
+  const pubPrayer = await call(env, '/pages/api/page/prayer/publish', { cookie, method: 'POST' });
+  eq(pubPrayer.status, 200, 'prayer publishes cleanly with its seeded block');
+  const pubContact = await call(env, '/pages/api/page/contact/publish', { cookie, method: 'POST' });
+  eq(pubContact.status, 200, 'so does contact');
 
   const api = await (await call(env, '/api/pages', { fresh: true })).json();
-  ok(!api.rendered.contact, 'contact is never rendered from blocks, whatever is published for it');
-  ok(!api.rendered.prayer, 'neither is prayer');
-  ok(!!api.rendered.about, 'a normal page with the same shape of publish still renders — the exclusion is scoped, not a general break');
+  ok(!!api.rendered.contact, 'contact renders from blocks now that it has its real form');
+  ok(!!api.rendered.prayer, 'so does prayer');
+  ok(api.rendered.prayer.includes('data-tlc-native-form="prayer"'), 'and the rendered HTML carries the real, screened form — not a stand-in');
+  ok(api.rendered.prayer.includes('name="website"'), 'honeypot included');
+  ok(api.rendered.prayer.includes('class="tlc-turnstile"'), 'Turnstile mount included');
+  ok(api.rendered.contact.includes('data-tlc-native-form="contact"'), 'contact carries its own real form too');
 
-  // Still ordinary pages: addressable, in the page list, at their own slug —
-  // only the rendered HTML entry is withheld.
+  // ⚠ THE ROUTE REFUSES, NOT JUST THE SEED HAPPENING TO BE RIGHT. A crafted
+  // publish with the required block stripped out of the posted blocks must
+  // fail the same way an untouched, correctly-seeded page succeeds above —
+  // this is the property the whole exclusion used to buy, kept without the
+  // exclusion.
+  const strippedBody = JSON.stringify({ blocks: [{ id: 'x', type: 'hero', title: 'Prayer Requests' }] });
+  const strip = await worker.fetch(new Request('https://admin.timothystl.org/pages/api/page/prayer/publish', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: strippedBody,
+  }), env, ctx);
+  eq(strip.status, 400, 'publishing without the prayerform block is refused');
+  const stripBody = await strip.json();
+  ok(/prayer request form/i.test(stripBody.error || ''), 'and says which block is missing: ' + stripBody.error);
+
+  // And the read path is a second, independent guard — not just the write
+  // path's own honesty. A row that reached "published, but missing the
+  // block" some other way (a direct DB write, a migration) must not render
+  // either.
+  db.prepare("UPDATE pages SET published_blocks = ? WHERE id = 'contact'")
+    .run(JSON.stringify([{ id: 'x', type: 'hero', title: 'Contact Us' }]));
+  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!api2.rendered.contact, 'a published page missing its required block still does not render — belt and braces');
+  ok(!!api2.rendered.prayer, 'prayer is unaffected, still published and correct');
+
+  // Still ordinary pages throughout: addressable, in the page list, at their
+  // own slug — this was never withheld, before or after.
   const contactEntry = api.pages.find((p) => p.id === 'contact');
   const prayerEntry = api.pages.find((p) => p.id === 'prayer');
-  ok(!!contactEntry, 'contact still appears in the page list');
-  ok(!!prayerEntry, 'prayer still appears in the page list');
+  ok(!!contactEntry, 'contact appears in the page list');
+  ok(!!prayerEntry, 'prayer appears in the page list');
   eq(contactEntry.slug, '/contact', 'at its own address, so the router and the menu are unaffected');
   eq(prayerEntry.slug, '/prayer', 'same for prayer');
 }

@@ -597,7 +597,7 @@ function shellHtml() {
         '<div class="ed-rail-f">Drag to reorder · Alt + ↑ ↓ with a row focused</div>' +
       '</aside>' +
       '<main class="ed-mid">' +
-        '<div class="ed-neverlive" id="edNeverLive" hidden>This page never reaches the live site. Contact and Prayer keep a real, spam-screened form built into the site\u2019s own code \u2014 nothing published here, ever, replaces it. Edit the words below if you want, but check them against <a href="#" id="edNeverLiveViewLive" target="_blank" rel="noopener">the live page</a> rather than this preview, which can no longer agree with it.</div>' +
+        '<div class="ed-neverlive" id="edNeverLive" hidden>The <span id="edNeverLiveLabel"></span> block has been removed from this page. Publishing right now would take the real, spam-screened form off the site \u2014 add it back from Add block (Sign up) before publishing.</div>' +
         '<div class="ed-canvas" id="edCanvas"><div class="ed-paper" id="edPaper"></div></div>' +
         '<div class="ed-pal">' +
           '<div class="ed-pal-h">' +
@@ -638,7 +638,7 @@ function shellHtml() {
 
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edRedo', 'edPublish', 'edHint', 'edHintX', 'edRail',
-   'edCanvas', 'edPaper', 'edNeverLive', 'edNeverLiveViewLive', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
+   'edCanvas', 'edPaper', 'edNeverLive', 'edNeverLiveLabel', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edMTabs',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
    'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
@@ -721,13 +721,18 @@ function renderTop() {
   // Disabled rather than hidden: a control that vanishes and reappears is
   // one the eye has to re-find, and an empty redo stack is the normal state.
   el.edRedo.disabled = S.future.length === 0;
-  el.edPublish.disabled = false;
   el.edView.href = 'https://timothystl.org' + S.path;
-  // S.neverLive is only ever sent by /pages/api, so this stays hidden on the
-  // ministries mount without needing to know which shell it is — the banner
-  // element itself is in the one shared markup both mounts render.
-  el.edNeverLive.hidden = !S.neverLive;
-  if (S.neverLive) el.edNeverLiveViewLive.href = 'https://timothystl.org' + S.path;
+  // S.formIncomplete is only ever sent by /pages/api, so this stays hidden
+  // on the ministries mount without needing to know which shell it is — the
+  // banner element itself is in the one shared markup both mounts render.
+  //
+  // ⚠ DISABLING PUBLISH HERE IS A COURTESY, NOT THE GUARD. The route itself
+  // (/pages/api/page/:id/publish) refuses the same way against a stale tab
+  // or a direct POST — see missingNativeForm() in tlc-admin-worker.js. This
+  // only saves a trip for the person looking right at the reason.
+  el.edPublish.disabled = !!S.formIncomplete;
+  el.edNeverLive.hidden = !S.formIncomplete;
+  if (S.formIncomplete) el.edNeverLiveLabel.textContent = S.formIncomplete;
 }
 
 // Which row (top/bottom of a pair) each half belongs to, walked the same way
@@ -4029,10 +4034,11 @@ async function boot() {
     // Worker rather than worked out here, so the editor never offers a button
     // that would come back "there is no redesigned layout for this page".
     S.hasRedesign = !!data.hasRedesign;
-    // Never true for a ministry page — /ministries/api sends no such field,
-    // and !!undefined is false. See tlc-admin-worker.js's own comment on
-    // NATIVE_FORM_ONLY_PAGE_IDS for why Contact and Prayer carry this.
-    S.neverLive = !!data.neverLive;
+    // Always null for a ministry page — /ministries/api sends no such field.
+    // See tlc-admin-worker.js's own comment on NATIVE_FORM_REQUIRED_TYPE for
+    // why Prayer and Contact carry this. A string (the missing block's own
+    // label), not a boolean, so renderTop() can name it in the banner.
+    S.formIncomplete = data.formIncomplete || null;
     S.media = data.media || [];
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';

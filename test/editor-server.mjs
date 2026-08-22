@@ -14,6 +14,16 @@ import {
   migrateLegacyPage, starterBlocks, newBlock, makeBlockId, templateOf, cleanText,
 } from '../admin/blocks.js';
 import { slugify, uniqueSlug, pageRename } from '../admin/pages.js';
+import { BLOCK_DEFS } from '../admin/blocks.js';
+// Mirrors NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in tlc-admin-worker.js
+// — a second, independent implementation would be a second place for the two
+// to quietly disagree, so this is copied rather than re-derived.
+const NATIVE_FORM_REQUIRED_TYPE = { prayer: 'prayerform', contact: 'contactform' };
+function missingNativeForm(slug, blocks) {
+  const need = NATIVE_FORM_REQUIRED_TYPE[slug];
+  if (!need) return false;
+  return !(blocks || []).some((b) => b.type === need);
+}
 import { LINKS_JS } from '../admin/links.js';
 import { PAGE_SEEDS } from '../admin/page-seeds.js';
 export { PAGE_SEEDS };
@@ -69,7 +79,6 @@ export function createEditorServer(seed = {}) {
       blocks: JSON.stringify(sanitizeBlocks(p.blocks || starterBlocks(p.title))),
       published_blocks: JSON.stringify(sanitizeBlocks(p.blocks || [])),
       change_log: '[]', updated_at: new Date().toISOString(),
-      neverLive: !!p.neverLive,
     });
   }
 
@@ -172,13 +181,17 @@ export function createEditorServer(seed = {}) {
           config: blocksClientConfig(),
           // ⚠ TOP LEVEL, A SIBLING OF `page` — NOT NESTED INSIDE IT. The real
           // Worker sends it there (beside its own `hasRedesign`), and the
-          // client reads `data.neverLive`, not `data.page.neverLive`. Nesting
-          // this inside `page` is the exact shape-mismatch this comment
-          // exists to prevent: it looked like a faithful mirror and still
-          // disagreed, which is worse than sending nothing — a test written
-          // against it would have passed while proving nothing about the real
-          // response shape. Sourced from the fixture so a test can seed it.
-          neverLive: isSitePage ? !!row.neverLive : false,
+          // client reads `data.formIncomplete`, not `data.page.formIncomplete`.
+          // Nesting this inside `page` is the exact shape-mismatch this
+          // comment exists to prevent: it looked like a faithful mirror and
+          // still disagreed, which is worse than sending nothing — a test
+          // written against it would have passed while proving nothing about
+          // the real response shape. Computed from the live blocks, the same
+          // as the real Worker, not seeded — so a test can prove the banner
+          // reacts to the block actually being there or not.
+          formIncomplete: isSitePage && missingNativeForm(slug, blocks)
+            ? (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[slug]] || {}).label || 'form'
+            : null,
           media,
           html: renderPage(blocks, Object.assign(
             { editing: true, slug, withCss: true, data: DATA }, layoutFor(slug, isSitePage))),
@@ -261,6 +274,11 @@ export function createEditorServer(seed = {}) {
       if (action === 'publish' && req.method === 'POST') {
         const body = await readBody(req);
         const blocks = sanitizeBlocks(body.blocks || parseBlocks(row.blocks));
+        // Mirrors the real /publish route's own refusal — see
+        // missingNativeForm() in tlc-admin-worker.js.
+        if (missingNativeForm(slug, blocks)) {
+          return json(res, { error: 'This page needs its ' + ((BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[slug]] || {}).label || 'form') + ' block before it can publish.' }, 400);
+        }
         revisions.push({ slug, blocks: JSON.stringify(blocks), published_at: new Date().toISOString(), published_by: 'test' });
         row.blocks = JSON.stringify(blocks);
         row.published_blocks = JSON.stringify(blocks);

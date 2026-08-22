@@ -30,9 +30,9 @@ const harness = createEditorServer({
     // having to drive the layout control first.
     { slug: 'grow', title: 'Grow', path: '/grow', template: 'sectionside', blocks: [newBlock('text', { body: '<p>GROW COPY</p>' })] },
     { slug: 'classes', title: 'Bible Classes', path: '/grow/classes', parent_id: 'grow', blocks: [newBlock('text', { body: '<p>Classes</p>' })] },
-    // Mirrors the real Worker's NATIVE_FORM_ONLY_PAGE_IDS — a page whatever
-    // is published for it never reaches the live site.
-    { slug: 'contact', title: 'Contact', path: '/contact', neverLive: true, blocks: [newBlock('text', { body: '<p>CONTACT COPY</p>' })] },
+    // No contactform block on purpose — this is the state that triggers the
+    // formIncomplete banner, mirroring the real Worker's missingNativeForm().
+    { slug: 'contact', title: 'Contact', path: '/contact', blocks: [newBlock('hero', { title: 'Contact Us' })] },
   ],
 });
 await new Promise((r) => harness.server.listen(0, r));
@@ -312,19 +312,46 @@ await open('home');
 eq(await page.locator('.ed-paper .tlcb-page--home').count(), 1, 'the Home layout is used on the canvas');
 eq(await page.getAttribute('#edView', 'href'), 'https://timothystl.org/', 'and View live points at the root');
 
-group('a page whatever is published never reaches the live site says so');
+group('a page missing its required native form block says so, and cannot publish — even with the button bypassed');
 {
   await open('contact');
   const banner = page.locator('#edNeverLive');
-  eq(await banner.isVisible(), true, 'the warning shows on a page flagged neverLive');
-  ok((await banner.textContent()).includes('never reaches the live site'), 'and says so in words, not just a color');
-  eq(await page.getAttribute('#edNeverLiveViewLive', 'href'), 'https://timothystl.org/contact',
-    'its link points at the real live page, so a person can check the two against each other');
+  eq(await banner.isVisible(), true, 'contact has no contactform block yet, so the warning shows');
+  ok((await banner.textContent()).includes('Contact form'), 'and names the missing block by its own label');
+  eq(await page.isEnabled('#edPublish'), false, 'Publish is disabled as a courtesy');
+
+  // ⚠ THE DISABLED BUTTON IS NOT THE GUARD — the route refuses the same POST
+  // a crafted request or a stale tab would send. Same verification shape
+  // this repo already holds Event Intake's server-side refusals to.
+  const refused = await page.evaluate(async () => {
+    const r = await fetch('/pages/api/page/contact/publish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    return { status: r.status, body: await r.json() };
+  });
+  eq(refused.status, 400, 'the publish route refuses a direct POST too');
+  ok(/contact form/i.test(refused.body.error || ''), 'and says why: ' + refused.body.error);
 
   // Scoped, not a general break: an ordinary page's editor stays exactly as
-  // it was — no banner, no space reserved for one.
+  // it was — no banner, no space reserved for one, Publish enabled.
   await open('about');
   eq(await page.locator('#edNeverLive').isVisible(), false, 'an ordinary page shows nothing');
+  eq(await page.isEnabled('#edPublish'), true, 'and Publish is enabled');
+
+  // Add the real block back and the whole thing clears — proving the banner
+  // and the refusal both react to the block actually being there, not to a
+  // page id on a fixed list.
+  await open('contact');
+  await page.click('.ed-pal-tab[data-group="Sign up"]');
+  await page.click('.ed-chip[data-type="contactform"]');
+  await page.waitForSelector('.ed-paper .tlcb--contactform');
+  await page.waitForTimeout(1800); // clears the autosave debounce
+  await open('contact');
+  eq(await page.locator('#edNeverLive').isVisible(), false, 'the banner is gone once the block is back');
+  eq(await page.isEnabled('#edPublish'), true, 'and Publish is enabled again');
+  await page.click('#edPublish');
+  await page.waitForSelector('.ed-toast');
+  ok((await page.textContent('.ed-toast')).includes('timothystl.org/contact'), 'and publishing now actually works');
 }
 
 eq(errors.length, 0, 'no page errors overall: ' + errors.join(' | '));
