@@ -188,7 +188,16 @@ export function canEdit(row) {
 // which always writes an explicit status. There is no legacy NULL-status row
 // to account for here the way there is for an issue sent before that column
 // existed.
+// `hidden_from_site` is a THIRD, independent fact from status/sent — it is
+// what "Remove from website" (see below) sets on an issue that has already
+// gone out. Folding it into `status` would mean a hidden-but-sent issue
+// reading as 'draft', which is wrong in every other place that column is
+// read (issueStatus()'s "Sent" pill, the admin list's own draft-first sort,
+// approvalState()) — all of those correctly check isSent() first and would
+// keep working, but a stray future reader of `status` alone would not. A
+// separate column is one fact with one name, not two meanings on one flag.
 export const NEWSLETTER_PUBLIC_WHERE_SQL = `(status IS NULL OR status = 'published')
+  AND (hidden_from_site IS NULL OR hidden_from_site = 0)
   AND id NOT IN (SELECT supersedes_id FROM newsletters WHERE supersedes_id IS NOT NULL AND status = 'published')`;
 
 // The admin list's own pure half of the same rule, for rows already fetched
@@ -234,6 +243,12 @@ export function approvalState(row, user, hasSecondApprover) {
 // What the Newsletter screen shows per row. Sends is the column that answers
 // the question people actually bring to this screen: did it go, and to how many.
 export function issueStatus(row) {
+  // Checked before "Sent" — an issue that went out is still sent, but the
+  // fact somebody most needs to see at a glance is that it no longer shows
+  // up on the website. Hiding a genuinely unsent issue can't happen through
+  // this control (Save as draft is the door for that), but the row reads
+  // sensibly either way.
+  if (row.hidden_from_site) return { tone: 'plain', label: isSent(row) ? 'Sent · off the website' : 'Off the website' };
   if (isSent(row)) return { tone: 'plain', label: 'Sent' };
   if (row.approval_status === 'pending') return { tone: 'warn', label: 'Awaiting approval' };
   if (row.scheduled_send_at && new Date(row.scheduled_send_at).getTime() > Date.now()) {

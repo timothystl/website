@@ -311,7 +311,7 @@ group('a corrected, re-sent issue supersedes the one it replaces');
   // fragment shared by four different queries, and what matters is what it
   // actually filters, not what it looks like.
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE newsletters (id INTEGER PRIMARY KEY, subject TEXT, status TEXT, supersedes_id INTEGER)');
+  db.exec('CREATE TABLE newsletters (id INTEGER PRIMARY KEY, subject TEXT, status TEXT, supersedes_id INTEGER, hidden_from_site INTEGER DEFAULT 0)');
   db.prepare("INSERT INTO newsletters (id, subject, status, supersedes_id) VALUES (1, 'Original', 'published', NULL)").run();
   db.prepare("INSERT INTO newsletters (id, subject, status, supersedes_id) VALUES (2, 'Corrected copy', 'draft', 1)").run();
   const visible = () => db.prepare(`SELECT id FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY id`).all().map((r) => r.id).join(',');
@@ -334,6 +334,31 @@ group('a corrected, re-sent issue supersedes the one it replaces');
     { id: 2, status: 'draft', supersedes_id: 1 },
   ]).size, 0, 'not yet — the copy replacing it has not been sent');
   eq(supersededIds([{ id: 1, status: 'published' }]).size, 0, 'an issue with nothing pointing at it stays unmarked');
+}
+
+// ── a sent issue can be removed from the website without being unsent ───────
+group('hidden_from_site takes a SENT issue off the archive, without touching status');
+{
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE newsletters (id INTEGER PRIMARY KEY, subject TEXT, status TEXT, supersedes_id INTEGER, hidden_from_site INTEGER DEFAULT 0, sent_at TEXT)');
+  db.prepare("INSERT INTO newsletters (id, subject, status, sent_at) VALUES (1, 'A sent issue', 'published', '2026-08-01')").run();
+  const visible = () => db.prepare(`SELECT id FROM newsletters WHERE ${NEWSLETTER_PUBLIC_WHERE_SQL} ORDER BY id`).all().map((r) => r.id).join(',');
+
+  eq(visible(), '1', 'an ordinary sent, published issue is visible');
+  db.prepare('UPDATE newsletters SET hidden_from_site = 1 WHERE id = 1').run();
+  eq(visible(), '', 'hidden takes it off the archive — status and sent_at are untouched');
+  const row = db.prepare('SELECT status, sent_at FROM newsletters WHERE id = 1').get();
+  eq(row.status, 'published', 'status is still published — this never unsends anything');
+  eq(row.sent_at, '2026-08-01', 'and sent_at is exactly what it always was');
+  db.prepare('UPDATE newsletters SET hidden_from_site = 0 WHERE id = 1').run();
+  eq(visible(), '1', 'unhiding puts it right back');
+
+  // issueStatus() names it, so the list and the edit screen say the same
+  // thing without either one guessing at the other's rule.
+  eq(issueStatus({ status: 'published', sent_at: '2026-08-01', hidden_from_site: 1 }).label, 'Sent · off the website',
+    'the pill says both facts — it went out, and it is not on the site');
+  eq(issueStatus({ status: 'published', sent_at: '2026-08-01', hidden_from_site: 0 }).label, 'Sent',
+    'unhidden reads exactly as it always did');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
