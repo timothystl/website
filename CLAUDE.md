@@ -601,7 +601,52 @@ Run: the `a standalone countdown`, `Documents`, and `Embed` groups in
 `node test/editor-media.test.mjs`, the `an upload needs a reason` group in
 `test/admin-redesign.test.mjs`, and `node test/editor.test.mjs`.
 
+### The congregation audience is gone — push only ever worked through the connect app (2026-08-22)
+
+Dinger: *"the push notifications would only work on the connect app"* — the
+"Turn on browser alerts" link under the newsletter sign-up form (below), and
+everything behind it, are removed. Push delivery on this site was never
+actually reachable the way the feature below assumed; a visitor's browser
+subscribing on `timothystl.org` rang nothing real, so the control was a dead
+one dressed up as a working one — the exact failure this repo's own
+dead-control rule warns about elsewhere.
+
+- **`public/index.html`** lost the button/note markup and the
+  `tlcPushInit()`/`tlcPushB64ToUint8Array()` client script and its call —
+  the newsletter band is back to exactly what the Menu → Appearance preview
+  (`renderNewsletterPreview()`, `admin/appearance.js`) has always shown: a
+  heading, an optional body, the two fields and Subscribe. That preview/live
+  mismatch (reported the same day) was never a preview bug — the button was
+  never part of what it was previewing.
+- **`POST /api/push/subscribe-public` and `/api/push/unsubscribe-public`
+  are gone** from `tlc-admin-worker.js`, along with `pushToPublicSubscribers()`
+  in `admin/webpush.js` and the **`/notify`** "Push Alert" composer screen
+  (title/message/link → broadcast to the public audience) that was its only
+  caller.
+- **⚠ `push_subscriptions.audience` and `pushToAllSubscribers()`'s `audience`
+  parameter are deliberately left in place**, not unwound. Every real trigger
+  (held mail, a delivered contact/prayer message, a gym request, payroll
+  turning ready, the ChMS/scheduler relay) still relies on the `'staff'`
+  default, and reverting the column would mean a table rebuild — the same
+  shape `audit_log.user_id` needed — for no functional gain. Nothing writes
+  `'public'` to it any more; a `push_log` row from before this shipped may
+  still show one.
+- **`/api/push/notify`** (the cross-app relay `connect.timothystl.org` calls
+  to ring staff devices — see "The admin is a PWA, with web push" below) is
+  **unrelated and unchanged**: it targets the staff audience like every other
+  trigger, and was never reachable by a website visitor.
+- The Push Alert sidebar link, the manual's "Push Alert tab" section and its
+  TOC entry are all removed with it.
+
+Run: the rewritten `the public push-alert plumbing is gone; staff
+subscriptions still filter by audience` group and the trimmed Push Log group
+in `test/admin-redesign.test.mjs` (1575).
+
 ### Push Alert: two audiences, not scoped triggers (v5.34.0, 2026-08-19)
+
+**⚠ Superseded 2026-08-22 — see the entry directly above.** The `/notify`
+composer and the public subscribe routes this section describes are removed;
+the six staff triggers it left untouched are still exactly as described below.
 
 The review above (SEC-6/FX-29) found that `pushToAllSubscribers()` reads the
 whole `push_subscriptions` table and rings every device, whatever its

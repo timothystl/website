@@ -165,23 +165,16 @@ export async function sendWebPush(env, subscription, payloadObj) {
 // throw — a push is a courtesy notification, never something that should
 // block the write (a held submission, a new hold request) that triggered it.
 //
-// ── TWO AUDIENCES, ONE TABLE ──
-// `staff` is every one of the six triggers that were already here — a held
-// submission, a new gym request, a payroll period turning ready, the
-// cross-app relay — and it stays the default so none of those eight call
-// sites needed to change. `public` is the congregation, added so an office
-// account can ring "worship is canceled" out to people who asked for it
-// without also ringing the Market coordinator's phone with a prayer request
-// — see pushToPublicSubscribers below and CLAUDE.md's "Push Alert" section
-// for why staying at the row level (a column) rather than scoping the six
-// staff triggers by PERMISSION was Andrew's call: the six existing triggers
-// are unchanged, and a second, genuinely different audience is who a
-// broadcast reaches.
-//
-// Returns counts rather than nothing, because the ONE caller that fires a
-// broadcast on purpose (the /notify screen) needs to tell the office how
-// many phones it actually reached — every other caller still ignores the
-// return value inside ctx.waitUntil, exactly as before.
+// `audience` defaults to 'staff', which every caller relies on implicitly —
+// held mail, a delivered contact/prayer message, a new gym request, payroll
+// turning ready, and the ChMS/scheduler relay. A congregation-facing 'public'
+// audience existed briefly (the "Push Alert" /notify screen and a website
+// subscribe button) but was removed 2026-08-22: push delivery only ever
+// worked through the connect app's own PWA, so a visitor subscribing on
+// timothystl.org rang nothing real. `push_subscriptions.audience` and the
+// parameter here are left in place rather than unwound — no code writes
+// anything but 'staff' to it any more, and reverting the column would mean a
+// table rebuild for no functional gain.
 export async function pushToAllSubscribers(env, payloadObj, audience = 'staff') {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return { sent: 0, gone: 0, total: 0 };
   let rows;
@@ -219,11 +212,4 @@ export async function pushToAllSubscribers(env, payloadObj, audience = 'staff') 
   } catch (_) { /* logging must never be why a push looks like it failed */ }
 
   return { sent, gone, total: rows.length };
-}
-
-// The one door onto the public audience, so nothing sending a congregation
-// broadcast has to know the column name or remember the default would
-// otherwise ring the office instead.
-export async function pushToPublicSubscribers(env, payloadObj) {
-  return pushToAllSubscribers(env, payloadObj, 'public');
 }

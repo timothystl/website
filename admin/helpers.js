@@ -810,7 +810,6 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     pagesChildren ? `<div class="sidebar-children" id="sidebar-under-pages"${inPages ? ' data-here' : ' hidden'}>${pagesChildren}</div>` : '',
     hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
     hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
-    hp('notices_edit')    ? navItem('/notify', 'Push Alert', activeTab === 'notify') : '',
     hp('links_edit')      ? navItem('/link-cards', 'NFC Taps', activeTab === 'link-cards') : '',
     hp('settings_manage') ? navItem('/redirects', 'Redirects', activeTab === 'redirects') : '',
   ].filter(Boolean).join('');

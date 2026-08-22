@@ -10,7 +10,7 @@ import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
          MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
-import { pushToAllSubscribers, pushToPublicSubscribers } from './admin/webpush.js';
+import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -921,7 +921,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/push/subscribe-public', '/api/push/unsubscribe-public', '/api/market/apply', '/api/events/register']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply', '/api/events/register']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -2597,14 +2597,12 @@ export default {
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PUSH_SUBSCRIPTIONS).run(); } catch (_) {}
-    // Two audiences in one table: `staff` (the default, every existing row and
-    // every one of the six triggers that were already here) and `public` (the
-    // congregation, added so a broadcast can reach them without also ringing
-    // every staff phone — see "Push Alert" in CLAUDE.md and the comment on
-    // pushToAllSubscribers in admin/webpush.js). SQLite backfills a non-null
-    // DEFAULT onto every existing row when a column is added, so this alone —
-    // no UPDATE needed — is what makes every subscription already on file a
-    // staff one, exactly as it always behaved.
+    // `audience` briefly held two values — `staff` (the default, every row)
+    // and `public` (a congregation broadcast audience, removed 2026-08-22 —
+    // see the comment on pushToAllSubscribers in admin/webpush.js). SQLite
+    // backfills a non-null DEFAULT onto every existing row when a column is
+    // added, so this alone — no UPDATE needed — is what makes every
+    // subscription a staff one.
     try { await env.DB.prepare("ALTER TABLE push_subscriptions ADD COLUMN audience TEXT NOT NULL DEFAULT 'staff'").run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_audience ON push_subscriptions(audience)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PAYROLL_READY_NOTIFIED).run(); } catch (_) {}
@@ -4135,86 +4133,6 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         return new Response(JSON.stringify({ success: true }), { headers: corsH });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
-      }
-    }
-
-    // ── PUBLIC: a visitor's own browser opts into the congregation's audience ──
-    // The mirror of /api/push/subscribe above, for the OTHER audience — see
-    // "Push Alert" in CLAUDE.md and the comment on pushToAllSubscribers in
-    // admin/webpush.js. That route requires a signed-in session because it is
-    // a staff member's own device; this one has no session to require, because
-    // the person subscribing has never signed into anything. `user_id` stays
-    // NULL and `audience` is 'public' — nothing here can reach a staff device,
-    // whatever is posted, because pushToAllSubscribers only ever reads ONE
-    // audience per call and every staff trigger still calls it with none
-    // (defaulting to 'staff').
-    //
-    // ⚠ NOT screenSubmission() — that scores a name/email/message shape this
-    // payload does not have. The real risk here is not content, it is a
-    // scripted flood of junk rows; validating the three fields are shaped like
-    // what a real PushManager.subscribe() hands back (an https endpoint, two
-    // short base64url keys) is what a scripted POST with no browser behind it
-    // cannot fake cheaply, and is proportionate to what an abused row actually
-    // costs — a wasted D1 row nobody reads, not a real notification to anybody
-    // real, since a fabricated endpoint just fails to deliver.
-    if (path === '/api/push/subscribe-public' && (method === 'POST' || method === 'OPTIONS')) {
-      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
-      // ⚠ THE FIRST GENUINELY LIVE OPTIONS BRANCH IN THIS FILE'S SET OF PUBLIC
-      // CROSS-ORIGIN POSTS. Every earlier one (/api/contact, /api/prayer,
-      // /api/subscribe, /api/market/apply) posts FormData, which the CORS spec
-      // treats as a "simple request" needing no preflight — their own OPTIONS
-      // checks, where they have one, do nothing a real browser ever triggers.
-      // This route posts JSON, which is NOT simple: the browser sends a real
-      // OPTIONS preflight first and refuses the POST unless this answers it
-      // with the right Allow-Methods/Allow-Headers, whatever this route's own
-      // POST logic would have returned.
-      if (method === 'OPTIONS') {
-        return new Response(null, { status: 204, headers: {
-          ...corsH,
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Max-Age': '86400',
-        }});
-      }
-      try {
-        const sub = await request.json();
-        const endpoint = String(sub?.endpoint || '');
-        const p256dh = String(sub?.keys?.p256dh || '');
-        const auth = String(sub?.keys?.auth || '');
-        const b64u = /^[A-Za-z0-9_-]+$/;
-        if (!/^https:\/\//.test(endpoint) || endpoint.length > 1024
-          || !b64u.test(p256dh) || p256dh.length > 256
-          || !b64u.test(auth) || auth.length > 256) {
-          return new Response(JSON.stringify({ error: 'Invalid subscription' }), { status: 400, headers: corsH });
-        }
-        await env.DB.prepare(
-          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')
-           ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, audience = 'public', user_id = NULL`
-        ).bind(endpoint, p256dh, auth).run();
-        return new Response(JSON.stringify({ success: true }), { headers: corsH });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: 'Could not save subscription' }), { status: 500, headers: corsH });
-      }
-    }
-    if (path === '/api/push/unsubscribe-public' && (method === 'POST' || method === 'OPTIONS')) {
-      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
-      if (method === 'OPTIONS') {
-        return new Response(null, { status: 204, headers: {
-          ...corsH,
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Max-Age': '86400',
-        }});
-      }
-      try {
-        const { endpoint } = await request.json();
-        // Same boundary the staff unsubscribe route already relies on: the
-        // endpoint is a bearer value only the subscribing browser holds, handed
-        // back by its own pushManager.getSubscription() — not a guessable id.
-        if (endpoint) await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND audience = 'public'").bind(endpoint).run();
-        return new Response(JSON.stringify({ success: true }), { headers: corsH });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: 'Could not remove subscription' }), { status: 500, headers: corsH });
       }
     }
 
@@ -10734,103 +10652,22 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`,
       }
     } // end notices tab
 
-    // ── PUSH ALERT ─────────────────────────────────────────────
-    // Andrew's answer to the review's own question about who a push should
-    // reach (SEC-6/FX-29): not scoping the six existing staff triggers by
-    // permission, but a second, genuinely different audience — "all push
-    // notifications should go to admin, and then notifications from admin can
-    // go out to all users." The six triggers already here (held mail, a new
-    // contact/prayer message, a gym request, payroll turning ready, the
-    // cross-app relay) are UNCHANGED — every one of them still calls
-    // pushToAllSubscribers with no audience argument, which still means
-    // 'staff', exactly as before this shipped. This is the one new door: a
-    // human composing a message on purpose, for the OTHER audience.
-    //
-    // Gated on notices_edit rather than a new permission — this is a Notice
-    // that rings a phone instead of sitting in a banner, and whoever can put
-    // "Worship is canceled" on the website already has every reason to be
-    // the one who can also push it.
-    if (path.startsWith('/notify') && !hasPermission(currentUser, 'notices_edit')) {
-      return new Response('Access denied.', { status: 403 });
-    }
-    if (path.startsWith('/notify')) {
-      if (path === '/notify' && method === 'GET') {
-        const { count } = await env.DB.prepare("SELECT COUNT(*) AS count FROM push_subscriptions WHERE audience = 'public'").first();
-        const configured = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
-        const toast = url.searchParams.get('toast');
-        return html(`
-${sidebarShell('notify', currentUser, '', await pageBadges())}
-<div class="tlc-wrap">
-  <div class="page-title">Push Alert</div>
-  <div class="page-sub">A message that rings a phone, for whoever has turned on browser alerts on the website — not the office's own devices, which already ring on their own for held mail, a new message, a gym request and a payroll period turning ready. This is the one door onto the other audience.</div>
-  ${!configured ? `<div class="alert alert-warn">Push notifications are not configured on this Worker yet — see the "admin is a PWA, with web push" section of CLAUDE.md for the VAPID keys this needs. Sending will do nothing until they are set.</div>` : ''}
-  <div class="card">
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">
-      <strong>${count}</strong> ${count === 1 ? 'person has' : 'people have'} turned on browser alerts on the website.
-      ${count === 0 ? ' Nobody will receive this yet.' : ''}
-    </div>
-    <form method="POST" action="/notify/send">
-      <div class="form-group">
-        <label>Title</label>
-        <input type="text" name="title" maxlength="200" required placeholder="e.g. Worship is canceled today">
-      </div>
-      <div class="form-group">
-        <label>Message</label>
-        <textarea name="body" maxlength="500" rows="3" required placeholder="A sentence or two — this is a notification, not the notice itself."></textarea>
-      </div>
-      <div class="form-group">
-        <label>Link <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— where tapping it goes, optional</span></label>
-        <input type="text" name="url" placeholder="/news" maxlength="200">
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">A page on this site, starting with /. Left blank, it opens the homepage.</div>
-      </div>
-      <button type="submit" class="btn btn-primary">Send to ${count} ${count === 1 ? 'person' : 'people'}</button>
-    </form>
-  </div>
-</div>`, 'Push Alert');
-      }
-
-      if (path === '/notify/send' && method === 'POST') {
-        const form = await request.formData();
-        const title = (form.get('title') || '').toString().trim().slice(0, 200);
-        const body = (form.get('body') || '').toString().trim().slice(0, 500);
-        // ⚠ A site-relative path only — never a general URL. `safeUrl()`
-        // (admin/blocks.js) accepts a leading "//" as site-relative when it is
-        // actually protocol-relative to an outside host (SEC-15); rather than
-        // reuse that gap here, this field only ever accepts a single leading
-        // slash, so there is nothing to get wrong about where it points.
-        let notifyUrl = (form.get('url') || '').toString().trim().slice(0, 200);
-        if (!/^\/(?!\/)/.test(notifyUrl)) notifyUrl = '';
-        if (!title || !body) {
-          return new Response('', { status: 302, headers: { Location: '/notify?toast=' + encodeURIComponent('A title and a message are both required.') } });
-        }
-        const payload = { title, body, tag: 'push-alert' };
-        if (notifyUrl) payload.url = notifyUrl;
-        // ⚠ AWAITED, NOT ctx.waitUntil. Every other caller of pushToAllSubscribers
-        // fires it alongside an action that already succeeded on its own (a
-        // submission was stored, a hold was taken) — the push there is a
-        // courtesy that must never be allowed to block or fail that action.
-        // Here the push IS the action. The office is looking at this screen to
-        // find out it went out; a fire-and-forget confirmation would be a
-        // confirmation of nothing.
-        const result = await pushToPublicSubscribers(env, payload);
-        await logAudit(env.DB, currentUser, 'push', 'push_alert', 'public', title, null, { title, body, url: notifyUrl || null, sent: result.sent, total: result.total });
-        const goneNote = result.gone > 0 ? ` ${result.gone} had stopped listening and ${result.gone === 1 ? 'was' : 'were'} removed.` : '';
-        return new Response('', {
-          status: 302,
-          headers: { Location: '/notify?toast=' + encodeURIComponent(`Sent to ${result.sent} of ${result.total}.${goneNote}`) },
-        });
-      }
-    } // end push alert
-
     // ── PUSH LOG ───────────────────────────────────────────────
     // Every trigger that calls pushToAllSubscribers() (held mail, a delivered
     // contact/prayer message, a gym request, payroll turning ready, a market
-    // application, an event sign-up, the newsletter approval nudge, the
-    // ChMS/scheduler relay, and the /notify broadcast above) writes one row
-    // here from inside that single function — see admin/webpush.js. This
-    // screen is just reading it. Gated on settings_manage, the same as
-    // Filtered Mail beside it: this is a system-wide record spanning every
-    // domain in the admin, not one team's business.
+    // application, an event sign-up, the newsletter approval nudge, and the
+    // ChMS/scheduler relay) writes one row here from inside that single
+    // function — see admin/webpush.js. This screen is just reading it. Gated
+    // on settings_manage, the same as Filtered Mail beside it: this is a
+    // system-wide record spanning every domain in the admin, not one team's
+    // business.
+    //
+    // ⚠ The congregation-facing "Push Alert" composer (/notify) and the public
+    // subscribe routes it depended on were removed 2026-08-22 — push delivery
+    // only ever worked through the connect app's PWA, so a website visitor's
+    // "Turn on browser alerts" button rang nothing real. `push_log.audience`
+    // can in principle still hold 'public' from before that removal; this
+    // screen still reads and shows whatever is there.
     if (path === '/push-log' && !hasPermission(currentUser, 'settings_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
