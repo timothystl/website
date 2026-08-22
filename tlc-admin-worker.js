@@ -13034,7 +13034,7 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
-      "SELECT id, subject, published_at, format, status, created_at, approval_status, scheduled_send_at, sent_at, sent_count, beehiiv_id, brevo_campaign_id, supersedes_id FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
+      "SELECT id, subject, published_at, format, status, created_at, approval_status, scheduled_send_at, sent_at, sent_count, beehiiv_id, brevo_campaign_id, supersedes_id, hidden_from_site FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
     ).all();
 
     const msgParam = url.searchParams.get('msg');
@@ -13140,6 +13140,7 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
     // vanished letter reads as the admin having lost something.
     const hiddenFromPublic = supersededIds(rows);
 
+    const canHideNl = hasPermission(currentUser, 'newsletter_approve');
     const listRows = rows.map((r) => {
       const st = issueStatus(r);
       const sent = isNewsletterSent(r);
@@ -13159,8 +13160,16 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
         ],
         // A sent issue offers Duplicate rather than Edit — the row's own action
         // says what is possible before anybody clicks into a locked screen.
+        // The same Remove-from-website / Show-again control the edit screen
+        // carries is offered right here too, so taking a mailed issue off the
+        // archive doesn't need a trip into the (otherwise read-only) editor.
         actions: sent
-          ? `<form method="POST" action="/newsletter/duplicate/${r.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Duplicate as draft</button></form><a class="tlc-edit" href="/edit/${r.id}">View</a>`
+          ? `<form method="POST" action="/newsletter/duplicate/${r.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Duplicate as draft</button></form>` +
+            (canHideNl ? (r.hidden_from_site
+              ? `<form method="POST" action="/newsletter/unhide/${r.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Show on website</button></form>`
+              : `<form method="POST" action="/newsletter/hide/${r.id}" style="display:inline;margin:0;" onsubmit="return confirm('Take this issue off timothystl.org/news? The email that already went out cannot be recalled — this only removes it from the website archive. You can put it back any time.')"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Remove from website</button></form>`
+            ) : '') +
+            `<a class="tlc-edit" href="/edit/${r.id}">View</a>`
           : `<a class="tlc-edit" href="/edit/${r.id}">Edit</a>`,
       };
     });

@@ -2833,6 +2833,27 @@ group('a sent newsletter can be removed from the website without being unsent');
     "SELECT action FROM audit_log WHERE entity_type='newsletter' AND entity_id='903' ORDER BY id"
   ).all().map((r) => r.action);
   eq(audited.join(','), 'unpublish,publish', 'both the hide and the unhide are in the audit log');
+
+  // The same control is right on the newsletter LIST's own row — Dinger's
+  // ask was to put it beside "Duplicate as draft" and "View", not make
+  // somebody open the (otherwise read-only) editor just to reach it.
+  let listHtml = await (await call(env, '/newsletters', { cookie: admin.cookie })).text();
+  has(listHtml, `action="/newsletter/hide/903"`, 'the list row offers Remove from website while visible');
+  lacks(listHtml, `action="/newsletter/unhide/903"`, 'and not Show on website — nothing to restore yet');
+
+  await call(env, '/newsletter/hide/903', { cookie: admin.cookie, method: 'POST', form: {} });
+  listHtml = await (await call(env, '/newsletters', { cookie: admin.cookie })).text();
+  has(listHtml, `action="/newsletter/unhide/903"`, 'once hidden, the row offers Show on website instead');
+  lacks(listHtml, `action="/newsletter/hide/903"`, 'and not Remove from website a second time');
+  has(listHtml, 'Sent · off the website', 'and the row’s own status pill says so');
+
+  // A writer who cannot approve sees neither control — the row still has to
+  // read correctly, it just cannot act.
+  const writerListHtml = await (await call(env, '/newsletters', { cookie: writer.cookie })).text();
+  lacks(writerListHtml, `action="/newsletter/unhide/903"`, 'a plain editor gets no Show-on-website control');
+  lacks(writerListHtml, `action="/newsletter/hide/903"`, 'nor a Remove-from-website one');
+
+  await call(env, '/newsletter/unhide/903', { cookie: admin.cookie, method: 'POST', form: {} });
 }
 
 group('an upload needs a reason to be uploading (FX-08)');
