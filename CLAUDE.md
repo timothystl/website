@@ -1834,6 +1834,147 @@ no tick mark at all; the reorder fix fails with the checklist's own position
 fails with all events visible and no "+N more" line on a cell built to
 overflow.
 
+### The rooms match the real building, the type picker stopped crowding the checklist, and the list filters by name (v5.44.0, 2026-08-21)
+
+Three more, off the same `/event-intake` screen:
+
+> "the spaces to have as choices are kitchen, gym, youth room, 3rd floor
+> classroom, multipurpose room, sanctuary, parking lot. secondly, the side
+> panel that does event details needs to not be so far down the page, it
+> should float next to selected event or be at the top. and still would
+> like a sort ability or mass select based on name, so i could pick all
+> richmond heights and say those are gymn rentals, all worship is worship,
+> all handbells are music, etc."
+
+**`ROOMS` was still the mock's own guess at the building** — Sanctuary,
+Fellowship Hall, Library, Room 4, MDO Wing, Whole campus, Kitchen, Lawn —
+never corrected against what the church actually has. It is the real seven
+now: Sanctuary, Gym, Youth Room, 3rd Floor Classroom, Multipurpose Room,
+Kitchen, Parking Lot. ⚠ A row already carrying one of the retired names (an
+old `Fellowship Hall`, say) simply shows the blank `—` option on next load —
+the same as any other enum this admin edits — rather than anything being
+rewritten or migrated; the stored value is untouched until somebody re-saves.
+
+**The checklist being "so far down the page" turned out not to be about the
+checklist's own position at all — it was the type picker's.** The v5.43.0
+pass already moved "Before it publishes" ahead of a type's own extra fields.
+What was still pushing it out of view is that the type picker grew from four
+pills to eleven (v5.40.0) and sat in the FIXED head — which never scrolls
+away, so its own height is what has to shrink for anything else to be
+visible without scrolling. Eleven pills wrap across three lines in a
+390–470px column; three lines of pills plus the kicker and title is roughly
+the 170px of blank space the screenshot showed before "Every event" ever
+appeared.
+
+- **The pill row moved out of the head and into the scrollable body**, as its
+  own "Type" section, right after the checklist. Reassigning a type from this
+  screen is still one click on a pill — nothing about *how* it works changed
+  — it now costs one scroll less to see what an already-classified event
+  still needs, which is the far more common visit than reclassifying one.
+- **The fixed head is kicker, title and status only now.** Three lines
+  shrink to about one.
+- The "Pick a type" placeholder shown before any type is chosen said "above"
+  the checklist; it says "below" now, matching where the picker actually is.
+
+**A name filter, and "Select all shown" made to mean it.** Andrew: *"i could
+pick all richmond heights and say those are gymn rentals, all worship is
+worship, all handbells are music."* The bulk-assign toolbar (v5.40.0) could
+already tick every row in the current queue at once; there was no way to
+narrow that to *some* of them by what they're called.
+
+- **`#ei-filter` is a plain text input, client-side only** — `tlcEiFilter()`
+  hides any `.ei-row-line` whose `.ei-row-title` text doesn't contain what
+  was typed (case-insensitive), and says how many matched (`"2 of 11
+  shown"`). ⚠ It hides the WHOLE row-and-checkbox pair, not just the row,
+  so a box a filter has hidden cannot be silently selected by something else
+  either.
+- **`tlcEiSelectAllShown()` replaces the old inline forEach**, and now
+  actually reads its own name: it walks every `.ei-row-line` and ticks the
+  checkbox only where the row is not `display:none`. Before this it ticked
+  every row in the queue regardless of the filter, which would have quietly
+  turned "pick the two Richmond Heights bookings" into "pick everything."
+- **Clearing the filter never un-ticks anything.** A box checked while
+  "Richmond Heights" narrowed the list stays checked once the filter is
+  cleared or changed to something else — which is what makes several passes
+  work: filter to one name, tick, filter to a second name, tick those too,
+  then assign one type to the accumulated selection, or submit after each
+  pass for a different type per name.
+- **This is the one script this screen didn't already have** (the "Select
+  all shown" checkbox's own inline handler was the prior, smaller exception
+  to "no client JS at all" — see v5.40.0). `EI_SCRIPT` is the one `<script>`
+  block, two named functions, no bigger than the interaction needs.
+- **Verified in a real browser against the real generated markup**, not
+  reasoned about: seeded events including two both titled "Maplewood
+  Richmond Heights," typed the filter, confirmed exactly those two stayed
+  visible and only those two got ticked by "Select all shown," then cleared
+  the filter and confirmed all rows returned with the two ticks still in
+  place.
+
+Run: `node admin/intake.test.mjs` (196, the `ROOMS` assertion updated to the
+real spaces), and the `the room list is the church's real spaces, the
+checklist sits above the type picker, and the list can be filtered by name`
+group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1570) — the reorder and room-list assertions were each verified non-vacuous
+by reverting the fix they guard and confirming the real failure; the deep
+filter/select-all-shown interaction was verified directly in Chromium against
+the real rendered page rather than only pinning the markup, since a Node-only
+harness has no way to fire a real `input` or `click` event.
+
+### Nothing on this screen is required any more (v5.45.0, 2026-08-21)
+
+Andrew, on the same screen: *"not every event needs a room, or the checklist,
+things like first day of school is just a note of first day of school, no
+room, no janitor, dont make any field required, you can jsut leave it with a
+publish button. same iwth classes, material copied is pointless for a
+calendar function."*
+
+**⚠ THE CHECKLIST WAS NEVER WHAT PUT AN EVENT ON THE PUBLIC CALENDAR, AND THE
+GATE REMOVED HERE NEVER ACTUALLY PROTECTED THAT.** A Google-sourced or
+News-sourced event reaches `/calendar` through its own path — Google's own
+feed, or the News post's own publish flow — with no idea Event Intake exists
+at all. A `local` row (`admin/calendar.js`'s `readLocalIntakeEvents()`) reaches
+it the instant it is entered with a date, with no `published_at` check
+anywhere in that query. So `openCountOf(type, checks) === 0` gating the
+`Publish` button was **always** gating something else: not "is this on the
+calendar," but "has the office finished its own paperwork" — a real and
+useful distinction for a rental's insurance and signed agreement, and a
+fiction for a plain note like "First day of school" or a routine Bible class,
+where "materials copied" has nothing to do with whether the date belongs on
+the calendar.
+
+- **`/event-intake/save`'s `action === 'publish'` branch no longer checks
+  `openCountOf` or even whether a type was ever picked.** It sets
+  `published_at`/`published_by` unconditionally. The checklist and the room
+  are both still saved exactly as typed — they are a **record**, not a
+  **requirement** — so a rental's coordinator can still tick off insurance and
+  the signed agreement as reminders to herself; she is simply never blocked
+  from publishing before she does.
+- **The Publish button is unconditional now too** — no `disabled` attribute,
+  no "Finish 3 items first" label. It just says "Publish."
+- **The footnote under the form was rewritten**, because the old line —
+  "Nothing reaches the public calendar with an open item" — was already
+  describing something that had never actually been true (see above), and
+  saying so plainly now that the gate it described is gone would have been
+  worse than saying nothing.
+- **⚠ Room stayed genuinely optional the whole time — there was never an HTML
+  `required` on it.** The gate was entirely the checklist-completeness check;
+  nothing about this change touches the standalone "+ New event" form's own
+  `local_title`/`local_event_date` requirements, which stay required because a
+  calendar entry with no date is not a calendar entry.
+- **Deliberately did NOT touch `isReady()`/`openCountOf()` themselves**, or
+  the status pill ("Ready" / "N open" / "Needs a type") that reads them. Those
+  stay exactly as informative as before — a coordinator still sees at a glance
+  that a rental has two items outstanding — the only thing that changed is
+  that seeing it is no longer the same thing as being allowed to publish.
+
+Run: two new groups replacing the old gated-publish group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1571) — one publishes a News-sourced item with one of four checklist items
+ticked and no room, one publishes a bare item with no type ever picked at
+all. Verified non-vacuous by reintroducing the old `openCountOf`/`type` gate
+and confirming both fail with the real symptom, `published_at` staying null.
+
 ### An event is entered once (2026-08-19)
 
 Dinger, once the calendar was rendering, on what the real problem had been all

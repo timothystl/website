@@ -127,6 +127,9 @@ const INTAKE_CSS = `<link href="https://fonts.googleapis.com/css2?family=Bricola
 .ei-mid-list{flex:1;min-height:0;overflow:auto;padding:0 16px 24px;display:flex;flex-direction:column;gap:8px;}
 .ei-empty{padding:40px 12px;text-align:center;font-size:16px;color:#8A8898;}
 
+.ei-filterbar{display:flex;align-items:center;gap:10px;padding:0 24px 10px;}
+.ei-filterbar input{flex:1;min-width:0;border:1px solid #DDE3ED;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff;}
+.ei-filterbar input:focus{outline:2px solid #2E7EA6;outline-offset:1px;}
 .ei-bulkbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 2px 4px;font-size:13px;color:#4A4860;}
 .ei-bulkall{display:flex;align-items:center;gap:6px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;cursor:pointer;}
 .ei-bulkbar select{border:1px solid #DDE3ED;border-radius:8px;padding:7px 9px;background:#fff;font-size:13px;}
@@ -425,14 +428,22 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
               if (form.get(`check_${c.key}`) === '1') checks[c.key] = true;
             }
             patch.checks_json = JSON.stringify(checks);
-            // ⚠ REFUSED SERVER-SIDE, NOT JUST A DISABLED BUTTON. A crafted
-            // POST claiming action=publish must not mark something ready that
-            // still has open items — the disabled button on screen is a
-            // courtesy, not the rule.
-            if (action === 'publish' && openCountOf(type, checks) === 0) {
-              patch.published_at = new Date().toISOString();
-              patch.published_by = currentUser.username;
-            }
+          }
+          // ⚠ PUBLISH IS NEVER GATED ON THE CHECKLIST, THE ROOM, OR EVEN
+          // HAVING A TYPE — reported directly: "not every event needs a
+          // room, or the checklist... dont make any field required, you can
+          // just leave it with a publish button." The checklist was never
+          // what put an event on the public calendar in the first place (a
+          // Google, News or gym-sourced event reaches it through its own
+          // path regardless; a local one reaches it the moment it is
+          // entered) — it was only ever the office's own record of its own
+          // paperwork, and forcing that paperwork before Publish would work
+          // conflated "on the calendar" with "the office is done with it,"
+          // which is a real distinction for a rental's insurance and a
+          // fiction for a plain note like "First day of school."
+          if (action === 'publish') {
+            patch.published_at = new Date().toISOString();
+            patch.published_by = currentUser.username;
           }
 
           if (row.source_kind === 'local') {
@@ -672,8 +683,19 @@ function intakeMiddle(list, queue, selectedKey) {
   const [title, sub] = QUEUE_TITLES[queue] || QUEUE_TITLES.inbox;
   const rows = list.map((it) => intakeListRow(it, queue, selectedKey)).join('');
   const typeOptions = TYPE_KEYS.map((k) => `<option value="${intakeEsc(k)}">${intakeEsc(TYPES[k].label)}</option>`).join('');
+  // ⚠ THE FILTER NARROWS "SHOWN", AND "SELECT ALL SHOWN" READS IT — Andrew:
+  // "i could pick all richmond heights and say those are gymn rentals, all
+  // worship is worship". Typing a name hides every non-matching row (client
+  // side, tlcEiFilter in EI_SCRIPT below); "Select all shown" already meant
+  // "every checkbox in this queue" and now genuinely means what it says,
+  // ticking only the rows the filter left visible rather than the whole
+  // queue underneath it.
+  const filterbar = list.length ? `<div class="ei-filterbar">
+      <input type="text" id="ei-filter" oninput="tlcEiFilter(this)" placeholder="Filter by name…" aria-label="Filter this list by name">
+      <span class="ei-mid-sub" id="ei-filter-count"></span>
+    </div>` : '';
   const toolbar = list.length ? `<div class="ei-bulkbar">
-      <label class="ei-bulkall"><input type="checkbox" onclick="this.form.querySelectorAll('.ei-row-check').forEach(function(c){c.checked=this.checked}.bind(this))"> Select all shown</label>
+      <label class="ei-bulkall"><input type="checkbox" onclick="tlcEiSelectAllShown(this)"> Select all shown</label>
       <select name="type" required><option value="">Assign type…</option>${typeOptions}</select>
       <button type="submit" class="ei-btn ei-btn-ghost">Assign to selected</button>
     </div>` : '';
@@ -682,6 +704,7 @@ function intakeMiddle(list, queue, selectedKey) {
       <span class="ei-mid-title">${intakeEsc(title)}</span>
       <span class="ei-mid-sub">${intakeEsc(sub)}</span>
     </div>
+    ${filterbar}
     <form method="POST" action="/event-intake/bulk-type" class="ei-mid-list"
       onsubmit="var n=this.querySelectorAll('.ei-row-check:checked').length; if(!n){alert('Select at least one event first.');return false;} return confirm('Assign this type to '+n+' event'+(n===1?'':'s')+'?');">
       <input type="hidden" name="queue" value="${intakeEsc(queue)}">
@@ -734,7 +757,7 @@ function intakeDeferredPanel(item, gymExtra) {
 
 function intakeChecklistPanel(item) {
   if (!item.type) {
-    return `<p class="ei-note">Pick a type above to see what this needs before it publishes.</p>`;
+    return `<p class="ei-note">Pick a type below to see what this needs before it publishes.</p>`;
   }
   const list = checklistFor(item.type, item.checks);
   const doneCount = list.filter((c) => c.done).length;
@@ -810,9 +833,17 @@ function intakeDetail(item, gymExtra, queue) {
           </div>
           <span class="ei-status${ready ? ' ei-status-ready' : ''}">${ready ? 'Ready' : (open == null ? 'Needs a type' : `${open} open`)}</span>
         </div>
-        <div class="ei-pillrow">${typePills}</div>
       </div>
       <div class="ei-detail-body">
+        ${/* ⚠ THE PILL ROW MOVED OUT OF THE FIXED HEAD, DELIBERATELY. Eleven
+             types wrap across three lines there, and that alone — not the
+             checklist's own old position — was most of what pushed "Room" and
+             "Before it publishes" out of view: the head sits above the
+             scrolling body and is never scrolled away, so its own height is
+             what has to shrink. Reported as wanting the info box "moved up to
+             the top so I can see it for the event." Reassigning a type is
+             still one click; it now costs one scroll less to see what a
+             correctly-typed event needs, which is the more common visit. */ ''}
         ${localFields}
         <div class="ei-basegroup">
           <span class="ei-rail-label">Every event</span>
@@ -820,14 +851,11 @@ function intakeDetail(item, gymExtra, queue) {
             <select name="room"><option value="">—</option>${ROOMS.map((r) => `<option value="${intakeEsc(r)}"${r === item.room ? ' selected' : ''}>${intakeEsc(r)}</option>`).join('')}</select>
           </label>
         </div>
-        ${/* ⚠ THE CHECKLIST COMES BEFORE THE TYPE'S OWN FIELDS, DELIBERATELY —
-             it used to sit last, after a Rental's deferred-fields note or a
-             type's own 2-4 extra fields, which pushed it far enough down the
-             scrollable body that it read as missing. "Before it publishes" is
-             the reason anybody opens an item; the type's own fields are detail
-             work that can wait. Reported as wanting the info box "moved up to
-             the top so I can see it for the event." */ ''}
         ${intakeChecklistPanel(item)}
+        <div class="ei-basegroup">
+          <span class="ei-rail-label">Type</span>
+          <div class="ei-pillrow">${typePills}</div>
+        </div>
         ${item.type ? `<div class="ei-basegroup">
           <span class="ei-rail-label" style="color:${intakeEsc(TYPES[item.type].color)}">${intakeEsc(TYPES[item.type].label)} only</span>
           <p class="ei-note">${intakeEsc(TYPES[item.type].note)}</p>
@@ -835,16 +863,44 @@ function intakeDetail(item, gymExtra, queue) {
         </div>` : ''}
         <div class="ei-actions">
           <button type="submit" name="action" value="save" class="ei-btn ei-btn-ghost">Save</button>
-          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary"${ready ? '' : ' disabled'}>${ready ? 'Publish to the calendar' : `Finish ${open == null ? 'classifying it' : open + ' item' + (open === 1 ? '' : 's') + ' first'}`}</button>
+          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">Publish</button>
         </div>
       </div>
     </form>
     <form method="POST" action="/event-intake/hold" class="ei-holdform"><button type="submit" class="ei-link-btn">← Back to Needs a decision</button></form>
     ${item.sourceKind === 'local' ? `<form method="POST" action="/event-intake/local/delete" class="ei-holdform" onsubmit="return confirm('Delete this event? This cannot be undone.')">
       <input type="hidden" name="key" value="${intakeEsc(item.key)}"><button type="submit" class="ei-link-btn ei-link-danger">Delete this event</button></form>` : ''}
-    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, and only the church’s own fields are asked for. Nothing reaches the public calendar with an open item.</p>
+    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, but nothing here is required. The room, the type and the checklist are all optional; a plain note needs none of them, and Publish works with the page exactly as it is.</p>
   </div>`;
 }
+
+// ⚠ THE ONE PLACE THIS SCREEN CARRIES A REAL <script>, alongside the existing
+// inline "Select all shown" handler it replaces — filtering a list by name
+// and having "shown" mean what it says has no selector-only expression.
+// Delegated function names rather than a bigger inline expression, so the
+// two call sites (the filter input, the select-all checkbox) stay readable.
+const EI_SCRIPT = `<script>
+function tlcEiFilter(input) {
+  var q = input.value.trim().toLowerCase();
+  var lines = document.querySelectorAll('.ei-row-line');
+  var shown = 0;
+  lines.forEach(function (line) {
+    var t = line.querySelector('.ei-row-title');
+    var match = !q || (t && t.textContent.toLowerCase().indexOf(q) !== -1);
+    line.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
+  var count = document.getElementById('ei-filter-count');
+  if (count) count.textContent = q ? (shown + ' of ' + lines.length + ' shown') : '';
+}
+function tlcEiSelectAllShown(box) {
+  document.querySelectorAll('.ei-row-line').forEach(function (line) {
+    if (line.style.display === 'none') return;
+    var c = line.querySelector('.ei-row-check');
+    if (c) c.checked = box.checked;
+  });
+}
+</script>`;
 
 async function renderIntakePage(ctx, currentUser, badges) {
   const { list, queue, selected, counts, openTotal, gymExtra, googleOk } = ctx;
@@ -864,7 +920,8 @@ async function renderIntakePage(ctx, currentUser, badges) {
     ${intakeMiddle(list, queue, selected && selected.key)}
     ${intakeDetail(selected, gymExtra, queue)}
   </div>
-</div>`;
+</div>
+${EI_SCRIPT}`;
 }
 
 async function intakeNewEventForm(currentUser, badges) {
