@@ -33,7 +33,7 @@ It is the first, and it is the proof the mechanism works end to end.
 | youthfamily | `/youthfamily` | section | hero, cardgrid, text, buttons |
 | news | `/news` | standard | hero, text, calendar |
 | calendar | `/calendar` | standard | hero, calendar |
-| contact | `/contact` | standard | hero, form, map |
+| **contact** | `/contact` | standard | hero, contactform, map — **PUBLISHED**, see below |
 | **give** | `/give` | standard | hero, text ×2, buttons, cardgrid, text, buttons — **PUBLISHED** |
 | music | `/music` | standard | hero, textphoto, text ×2, buttons |
 | stephen | `/stephen` | standard | hero, text, cardgrid, text |
@@ -43,7 +43,7 @@ It is the first, and it is the proof the mechanism works end to end.
 | ccs | `/ccs` | standard | hero, text ×2, buttons |
 | wol | `/wol` | standard | hero, text, buttons |
 | youth · sundayschool · confirmation · vbs · egghunt · family | six youth pages | standard | hero, text, buttons each |
-| prayer | `/prayer` | standard | hero, form |
+| **prayer** | `/prayer` | standard | hero, prayerform — **PUBLISHED**, see below |
 
 **The three with no draft, and why each is right:**
 

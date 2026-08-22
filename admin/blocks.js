@@ -791,6 +791,38 @@ export const BLOCK_DEFS = {
     // allowlist, so this closes it with no change to the documented use.
     url: true, urlLabel: 'Google Form embed URL', richBody: true, align: true, embedGate: true,
   },
+  // ── THE PRAYER REQUEST FORM ────────────────────────────────────────────
+  // The real, spam-screened form — honeypot, signed token and Turnstile,
+  // POSTing straight to /api/prayer through admin/forms.js's
+  // screenSubmission(). Fixed for the same reason marketapp's fields below
+  // are fixed: this is one of the two forms on the site that must never be
+  // silently swapped for the generic 'form' block's unscreened Google Form
+  // embed. That already happened once — see NATIVE_FORM_REQUIRED_TYPE's own
+  // comment in tlc-admin-worker.js for the incident — which is why the
+  // publish route refuses to publish this page without one of these blocks
+  // on it, whatever the office does in the editor otherwise. What IS
+  // editable: the intro copy above the form.
+  prayerform: {
+    label: 'Prayer request form', glyph: '✟',
+    richBody: true, align: true,
+    defaults: {
+      eyebrow: '', title: 'Send a prayer request',
+      body: '<p>The pastoral staff wants to know how to pray for you and walk alongside you in the joys and struggles of life. We can’t care well if we don’t know what’s happening.</p>\n<p>Submit a request below and someone from our team will pray for you — and reach out if you’d like pastoral care. You can also reach us at <a href="https://timothystl.org/prayer">timothystl.org/prayer</a>.</p>',
+      spaceAbove: 64, spaceBelow: 64,
+    },
+  },
+  // ── THE CONTACT FORM ───────────────────────────────────────────────────
+  // Same shape and the same reason as prayerform above — the real form,
+  // POSTing to /api/contact through the same screening pipeline.
+  contactform: {
+    label: 'Contact form', glyph: '☎',
+    richBody: true, align: true,
+    defaults: {
+      eyebrow: 'Send us a message', title: 'Get in touch',
+      body: '',
+      spaceAbove: 24, spaceBelow: 24,
+    },
+  },
   // A handful of other services the office pastes in, and nothing else —
   // see EMBED_HOSTS above the sanitizer for the full list and why it exists.
   // Distinct from Calendar and Signup form, which are typed for one Google
@@ -1325,7 +1357,7 @@ export const GROUPS = [
   // Forms and things somebody signs up for or reads. `registration`,
   // `marketapp` and `marketfacts` all live here too — a market application
   // is a form like any other, even though the word "market" suggests money.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'registration', 'marketapp', 'marketfacts'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'registration', 'marketapp', 'marketfacts', 'prayerform', 'contactform'] },
   // The actual money blocks — nothing here asks for anything but an amount.
   // `giving` and `amounts` join `give` rather than starting a group of two
   // that would read on every other page as a broken, near-empty section.
@@ -2428,8 +2460,8 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb--right .tlcb-callout-tag{align-self:flex-end;}
 /* Elements carrying their own max-width sit at the left of the space they are
    given, whatever their text does, until the side margins are moved. */
-.tlcb--center .tlcb-hero-sub,.tlcb--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
-.tlcb--right .tlcb-hero-sub,.tlcb--right .tlcb-cg-intro{margin-left:auto;margin-right:0;}
+.tlcb--center .tlcb-hero-sub,.tlcb--center .tlcb-cg-intro,.tlcb--center .tlcb-nf-form{margin-left:auto;margin-right:auto;}
+.tlcb--right .tlcb-hero-sub,.tlcb--right .tlcb-cg-intro,.tlcb--right .tlcb-nf-form{margin-left:auto;margin-right:0;}
 /* ⚠ The amount ladder aligns its INTRO ONLY. Its rows are
    "$100 /week ———— [Give $100]" — a left column and a right button — and
    moving that text is not what "center this section" means to anybody looking
@@ -3882,6 +3914,92 @@ const GIVING_WIDGET_SCRIPT = '<script>' + GIVE_LINK_JS + `
       var list = w.querySelectorAll('.tlcb-gv-chip');
       for (var i = 0; i < list.length; i++) list[i].classList.remove('is-on');
       paint(w, val);
+    });
+  })();
+` + '<\/script>';
+
+
+// ── THE PRAYER AND CONTACT FORMS' BROWSER HALF ───────────────────────────────
+// Shipped inside the block, like the giving widget's above and the countdown's
+// below — so the real form works wherever it is rendered (a direct visit,
+// where the edge has already put the markup in the document ahead of this
+// script; an SPA navigation, where tlcRunBlockScripts() re-parents a fresh
+// copy so it runs a second time) rather than only on the one page that used
+// to carry it hardcoded. Delegated off `document`, so both forms — and a
+// second copy of this script from either block appearing twice — share one
+// listener.
+//
+// ⚠ THIS ONLY ATTACHES A LISTENER. It never calls tlcFormData / tlcMountTurnstile
+// / reads tlcFormToken until the callback actually runs, which is on a real
+// submit — long after the rest of the page's own bottom script (which defines
+// all three) has finished, however early this script itself executes. Do not
+// "simplify" this by calling tlcFormData() from top-level code in here; that
+// is exactly the ordering trap this comment exists to head off.
+//
+// ⚠ No backticks and no `${` anywhere in this string — it lives inside a
+// template literal and either would break the module while still passing
+// `node --check`. That trap has already been hit three times in this file.
+const NATIVE_FORM_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcNativeFormWired) return;
+    window.__tlcNativeFormWired = 1;
+    var ENDPOINTS = { prayer: 'https://admin.timothystl.org/api/prayer', contact: 'https://admin.timothystl.org/api/contact' };
+    var SUCCESS = {
+      prayer: 'Your request has been received. Our pastoral staff will pray for you.',
+      contact: 'Message sent! We\\'ll be in touch.'
+    };
+    var FALLBACK = {
+      prayer: 'Something went wrong — please call the office at (314) 781-8673 or email dinger@timothystl.org',
+      contact: 'Something went wrong — please email us directly at dinger@timothystl.org'
+    };
+    var okStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#e8f5e9;border-left:3px solid #4a5e3a;color:#1a3d1f;';
+    var errStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
+    function showErr(alertEl, msg) { if (alertEl) { alertEl.style.cssText = errStyle; alertEl.textContent = msg; } }
+    function validEmail(v) {
+      var at = v.indexOf('@');
+      if (at < 1) return false;
+      var dot = v.indexOf('.', at + 2);
+      return dot > at + 1 && dot < v.length - 1;
+    }
+    document.addEventListener('submit', function (e) {
+      var form = e.target.closest && e.target.closest('[data-tlc-native-form]');
+      if (!form) return;
+      e.preventDefault();
+      var kind = form.getAttribute('data-tlc-native-form');
+      var url = ENDPOINTS[kind];
+      if (!url) return;
+      var alertEl = form.querySelector('.tlcb-nf-alert');
+      var btn = form.querySelector('button[type="submit"]');
+      // Honeypot — if filled, silently succeed. A bot that learns which of
+      // its submissions were caught learns how to get past the filter.
+      var hp = form.querySelector('[name="website"]');
+      if (hp && hp.value) { form.reset(); return; }
+      var msgEl = form.querySelector('[name="message"]');
+      var msgVal = msgEl ? msgEl.value.trim() : '';
+      if (!msgVal) { showErr(alertEl, kind === 'prayer' ? 'Please share your prayer request.' : 'Please enter a message.'); return; }
+      if (kind === 'contact') {
+        var nameEl = form.querySelector('[name="name"]');
+        if (!nameEl || !nameEl.value.trim()) { showErr(alertEl, 'Please enter your name.'); return; }
+      }
+      var emailEl = form.querySelector('[name="email"]');
+      var emailVal = emailEl ? emailEl.value.trim() : '';
+      if (emailVal && !validEmail(emailVal)) { showErr(alertEl, 'Please enter a valid email address.'); return; }
+      var label = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      if (alertEl) alertEl.style.display = 'none';
+      var fd = new FormData(form);
+      if (window.tlcFormToken) fd.append('form_token', window.tlcFormToken);
+      fetch(url, { method: 'POST', body: fd }).then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+      }).then(function (res) {
+        if (!res.ok || res.d.error) throw new Error(res.d.error || 'Server error');
+        form.reset();
+        if (alertEl) { alertEl.style.cssText = okStyle; alertEl.textContent = SUCCESS[kind]; }
+      }).catch(function () {
+        showErr(alertEl, FALLBACK[kind]);
+      }).then(function () {
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+      });
     });
   })();
 ` + '<\/script>';
@@ -5531,6 +5649,56 @@ function renderInner(b, opts) {
       inner = '';
     }
     return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
+  }
+
+  if (t === 'prayerform' || t === 'contactform') {
+    const kind = t === 'prayerform' ? 'prayer' : 'contact';
+    // ⚠ SAME DEAD-CONTROL REASONING AS 'form' ABOVE, IN THE OTHER DIRECTION.
+    // There the risk was a fake control that looked live; here it is a REAL
+    // honeypot/token/Turnstile form rendered as draggable furniture, which a
+    // cursor mid-drag would submit if it were a real <form>. The editor
+    // canvas also never loads public/styles.css, which .form-input/.btn rely
+    // on, so a "real" render there would look broken rather than merely
+    // inert. A mockup, matching 'form's own, is both safer and honest.
+    if (opts.editing) {
+      const btnLabel = kind === 'prayer' ? 'Submit prayer request' : 'Send message';
+      return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}
+        <div class="tlcb-stack" style="gap:9px">
+          <span class="tlcb-field"></span>
+          <span class="tlcb-field"></span>
+          <span class="tlcb-field" style="height:80px"></span>
+          <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">${esc(btnLabel)}</span>
+          <span class="tlcb-note">The real, spam-screened ${kind} form — honeypot, signed token and Turnstile included. It only appears once this page is published.</span>
+        </div></div>`;
+    }
+    const nameReq = kind === 'contact' ? ' required' : '';
+    const namePh = kind === 'prayer' ? 'First name is fine' : 'First and last name';
+    const emailLabel = kind === 'prayer' ? 'Email (optional)' : 'Email address';
+    const emailPh = kind === 'prayer' ? "If you'd like us to follow up" : 'your@email.com';
+    const msgLabel = kind === 'prayer' ? 'Prayer request' : 'Message';
+    const msgPh = kind === 'prayer' ? "Share what's on your heart..." : 'How can we help you?';
+    const msgHeight = kind === 'prayer' ? '160px' : '120px';
+    const btnLabel = kind === 'prayer' ? 'Submit prayer request' : 'Send message';
+    return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}
+      <form class="tlcb-nf-form" data-tlc-native-form="${kind}" style="max-width:560px">
+        <div class="tlcb-nf-alert" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px"></div>
+        <div class="form-group">
+          <label class="form-label">Your name</label>
+          <input type="text" name="name" class="form-input" placeholder="${esc(namePh)}"${nameReq}>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${esc(emailLabel)}</label>
+          <input type="email" name="email" class="form-input" placeholder="${esc(emailPh)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${esc(msgLabel)}</label>
+          <textarea name="message" class="form-input" style="min-height:${msgHeight}" placeholder="${esc(msgPh)}" required></textarea>
+        </div>
+        <input type="text" name="website" style="display:none" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="tlc-turnstile" style="margin-bottom:14px"></div>
+        <button type="submit" class="btn btn-primary">${esc(btnLabel)}</button>
+      </form>
+    </div>${NATIVE_FORM_SCRIPT}`;
   }
 
   if (t === 'embed') {

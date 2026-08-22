@@ -73,16 +73,31 @@ import { LINKS_JS } from './admin/links.js';
 // the top of that file.
 import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
-// ⚠ THE ONE PLACE THIS SET IS DECLARED. Both /api/pages (what the public site
-// reads) and the page editor's own GET (what tells whoever is editing the
-// page that publishing here does nothing) read this same Set — two separate
-// declarations is exactly how a page could get added to one and not the
-// other, which is worse than neither: an editor that silently disagrees with
-// what it is editing. See "Contact and Prayer never render from blocks" for
-// why these two exist at all — no block on this site can express a screened,
-// Turnstile-checked POST to /api/contact or /api/prayer, so the real form
-// lives only in public/index.html's hardcoded markup and always will.
-const NATIVE_FORM_ONLY_PAGE_IDS = new Set(['contact', 'prayer']);
+import { NATIVE_FORM_BLOCKS } from './admin/native-form-page-seed.js';
+// The prayer and contact forms are the two on this site that MUST stay
+// spam-screened — honeypot, signed token, Turnstile, straight through
+// admin/forms.js's screenSubmission(). Both pages used to be permanently
+// excluded from the block editor for exactly that reason: no block on the
+// site could express that screened POST, so publishing either page always
+// meant silently losing the real form to whatever generic block stood in
+// for it — which happened, once, with the generic 'form' block's empty
+// Google Form embed, and went unnoticed until compared to the live site by
+// hand.
+//
+// `prayerform`/`contactform` (admin/blocks.js) close that gap: the real
+// form, fixed, shipped as its own block type. These two pages are ordinary
+// editable pages now — but the ONE property that made the exclusion
+// necessary in the first place still has to hold, so it is enforced here
+// instead: a page in this map may publish only while its blocks still carry
+// one block of the paired type. ⚠ THE ONE PLACE THIS MAP IS DECLARED — see
+// its two call sites (the immediate /publish route and the scheduled-publish
+// promotion) for why both have to check it, not just one.
+const NATIVE_FORM_REQUIRED_TYPE = { prayer: 'prayerform', contact: 'contactform' };
+function missingNativeForm(pageId, blocks) {
+  const need = NATIVE_FORM_REQUIRED_TYPE[pageId];
+  if (!need) return false;
+  return !(blocks || []).some((b) => b.type === need);
+}
 // /christmasmarket/vendors, same shape as give-landing-seed.js and for the
 // same reason — a live payment application the generic extractor never had a
 // chance to convert, because it never had a tools/extract-pages.mjs PAGES
@@ -1483,7 +1498,16 @@ async function promoteScheduledPages(env) {
       'SELECT id, title, blocks FROM pages WHERE publish_at IS NOT NULL AND publish_at <= ?'
     ).bind(nowIso).all();
     for (const row of due.results || []) {
-      const json = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks)));
+      const blocks = sanitizeBlocks(parseBlocks(row.blocks));
+      // ⚠ SAME GUARD AS THE IMMEDIATE /publish ROUTE, AND FOR THE SAME
+      // REASON. A page can be scheduled with its real form block present and
+      // have that block removed from the draft before the scheduled moment
+      // arrives — this promotion is the other place published_blocks is set,
+      // so it is the other place this has to be checked. Skipped rather than
+      // promoted; publish_at is left alone so it is retried on the next
+      // sweep rather than silently dropped.
+      if (missingNativeForm(row.id, blocks)) continue;
+      const json = JSON.stringify(blocks);
       await env.DB.prepare(
         "UPDATE pages SET published_blocks = ?, status = 'published', publish_at = NULL, change_log = '[]', updated_at = ? WHERE id = ?"
       ).bind(json, nowIso, row.id).run();
@@ -2570,7 +2594,11 @@ export default {
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
       const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE, ...MARKET_SEEDED_PAGES]
-        .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
+        .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p))
+        // Same override shape as REDESIGN_BLOCKS above, for the two pages
+        // whose extractor-produced blocks are actively unsafe rather than
+        // merely dated — see admin/native-form-page-seed.js.
+        .map((p) => (NATIVE_FORM_BLOCKS[p.id] ? { ...p, blocks: NATIVE_FORM_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
           'INSERT OR IGNORE INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) ' +
@@ -3374,27 +3402,22 @@ export default {
       const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
-      // ⚠ NEVER RENDERED FROM BLOCKS, WHATEVER IS PUBLISHED FOR THEM. See the
-      // constant's own comment near the top of the file for why. Unlike
-      // give-landing these are still ordinary pages — in `list`, in the menu,
-      // at their own address — only the entry in `rendered` is withheld,
-      // which is what makes the client and the edge injector both fall back
-      // to the hardcoded native form with no change on either side. The
-      // editor's own GET route (below, /pages/api/page/:id) sends the same
-      // flag back to whoever opens either page, so the canvas can say
-      // plainly that nothing here reaches the live site — found live without
-      // that warning: both pages had been published with a "Signup form"
-      // block (a Google Form embed with no URL set) standing in for the real
-      // form, and the editor's own preview never disagreed until a person
-      // compared it against the actual site by hand.
       for (const r of list) {
-        if (NATIVE_FORM_ONLY_PAGE_IDS.has(r.id)) continue;
         // A page that links out has no content of its own. Rendering blocks it
         // may still be carrying from before would give the visitor a flash of a
         // page that is about to redirect out from under them.
         if (outboundUrl(r)) continue;
         const blocks = sanitizeBlocks(parseBlocks(r.published_blocks));
         if (!blocks.length) continue;
+        // ⚠ BELT AND BRACES, NOT THE ONLY GUARD — the publish route already
+        // refuses to set published_blocks without the required native-form
+        // block (see missingNativeForm and NATIVE_FORM_REQUIRED_TYPE), but a
+        // read-time check costs one Array.some() and closes the gap for any
+        // row that reached this state some other way (a direct DB write, a
+        // migration). Falling back to the hardcoded markup here is exactly
+        // what happened before this page could publish at all — see the
+        // block types' own comment for the incident that made that the rule.
+        if (missingNativeForm(r.id, blocks)) continue;
         const children = list.filter((c) => c.parent_id === r.id).map(publicPage);
         // The stylesheet ships once for the whole response, not once per page.
         rendered[r.id] = fixUrl(renderPage(blocks, { slug: r.id, template: r.template, data, children, asideTop: r.aside_top || 0, withCss: false }));
@@ -9451,9 +9474,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // rather than worked out in the browser, so the editor never draws
             // a button that would come back "there is no redesigned layout".
             hasRedesign: !!REDESIGN_BLOCKS[row.id],
-            // The one thing publishing this page can never do. See the
-            // constant's own comment for why — read it before removing this.
-            neverLive: NATIVE_FORM_ONLY_PAGE_IDS.has(row.id),
+            // Set only for 'prayer'/'contact' when their required native-form
+            // block (see NATIVE_FORM_REQUIRED_TYPE, missingNativeForm) is
+            // currently missing from the DRAFT — the label of the block that
+            // has to come back before Publish will do anything but refuse.
+            // null the rest of the time, on every other page.
+            formIncomplete: missingNativeForm(row.id, blocks)
+              ? (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[row.id]] || {}).label || 'form'
+              : null,
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
@@ -9587,6 +9615,16 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (action === '/publish' && method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const blocks = sanitizeBlocks(body.blocks && body.blocks.length ? body.blocks : parseBlocks(row.blocks));
+          // ⚠ THE ACTUAL GUARD, NOT JUST THE DISABLED BUTTON. Prayer and
+          // Contact may publish only while their real, spam-screened form
+          // block is still among what is being published — a crafted POST
+          // with it stripped out is refused here, not merely discouraged by
+          // the editor's own UI. See NATIVE_FORM_REQUIRED_TYPE and
+          // missingNativeForm's own comment for why this exists at all.
+          if (missingNativeForm(pageId, blocks)) {
+            const need = BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[pageId]] || {};
+            return jsonResponse({ error: `This page needs its ${need.label || 'form'} block before it can publish — the real, spam-screened form must stay on the page.` }, 400);
+          }
           const json = JSON.stringify(blocks);
           const nowIso = new Date().toISOString();
           await env.DB.prepare(

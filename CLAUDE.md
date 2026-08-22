@@ -173,6 +173,102 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### Contact and Prayer publish through the block editor now (2026-08-22)
+
+Dinger: *"i want to publish the page. i dont want any page now to be hardcoded
+if at all possible, i want to be able to edit soemthing on my own without
+going into the code and finding where that is at."*
+
+**The blanket exclusion is gone. What replaces it is narrower and holds the
+one property that made the exclusion exist in the first place.**
+`NATIVE_FORM_ONLY_PAGE_IDS` used to keep these two pages out of `rendered`
+entirely, whatever was published for them — because no block on the site
+could express a screened, Turnstile-checked POST to `/api/prayer` or
+`/api/contact`, so publishing either page always meant silently losing the
+real form to whatever generic block stood in for it. That happened once: both
+pages were published with the generic **Signup form** block (a Google Form
+embed with no URL set) standing in for the real form, and nothing on the
+editor's own preview disagreed until it was compared to the live site by
+hand.
+
+- **`prayerform` / `contactform`** (`admin/blocks.js`) are the real forms,
+  fixed, as their own block types — the same shape `marketapp` already uses
+  for the Christmas Market application: no `url` field at all (nothing here
+  can hold a payment or embed address), the honeypot/signed-token/Turnstile
+  markup and the fields themselves are fixed, and only the intro copy above
+  the form is editable. `NATIVE_FORM_SCRIPT` (beside `GIVING_WIDGET_SCRIPT`
+  and `COUNTDOWN_SCRIPT`) is the browser half, shipped inside the block for
+  the same reason those two are: it has to run whether the edge injected the
+  markup ahead of the page's own bottom script or the client injected it
+  later on an SPA navigation, and it must never call `tlcFormData()` /
+  `tlcMountTurnstile()` / read `tlcFormToken` from top-level code — only from
+  inside the submit callback, which always runs after the rest of the page's
+  own script has finished, however early the block's own script executes.
+  Delegated off `document`, keyed on `data-tlc-native-form="prayer"` /
+  `"contact"`, so one listener covers both forms and a second copy from
+  either block appearing twice is a no-op.
+- **⚠ THE EDITING-MODE RENDER IS A MOCKUP, NEVER THE REAL FORM** — same
+  dead-control reasoning as the generic `form` block, in the other direction:
+  a real honeypot/token/Turnstile form under a drag cursor is a form a drag
+  could submit, and the editor canvas never loads `public/styles.css` besides,
+  which is what `.form-input`/`.btn` actually depend on.
+- **`admin/native-form-page-seed.js`** is the hand-authored override — same
+  shape as `admin/market-page-seed.js` and `give-landing-seed.js` — replacing
+  only the `blocks` array `tools/extract-pages.mjs` would otherwise have
+  produced (a generic `form` block, exactly the failure above) for these two
+  page ids, merged into `ALL_SEEDED_PAGES` the same way `REDESIGN_BLOCKS`
+  is. Everything else about the page rows — title, slug, template, menu
+  placement — still comes from the extractor.
+- **The safety property moved from a blanket ban to a narrow, enforced
+  requirement: `NATIVE_FORM_REQUIRED_TYPE` and `missingNativeForm()`
+  (`tlc-admin-worker.js`).** A page in that map may publish only while its
+  blocks still carry one block of the paired type.
+  - **⚠ ENFORCED AT EVERY PLACE `published_blocks` IS ACTUALLY SET, NOT JUST
+    THE ONE THE EDITOR'S BUTTON USES.** The immediate `/pages/api/page/:id/publish`
+    route refuses a crafted POST with the block stripped out — verified
+    directly, not assumed correct from reading it: the first version of this
+    change documented the refusal in a comment and never actually wrote the
+    check, and the integration test caught it with the real symptom, a 200
+    where a 400 belonged. `promoteScheduledPages()`'s own site-page loop
+    (the cron-triggered path — a page can be scheduled with the block
+    present and have it removed from the draft before the scheduled moment
+    arrives) carries the identical check and skips promotion rather than
+    silently publishing an incomplete page; `publish_at` is left alone so the
+    next sweep retries it.
+  - **`/api/pages`'s own render loop carries the same check a second time,
+    read-side** — belt and braces, not the only guard: a row that reached
+    "published, but missing the block" some other way (a direct DB write, a
+    migration) still must not render. Costs one `Array.some()` per page.
+  - **The editor's own banner is a courtesy on top of both, not the
+    guard itself.** `formIncomplete` (renamed from `neverLive`, sent by the
+    page editor's GET) carries the missing block's own label — `null` on
+    every ordinary page and on the ministries mount, which never had this
+    field at all. The banner names the block by that label and Publish is
+    disabled client-side, but the comment on both says outright: the route
+    refuses the same POST regardless, so a stale tab or a crafted request is
+    caught either way.
+- **Both pages keep their hardcoded fallback markup in `public/index.html`,
+  untouched** — the same rule every other converted page follows. A page
+  with nothing published still renders exactly what it always rendered; the
+  hardcoded form's own submit handler is still there, just hidden (not
+  removed) once a takeover happens, so nothing about the fallback path
+  changed.
+
+Run: the new groups in `node admin/blocks.test.mjs` (the two block types'
+render/sanitize behavior, and that the two hand-authored seeds carry the real
+block rather than the generic one), `node test/site-editor.test.mjs` (a page
+missing its required block shows the banner, Publish is disabled, and a
+direct POST bypassing the button is refused with the real 400 — then adding
+the block back through the palette clears all three and Publish actually
+works), and the rewritten group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(publishes both pages through the real route, confirms the rendered HTML
+carries the honeypot/Turnstile/real endpoint, confirms a stripped publish is
+refused with the missing block named in the error, and confirms a published
+row missing the block some other way still does not render). The write-path
+refusal was caught missing by exactly this suite — reverting it back out
+reproduces the original 200-where-400-belongs failure.
+
 ### Giving Tab (added 2026-07-27)
 Consolidates everything related to giving/payment links, previously either hardcoded in
 code (`give-landing.js` in this repo) or scattered under Redirects:
