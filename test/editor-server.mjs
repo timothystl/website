@@ -181,16 +181,18 @@ export function createEditorServer(seed = {}) {
           config: blocksClientConfig(),
           // ⚠ TOP LEVEL, A SIBLING OF `page` — NOT NESTED INSIDE IT. The real
           // Worker sends it there (beside its own `hasRedesign`), and the
-          // client reads `data.formIncomplete`, not `data.page.formIncomplete`.
-          // Nesting this inside `page` is the exact shape-mismatch this
-          // comment exists to prevent: it looked like a faithful mirror and
-          // still disagreed, which is worse than sending nothing — a test
-          // written against it would have passed while proving nothing about
-          // the real response shape. Computed from the live blocks, the same
-          // as the real Worker, not seeded — so a test can prove the banner
-          // reacts to the block actually being there or not.
-          formIncomplete: isSitePage && missingNativeForm(slug, blocks)
-            ? (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[slug]] || {}).label || 'form'
+          // client reads `data.nativeFormRequired`, not
+          // `data.page.nativeFormRequired`. Nesting this inside `page` is
+          // the exact shape-mismatch this comment exists to prevent: it
+          // looked like a faithful mirror and still disagreed, which is
+          // worse than sending nothing. A static fact about the PAGE
+          // (which type it needs, if any) rather than a yes/no snapshot of
+          // whether the block is currently there — the client re-checks
+          // that against its own live blocks on every render, which is what
+          // makes the banner react to a block being added back mid-session
+          // instead of only on the next reload.
+          nativeFormRequired: isSitePage && NATIVE_FORM_REQUIRED_TYPE[slug]
+            ? { type: NATIVE_FORM_REQUIRED_TYPE[slug], label: (BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[slug]] || {}).label || 'form' }
             : null,
           media,
           html: renderPage(blocks, Object.assign(

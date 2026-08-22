@@ -722,17 +722,26 @@ function renderTop() {
   // one the eye has to re-find, and an empty redo stack is the normal state.
   el.edRedo.disabled = S.future.length === 0;
   el.edView.href = 'https://timothystl.org' + S.path;
-  // S.formIncomplete is only ever sent by /pages/api, so this stays hidden
-  // on the ministries mount without needing to know which shell it is — the
-  // banner element itself is in the one shared markup both mounts render.
+  // S.nativeFormRequired is only ever sent by /pages/api (null on the
+  // ministries mount, and on every ordinary site page) — a static fact
+  // about the PAGE, not a snapshot of whether the block is there. Checked
+  // against S.blocks fresh on every render, which is what makes this
+  // reactive: add the block back mid-session and the very next renderTop()
+  // — the one the add itself triggers — sees it, with no reload needed.
+  // Reported directly: the earlier version sent a yes/no answer computed
+  // once at load, so putting the block back left the banner and the
+  // disabled button sitting there lying about the page until it was
+  // reloaded.
   //
-  // ⚠ DISABLING PUBLISH HERE IS A COURTESY, NOT THE GUARD. The route itself
+  // DISABLING PUBLISH HERE IS A COURTESY, NOT THE GUARD. The route itself
   // (/pages/api/page/:id/publish) refuses the same way against a stale tab
   // or a direct POST — see missingNativeForm() in tlc-admin-worker.js. This
   // only saves a trip for the person looking right at the reason.
-  el.edPublish.disabled = !!S.formIncomplete;
-  el.edNeverLive.hidden = !S.formIncomplete;
-  if (S.formIncomplete) el.edNeverLiveLabel.textContent = S.formIncomplete;
+  var need = S.nativeFormRequired;
+  var missing = need && !S.blocks.some(function (b) { return b.type === need.type; });
+  el.edPublish.disabled = !!missing;
+  el.edNeverLive.hidden = !missing;
+  if (missing) el.edNeverLiveLabel.textContent = need.label;
 }
 
 // Which row (top/bottom of a pair) each half belongs to, walked the same way
@@ -4036,9 +4045,10 @@ async function boot() {
     S.hasRedesign = !!data.hasRedesign;
     // Always null for a ministry page — /ministries/api sends no such field.
     // See tlc-admin-worker.js's own comment on NATIVE_FORM_REQUIRED_TYPE for
-    // why Prayer and Contact carry this. A string (the missing block's own
-    // label), not a boolean, so renderTop() can name it in the banner.
-    S.formIncomplete = data.formIncomplete || null;
+    // why Prayer and Contact carry this. {type, label} or null — a fact
+    // about the PAGE, checked against the live S.blocks on every render in
+    // renderTop() rather than trusted as a yes/no snapshot from this GET.
+    S.nativeFormRequired = data.nativeFormRequired || null;
     S.media = data.media || [];
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';
