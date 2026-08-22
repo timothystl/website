@@ -134,7 +134,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          issueStatus, sendSummary, parseSubscriberCsv,
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
          prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
-         NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds } from './admin/newsletter.js';
+         NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict as newsletterHasConflict } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -2015,7 +2015,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-22-1'; // bumped: newsletters.hidden_from_site, so a sent issue can be taken off the public archive without unsending it
+    const SCHEMA_VERSION = '2026-08-22-2'; // bumped: newsletters.updated_at/updated_by, so a concurrent save cannot silently overwrite somebody else's just-typed content
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2728,6 +2728,19 @@ export default {
     // for why. DEFAULT 0 backfills every existing row as still shown, with
     // no migration script needed.
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN hidden_from_site INTEGER DEFAULT 0').run(); } catch (_) {}
+    // A real report: type a pastor's note, save, and later find it gone —
+    // because a SECOND person had this same issue open in another tab from
+    // before the first save, and their own later save (of an unrelated
+    // field, or just clicking Save again) blindly overwrote it with their
+    // stale copy. The composer's UPDATE has always written every field from
+    // whatever form was submitted, with no idea whether the row had changed
+    // since that form was loaded. updated_at/updated_by is what lets it know
+    // — see the conflict check in the /publish route. Nullable and unset on
+    // every existing row, so a legacy issue nobody has saved since this
+    // shipped simply has nothing to compare against yet (no conflict check
+    // fires until its first save under the new code writes a real value).
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN updated_at TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN updated_by TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
@@ -7632,12 +7645,16 @@ function pickFormat(fmt) {
       // website has to keep saying what was actually sent — editing it would
       // make the archive a lie. Checked before anything is read from the form
       // so a crafted POST cannot get partway in.
+      // ⚠ ALSO WHERE THE CONFLICT CHECK READS updated_at — same fetch, so a
+      // second SELECT is not needed a few lines further down.
+      let existingBeforeSave = null;
       {
         const lockId = form.get('newsletter_id');
         if (lockId) {
           const existing = await env.DB.prepare(
-            'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id FROM newsletters WHERE id = ?'
+            'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id, updated_at, updated_by FROM newsletters WHERE id = ?'
           ).bind(lockId).first();
+          existingBeforeSave = existing;
           const verdict = canEditNewsletter(existing);
           if (!verdict.ok) {
             return new Response('', { status: 302, headers: { Location: `/edit/${lockId}?msg=locked` } });
@@ -7754,20 +7771,33 @@ function pickFormat(fmt) {
       }
 
       const newsIdsStr = selectedNewsIds.join(',');
+      const nowIso = new Date().toISOString();
+      // ── THE CONFLICT CHECK ──
+      // See hasConflict() in admin/newsletter.js and the comment on the
+      // hidden expected_updated_at field this compares against.
+      const conflict = !!editId
+        && newsletterHasConflict(existingBeforeSave, form.get('expected_updated_at'));
       let newsletterId;
-      if (editId) {
+      if (editId && !conflict) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, updated_at=?, updated_by=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '', editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
-        // Insert new newsletter
+        // Insert new newsletter — a genuinely new issue, OR (when `conflict`
+        // is true) a safe landing spot for exactly what was just typed,
+        // rather than blindly overwriting a change somebody else already
+        // saved. Always a draft when it's a recovery: an unattended "Publish"
+        // click during a conflict must never send an email out of a copy
+        // nobody has looked at yet.
+        const insertStatus = conflict ? 'draft' : status;
+        const insertSubject = conflict ? `Recovered — ${subject}` : subject;
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(insertSubject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '').run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -7776,6 +7806,19 @@ function pickFormat(fmt) {
         await env.DB.prepare(
           'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order, news_item_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order, e.news_item_id ?? null).run();
+      }
+
+      // A conflict never falls through into the approval/send logic below —
+      // what was just typed is safe in its own draft, and that draft has not
+      // been reviewed by anybody. Land back on it, naming the issue it was
+      // meant to update, so nothing is a mystery.
+      if (conflict) {
+        await logAudit(env.DB, currentUser, 'create', 'newsletter', String(newsletterId), `Recovered — ${subject}`,
+          null, { recovered_from: editId, reason: 'concurrent edit' });
+        return new Response('', {
+          status: 302,
+          headers: { Location: `/edit/${newsletterId}?msg=conflict&other=${editId}` },
+        });
       }
 
       // Approval workflow: editors without newsletter_approve submit for approval
@@ -8143,6 +8186,18 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
         ? `<div class="alert alert-success">Back on the website archive.</div>` : '';
       const canHide = hasPermission(currentUser, 'newsletter_approve');
 
+      // ── A CONFLICTING SAVE LANDS HERE, ON THE COPY IT MADE ──
+      // Somebody else saved this issue in between this form loading and this
+      // save being submitted — see hasConflict() in admin/newsletter.js. What
+      // was just typed was never discarded: it is THIS row, a new draft, so
+      // there is something concrete to point at rather than an apology.
+      let conflictMsg = '';
+      if (url.searchParams.get('msg') === 'conflict') {
+        const otherId = url.searchParams.get('other');
+        const other = otherId ? await env.DB.prepare('SELECT id, subject, updated_by FROM newsletters WHERE id = ?').bind(otherId).first() : null;
+        conflictMsg = `<div class="alert alert-error"><strong>Somebody else saved changes to this issue while you were working on it${other?.updated_by ? ` (${escapeHtml(other.updated_by)})` : ''}.</strong> To make sure nothing you typed was lost, it was NOT written over their version — what you had is saved here instead, as its own draft. Open ${other ? `<a href="/edit/${other.id}" target="_blank">the issue you were editing</a>` : 'the original issue'} in another tab to see their version, and copy across whatever you still need by hand.</div>`;
+      }
+
       // Every block gets a switch except the pastor's note, which is locked on:
       // an issue without it is not a newsletter. Switching one off hides it from
       // the email AND from the form, so a light week is a few clicks rather than
@@ -8187,6 +8242,7 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
     ${copiedNotice}
     ${lockedMsg}
     ${hiddenMsg}
+    ${conflictMsg}
     ${nlLocked
       ? `<div class="alert alert-info"><strong>${escapeHtml(sendSummary(row))}.</strong> A sent issue is read-only — the archive on the website has to keep saying what was actually sent. To work from a copy, duplicate it as a draft.
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -8203,6 +8259,14 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
   <div class="tlc-nl-form">
   <form method="POST" action="/publish" enctype="multipart/form-data" id="nl-form">
   <input type="hidden" name="newsletter_id" value="${editId}">
+  <!-- The version of this issue that was on screen when this form was
+       loaded. /publish compares it against the row's CURRENT updated_at —
+       if somebody else saved a change in between, this form's own submit
+       would otherwise blindly overwrite it (a real report: type a pastor's
+       note, save, and it's gone — someone else's stale tab had saved over
+       it). A mismatch never discards what was just typed; see the note by
+       the conflict check itself. -->
+  <input type="hidden" name="expected_updated_at" value="${escapeHtml(row.updated_at || '')}">
   <input type="hidden" name="format" id="format-input" value="${fmt}">
 
     <div class="card">

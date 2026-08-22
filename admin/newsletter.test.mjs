@@ -12,7 +12,7 @@ import {
   issueStatus, sendSummary, parseSubscriberCsv,
   parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
-  NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds,
+  NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -359,6 +359,29 @@ group('hidden_from_site takes a SENT issue off the archive, without touching sta
     'the pill says both facts — it went out, and it is not on the site');
   eq(issueStatus({ status: 'published', sent_at: '2026-08-01', hidden_from_site: 0 }).label, 'Sent',
     'unhidden reads exactly as it always did');
+}
+
+// ── a stale form must not silently overwrite a newer save ───────────────────
+group('hasConflict — a real report: type a note, save, and it is gone');
+{
+  // Nothing to compare against yet — a legacy row saved before updated_at
+  // existed, or a brand-new issue with no editId at all. Neither is a
+  // conflict; refusing every single save the day this ships would be worse
+  // than the bug it fixes.
+  eq(hasConflict(null, ''), false, 'no row at all — nothing to compare');
+  eq(hasConflict({ updated_at: null }, ''), false, 'a legacy row with nothing recorded yet');
+  eq(hasConflict({ updated_at: '2026-08-20T10:00:00.000Z' }, ''), false, 'a form with no expected value (a brand-new issue)');
+  eq(hasConflict({ updated_at: null }, '2026-08-20T10:00:00.000Z'), false, 'or the other way around');
+
+  // The real case: the form was loaded against one version, and the row has
+  // since moved on — somebody else saved in between.
+  eq(hasConflict({ updated_at: '2026-08-20T10:05:00.000Z' }, '2026-08-20T10:00:00.000Z'), true,
+    'the row changed after this form was loaded');
+
+  // And the case that must NOT fire: this form's own save just landed, and
+  // its own subsequent reload compares cleanly against what it just wrote.
+  eq(hasConflict({ updated_at: '2026-08-20T10:00:00.000Z' }, '2026-08-20T10:00:00.000Z'), false,
+    'the same version — no conflict, this is the ordinary case on every save');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
