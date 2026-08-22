@@ -2856,6 +2856,93 @@ group('a sent newsletter can be removed from the website without being unsent');
   await call(env, '/newsletter/unhide/903', { cookie: admin.cookie, method: 'POST', form: {} });
 }
 
+group('a stale save never overwrites a newer one — the pastor’s-note report');
+{
+  // Andrew, directly: "ive also had several times where i have typed in a
+  // pastors note and hit save as draft, but then another user opens that
+  // newsletter and the pastors note is not there anymore." Reproduced here
+  // as the shape that actually causes it: two tabs open on the same draft,
+  // the second one still carrying whatever was there when IT loaded.
+  const { db, env } = await boot();
+  const a = signIn(db, ['newsletter_edit'], 'staffA');
+  const b = signIn(db, ['newsletter_edit'], 'staffB');
+
+  db.prepare(
+    `INSERT INTO newsletters (id, subject, status, published_at, pastor_note, format, updated_at)
+     VALUES (950, 'This week at Timothy', 'draft', '2026-08-23', '', 'weekly', '2026-08-20T09:00:00.000Z')`
+  ).run();
+
+  // Both open the same draft at (essentially) the same moment — both forms
+  // carry the same expected_updated_at, the version that was there before
+  // either of them typed anything.
+  const loadedAt = db.prepare('SELECT updated_at FROM newsletters WHERE id = 950').get().updated_at;
+  eq(loadedAt, '2026-08-20T09:00:00.000Z', 'both tabs load against the same starting version');
+
+  const save = (cookie, fields) => call(env, '/publish', {
+    cookie, method: 'POST',
+    form: Object.assign({
+      newsletter_id: '950', format: 'weekly', action: 'draft', expected_updated_at: loadedAt,
+      subject: 'This week at Timothy',
+    }, fields),
+  });
+
+  // Staff A types the pastor's note and saves first. Nothing stopped them —
+  // this is the ordinary, unconflicted case, exactly like today.
+  let res = await save(a.cookie, { pastor_note: 'Grace and peace to you this week...' });
+  eq(res.status, 302, 'A’s save succeeds');
+  eq(res.headers.get('Location'), '/newsletters?msg=draft&subject=This%20week%20at%20Timothy', 'the ordinary draft-save redirect');
+  const afterA = db.prepare('SELECT pastor_note, updated_at, updated_by FROM newsletters WHERE id = 950').get();
+  eq(afterA.pastor_note, 'Grace and peace to you this week...', 'the note is really there');
+  eq(afterA.updated_by, 'staffA', 'and attributed to whoever actually typed it');
+  ok(afterA.updated_at !== loadedAt, 'updated_at moved on');
+
+  // ⚠ THIS IS THE BUG. Staff B's tab has been open since before A saved —
+  // their own form still carries the ORIGINAL expected_updated_at, and
+  // their own pastor_note field still shows blank (what was there when
+  // THEIR page loaded). Before this fix, B saving here — even just to
+  // change something unrelated — would blindly overwrite A's note with B's
+  // stale blank one. That silent loss is what this whole fix exists for.
+  res = await save(b.cookie, { subject: 'This week at Timothy (updated)', pastor_note: '' });
+  eq(res.status, 302, 'B’s save is accepted — but not as an overwrite');
+  const loc = res.headers.get('Location');
+  ok(/^\/edit\/\d+\?msg=conflict&other=950$/.test(loc), 'redirected to a NEW draft, naming the issue it was meant to update — got ' + loc);
+  const recoveredId = Number(loc.match(/^\/edit\/(\d+)/)[1]);
+
+  // The load-bearing assertion: A's note is EXACTLY as A left it.
+  const stillA = db.prepare('SELECT subject, pastor_note FROM newsletters WHERE id = 950').get();
+  eq(stillA.pastor_note, 'Grace and peace to you this week...', 'the original issue still has the real note — never overwritten');
+  eq(stillA.subject, 'This week at Timothy', 'and B’s stale subject never landed on it either');
+
+  // What B had typed was not thrown away — it is sitting in a draft of its
+  // own, exactly as submitted, for a human to reconcile by hand.
+  const recovered = db.prepare('SELECT subject, pastor_note, status FROM newsletters WHERE id = ?').get(recoveredId);
+  eq(recovered.subject, 'Recovered — This week at Timothy (updated)', 'B’s content is preserved, not discarded');
+  eq(recovered.pastor_note, '', 'exactly what B had, blank note included — nothing invented');
+  eq(recovered.status, 'draft', 'and it is a draft, whatever button B pressed — never auto-sent');
+
+  const conflictHtml = await (await call(env, `/edit/${recoveredId}?msg=conflict&other=950`, { cookie: b.cookie })).text();
+  has(conflictHtml, 'Somebody else saved changes to this issue', 'the banner explains what happened');
+  has(conflictHtml, 'staffA', 'and names who saved it');
+  has(conflictHtml, `/edit/950`, 'with a way to open the real issue and compare');
+
+  const audited = db.prepare(
+    "SELECT action, entity_id FROM audit_log WHERE entity_type='newsletter' AND action='create' ORDER BY id DESC LIMIT 1"
+  ).get();
+  eq(String(audited.entity_id), String(recoveredId), 'the recovery itself is in the audit log');
+
+  // And the mechanism gets out of the way once somebody has the real,
+  // current version — B reloads, gets 950's now-current updated_at, and a
+  // save against THAT succeeds normally.
+  const freshEdit = await (await call(env, '/edit/950', { cookie: b.cookie })).text();
+  const freshExpected = freshEdit.match(/name="expected_updated_at" value="([^"]*)"/)[1];
+  ok(freshExpected !== loadedAt, 'a fresh load carries the real current version');
+  res = await save(b.cookie, { expected_updated_at: freshExpected, pastor_note: 'Grace and peace to you this week...\n\nAlso: choir practice moved to Thursday.' });
+  eq(res.status, 302, 'a save against the CURRENT version is never treated as a conflict');
+  eq(res.headers.get('Location'), '/newsletters?msg=draft&subject=This%20week%20at%20Timothy', 'and it is the ordinary save redirect, not a recovery one');
+  eq(db.prepare('SELECT pastor_note FROM newsletters WHERE id = 950').get().pastor_note,
+    'Grace and peace to you this week...\n\nAlso: choir practice moved to Thursday.', 'the merged note is really saved on the real issue');
+}
+
 group('an upload needs a reason to be uploading (FX-08)');
 {
   // ⚠ Nothing ever deletes an R2 object, so this is not "can they write a

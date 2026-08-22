@@ -166,6 +166,27 @@ export function canEdit(row) {
   return { ok: true, reason: '' };
 }
 
+// ── A STALE FORM MUST NOT SILENTLY OVERWRITE A NEWER SAVE ───────────────────
+// Reported directly: type a pastor's note, save as draft, and later find it
+// gone. The composer's save has always been a blind UPDATE of every field
+// from whatever form was submitted — with two tabs open on the same issue
+// (two staff, or one person in two tabs), the second submit overwrites the
+// first with a stale snapshot, silently.
+//
+// `expectedUpdatedAt` is what the form carried when it was LOADED — see the
+// hidden `expected_updated_at` field on the edit screen. If the row's real
+// `updated_at` has moved on since, somebody else saved in between. Either
+// side being blank means there is nothing to compare — a brand-new issue
+// (no editId at all), or a legacy row saved before this column existed —
+// and a blank pairing is never treated as a conflict, which is what keeps
+// this from refusing every single save the moment it ships.
+export function hasConflict(existing, expectedUpdatedAt) {
+  const cur = existing && existing.updated_at;
+  const exp = (expectedUpdatedAt || '').trim();
+  if (!cur || !exp) return false;
+  return cur !== exp;
+}
+
 // ── SUPERSEDING A SENT ISSUE ────────────────────────────────────────────────
 // "Duplicate as draft" is only ever offered on a sent issue (see canEdit
 // above), and the copy it makes carries `supersedes_id` pointing back at the
