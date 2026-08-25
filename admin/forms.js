@@ -9,7 +9,7 @@
 // /filtered, where one click releases it — sending the email that was withheld
 // and forwarding it on to ChMS exactly as if it had come through cleanly.
 
-import { scoreSubmission, signFormToken, verifyFormToken } from './spam.js';
+import { scoreSubmission, signFormToken, verifyFormToken, SUSPECT_SUBJECT_PREFIX } from './spam.js';
 import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { renderListSection, renderDrawer, primaryCell } from './ui.js';
@@ -199,7 +199,7 @@ export function officeSubject(kind, name, suspect) {
   const base = kind === 'prayer'
     ? `Prayer Request — ${name || 'Anonymous'}`
     : `Contact Form — ${name}`;
-  return suspect ? `[likely spam] ${base}` : base;
+  return suspect ? `${SUSPECT_SUBJECT_PREFIX}${base}` : base;
 }
 
 // ── FILTERED MAIL ADMIN PAGE ─────────────────────────────────

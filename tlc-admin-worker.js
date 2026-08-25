@@ -152,6 +152,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict as newsletterHasConflict } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
+import { SUSPECT_SUBJECT_PREFIX } from './admin/spam.js';
 import { stripImageMetadata } from './admin/exif.js';
 import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
          sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, marketInsertArgs } from './admin/market.js';
@@ -4318,7 +4319,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         // read to a maker as "your application failed".
         ctx.waitUntil((async () => {
           await sendTransactionalEmail(env, {
-            subject: `${screen.suspect ? '[likely spam] ' : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
+            subject: `${screen.suspect ? SUSPECT_SUBJECT_PREFIX : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
             htmlContent: coordinatorEmailHtml(value, { totalCents: amountDueCents, photos, suspect: screen.suspect }),
             toEmails: [settings.coordinatorEmail],
             replyTo: { email: value.email, name: value.participant_names },
@@ -4465,8 +4466,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           ctx.waitUntil((async () => {
             const rows = fields.map((f) => `<p style="margin:0 0 6px"><strong>${escapeHtml(f.label)}:</strong> ${escapeHtml(String(allValues[f.key] == null ? '' : allValues[f.key]))}</p>`).join('');
             await sendTransactionalEmail(env, {
-              subject: `${screen.suspect ? '[likely spam] ' : ''}${ev.name || 'Event'} sign-up — ${value.contact_name || value.contact_email || 'new'}`,
-              htmlContent: `${screen.suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>The spam filter scored this one as doubtful.</strong> It is almost certainly real — this note is just so you read it twice.</p>' : ''}${rows}${waitlisted ? '<p style="margin:12px 0 0;"><strong>Waitlisted</strong> — capacity was already reached.</p>' : ''}`,
+              subject: `${screen.suspect ? SUSPECT_SUBJECT_PREFIX : ''}${ev.name || 'Event'} sign-up — ${value.contact_name || value.contact_email || 'new'}`,
+              htmlContent: `${screen.suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>This one was flagged for review by the screening filter.</strong> It is almost certainly real — this note is just so you read it twice.</p>' : ''}${rows}${waitlisted ? '<p style="margin:12px 0 0;"><strong>Waitlisted</strong> — capacity was already reached.</p>' : ''}`,
               toEmails: [ev.coordinator_email],
               replyTo: value.contact_email ? { email: value.contact_email, name: value.contact_name || '' } : undefined,
             });

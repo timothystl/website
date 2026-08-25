@@ -1135,8 +1135,26 @@ export async function handleEventsRoutes(request, env, path, method, currentUser
     const status = PAYMENT_STATES.some((s) => s.value === form.get('payment_status')) ? form.get('payment_status') : 'unpaid';
     const before = await getRegistration(env, rid);
     if (before && before.event_id === id) {
-      await updateRegistration(env, rid, { payment_status: status });
-      await logAudit(env.DB, currentUser, 'update', 'event_registration', String(rid), before.contact_name || before.contact_email || '', { payment_status: before.payment_status }, { payment_status: status });
+      const patch = { payment_status: status };
+      // ⚠ MARKING A ROW PAID RECORDS THE AMOUNT ASKED, unless one is already
+      // recorded — the identical rule /market/update (admin/market.js) already
+      // follows for the Christmas Market's own vendor screen. This is the
+      // OTHER door onto the same site_event_registrations row (the generic
+      // "Registrations" tab any has_payment event gets), and without this it
+      // is a second form disagreeing with the first about what "Paid" means:
+      // the pill reads Paid off payment_status alone, but the money line and
+      // the "Recorded as paid" total both read amount_paid_cents, which this
+      // route left NULL. A row marked Paid here read "asked $X" forever and
+      // was invisible to reconciliation — exactly the failure the market
+      // screen's own rule exists to prevent, just reachable through a second
+      // door that never got the same rule.
+      if (status === 'paid' && before.amount_paid_cents == null) {
+        patch.amount_paid_cents = before.amount_due_cents || 0;
+      }
+      await updateRegistration(env, rid, patch);
+      await logAudit(env.DB, currentUser, 'update', 'event_registration', String(rid), before.contact_name || before.contact_email || '',
+        { payment_status: before.payment_status, amount_paid_cents: before.amount_paid_cents },
+        { payment_status: status, amount_paid_cents: patch.amount_paid_cents ?? before.amount_paid_cents });
     }
     return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
   }
