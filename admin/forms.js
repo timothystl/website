@@ -112,8 +112,28 @@ export async function screenSubmission(env, request, sub) {
     { name: sub.name, email: sub.email, message: sub.message, honeypot: sub.honeypot },
     { tokenState, turnstile, recentFromIp }
   );
-  const held = result.verdict === 'spam';
-  const suspect = result.verdict === 'suspect';
+  // ── SCREENING IS DISABLED (2026-08-25, Andrew's call) ──────────────────────
+  // Nothing is held and nothing is downgraded to "suspect" any more, whatever
+  // scoreSubmission() comes back with. In practice the false-positive cost had
+  // outgrown the marketing pitches it was actually catching: a Christmas
+  // Market application scored "suspect" purely because TURNSTILE_SECRET_KEY
+  // was set on the Worker with no site key ever saved on the Filtered Mail
+  // screen — so the widget never rendered and EVERY submission site-wide
+  // scored "Turnstile check missing" — which meant its own confirmation email
+  // was silently never sent, and the office's copy carried a "[likely spam]"
+  // subject that got it routed into Gmail's Spam folder by the receiving
+  // provider, defeating the whole point of delivering it. A held real message
+  // is a pastoral failure; that risk turned out to be larger than the
+  // marketing spam this was built to catch.
+  //
+  // ⚠ scoreSubmission() STILL RUNS, and the result is STILL LOGGED below,
+  // deliberately: it costs nothing, it is what a future re-enable would flip
+  // back on, and it is what /filtered can still show for anything already
+  // held from before this shipped. It just no longer decides what happens to
+  // a submission — every one, honeypot included, is delivered exactly as if
+  // it had scored clean.
+  const held = false;
+  const suspect = false;
 
   // A held message is stored in full — it has to be readable to be released.
   // A delivered one is not: the email in the office inbox is the record, and
