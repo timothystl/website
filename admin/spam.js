@@ -14,8 +14,22 @@
 // A score at or above this is held for review instead of emailed.
 export const HOLD_SCORE = 6;
 // At or above this (but below HOLD_SCORE) the message is still delivered, with
-// "[likely spam]" prefixed to the subject so it can be filtered or eyeballed.
+// SUSPECT_SUBJECT_PREFIX on the front of the subject so it can be filtered or
+// eyeballed.
 export const SUSPECT_SCORE = 3;
+
+// ⚠ NOT "[likely spam]", and this was not a style choice — it was a bug.
+// Prefixing a subject with the literal word "spam" is exactly the signal a
+// receiving mail provider's own spam classifier looks for, so a message this
+// screening deliberately chose to DELIVER (as opposed to holding it) could
+// still be silently routed into the recipient's Spam folder by Gmail or
+// whoever they use — undoing the whole point of scoring it "suspect" rather
+// than "held". A real Christmas Market application landed exactly there.
+// "review" carries the same meaning to a human without being a word a spam
+// filter is trained to react to. One constant, not four copies of the string
+// in officeSubject() and the market/event registration subject lines, so a
+// future rename cannot happen in three places and miss the fourth.
+export const SUSPECT_SUBJECT_PREFIX = '[flagged for review] ';
 
 // Sales/marketing vocabulary. Individually weak — a real note might contain
 // one — so each is worth 2 and the whole group is capped (MARKETING_CAP)

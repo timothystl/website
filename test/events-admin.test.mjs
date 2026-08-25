@@ -534,6 +534,49 @@ group('reviewing what came in');
   const del = await callForm(env, `/events/${id}/registrations/delete`, { cookie, formData: new URLSearchParams({ id: String(regId) }) });
   eq(del.status, 302, 'deleting a registration redirects');
   eq(db.prepare('SELECT COUNT(*) AS n FROM site_event_registrations WHERE id = ?').get(regId).n, 0, 'and it is really gone');
+}
+
+// ── Marking a registration paid from the generic Registrations tab has to
+// record the amount asked, the identical rule /market/update already follows
+// for the Christmas Market's own screen — this is the OTHER door onto the
+// same site_event_registrations row (any has_payment event gets one), and it
+// used to just flip payment_status with no amount, so the pill read Paid
+// while the money line and the "collected" total both stayed at zero. Real
+// symptom, reported directly: a Christmas Market application marked paid from
+// this tab showed "Paid" in the table while the /market screen's "Recorded as
+// paid" tile silently excluded it.
+group('marking a paid-event registration Paid records the amount, from either door');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['events_manage']);
+  const id = await createEventViaForm(env, cookie); // has_payment defaults on
+  const fd = new FormData();
+  fd.set('event_id', id); fd.set('qty', '1');
+  const regRes = await worker.fetch(new Request('https://admin.timothystl.org/api/events/register', {
+    method: 'POST', headers: new Headers({ origin: 'https://timothystl.org' }), body: fd,
+  }), env, ctx);
+  const { id: regId } = await regRes.json();
+  const due = db.prepare('SELECT amount_due_cents, amount_paid_cents FROM site_event_registrations WHERE id = ?').get(regId);
+  ok(due.amount_due_cents > 0, 'a has_payment event charges a real fee');
+  eq(due.amount_paid_cents, null, 'nothing recorded as paid yet — a fact, not a zero');
+
+  await callForm(env, `/events/${id}/registrations/update`, { cookie, formData: new URLSearchParams({ id: String(regId), payment_status: 'paid' }) });
+  const after = db.prepare('SELECT payment_status, amount_paid_cents FROM site_event_registrations WHERE id = ?').get(regId);
+  eq(after.payment_status, 'paid', 'marked paid');
+  eq(after.amount_paid_cents, due.amount_due_cents, 'and the amount asked was recorded — not left null under a Paid pill');
+
+  // An amount already on the row — a partial payment somebody typed by hand —
+  // must never be quietly rounded up to the full fee by a second click of the
+  // same dropdown.
+  db.prepare('UPDATE site_event_registrations SET payment_status = ?, amount_paid_cents = ? WHERE id = ?').run('unpaid', 500, regId);
+  await callForm(env, `/events/${id}/registrations/update`, { cookie, formData: new URLSearchParams({ id: String(regId), payment_status: 'paid' }) });
+  eq(db.prepare('SELECT amount_paid_cents FROM site_event_registrations WHERE id = ?').get(regId).amount_paid_cents, 500, 'a recorded partial payment is left alone');
+
+  // Marking waived or dropped must never invent a paid amount — no money
+  // arrived either way.
+  db.prepare('UPDATE site_event_registrations SET payment_status = ?, amount_paid_cents = NULL WHERE id = ?').run('unpaid', regId);
+  await callForm(env, `/events/${id}/registrations/update`, { cookie, formData: new URLSearchParams({ id: String(regId), payment_status: 'waived' }) });
+  eq(db.prepare('SELECT amount_paid_cents FROM site_event_registrations WHERE id = ?').get(regId).amount_paid_cents, null, 'waiving the fee records no payment');
 
   // A different event's coordinator cannot touch this event's registrations,
   // even by guessing a real registration id.

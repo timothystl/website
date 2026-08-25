@@ -392,7 +392,7 @@ const row = (label, v) => (v ? `<p style="margin:0 0 6px"><strong>${escapeHtml(l
 
 export function coordinatorEmailHtml(v, { totalCents, photos = [], suspect = false }) {
   const addr = [v.street, [v.city, v.state].filter(Boolean).join(', '), v.zip].filter(Boolean).join(' · ');
-  return `${suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>The spam filter scored this one as doubtful.</strong> It is almost certainly a real application — this note is just so you read it twice.</p>' : ''}
+  return `${suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>This one was flagged for review by the screening filter.</strong> It is almost certainly a real application — this note is just so you read it twice.</p>' : ''}
 <p style="margin:0 0 12px"><strong>${escapeHtml(v.participant_names)}</strong>${v.business_name ? ` — ${escapeHtml(v.business_name)}` : ''} applied for ${v.tables} table${v.tables === 1 ? '' : 's'}.</p>
 ${row('Email', v.email)}
 ${row('Phone', v.phone)}
