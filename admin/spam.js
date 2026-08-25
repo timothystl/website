@@ -3,11 +3,21 @@
 // Pure functions only — no D1, no fetch, no Worker globals beyond WebCrypto —
 // so the whole thing is testable with `node admin/spam.test.mjs`.
 //
-// Design rule: a church must never lose a real prayer request. Nothing here
-// rejects a submission outright. A message that scores past HOLD_SCORE is
-// *held* — stored in full, visible under Filtered Mail in the admin, one click
-// from being released. Everything below the threshold is delivered as before,
-// with a marker in the subject line when it scored high enough to be worth a
+// ⚠ SCORING STILL RUNS; ACTING ON IT IS TURNED OFF (2026-08-25). See the
+// comment above `screenSubmission()` in admin/forms.js — the short version is
+// that a false positive here (a legitimate submission scored "suspect" or
+// held) turned out to cost more than the marketing spam this ever caught, so
+// nothing is held or downgraded any more. `scoreSubmission()` below is
+// unchanged and still called on every submission, purely so the score/reasons
+// keep being logged and the machinery is a flip of one boolean away from
+// being turned back on — it just no longer decides what happens to a message.
+//
+// Design rule, as originally written, kept for when this is re-enabled: a
+// church must never lose a real prayer request. Nothing here rejects a
+// submission outright. A message that scores past HOLD_SCORE is *held* —
+// stored in full, visible under Filtered Mail in the admin, one click from
+// being released. Everything below the threshold is delivered as before, with
+// a marker in the subject line when it scored high enough to be worth a
 // second look. That is why the weights lean conservative: a missed spam is an
 // annoyance, a held prayer request is a pastoral failure.
 

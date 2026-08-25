@@ -117,7 +117,12 @@ group('a real prayer request goes straight through');
 }
 
 // ── the pitch ────────────────────────────────────────────────────────────────
-group('a sales pitch is held, not emailed');
+// Screening is disabled (2026-08-25) — see the comment above screenSubmission
+// in admin/forms.js. A pitch that would once have been held now goes through
+// exactly like anything else: nothing is silently swallowed any more. The
+// score is still computed and logged, which is what the second half of this
+// group checks — the machinery is dormant, not deleted.
+group('a sales pitch is delivered too — screening is disabled, not just lenient');
 {
   const { env } = freshEnv();
   sentEmails = []; chmsPosts = [];
@@ -125,23 +130,43 @@ group('a sales pitch is held, not emailed');
     kind: 'contact', name: 'Sarah Glover', email: 'sarah@thelumitoonstudios.com', message: LUMITOON,
     token: '', // posted straight at the API, as these do
   });
-  eq(screen.held, true, 'it is held');
-  eq(sentEmails.length, 0, 'no email is sent to the office');
-  eq(chmsPosts.length, 0, 'and nothing is forwarded to ChMS');
-  eq(await heldCount(env), 1, 'it is waiting for review');
+  eq(screen.held, false, 'it is not held');
+  eq(screen.suspect, false, 'and not flagged suspect either');
+  ok(screen.score >= 6, 'the underlying score still reads as spam-shaped, it is just not acted on');
+  eq(await heldCount(env), 0, 'nothing is waiting for review');
 
-  const row = await env.DB.prepare("SELECT * FROM form_submissions WHERE status='held'").first();
-  ok(row.message.includes('Lumitoon'), 'the message is stored in full, not discarded');
-  ok(JSON.parse(row.reasons).length >= 3, 'with the reasons it was held');
-  eq(row.ip, '203.0.113.7', 'and the address it came from');
+  const row = await env.DB.prepare("SELECT * FROM form_submissions ORDER BY id DESC LIMIT 1").first();
+  eq(row.status, 'delivered', 'stored as delivered, not held');
+  ok(JSON.parse(row.reasons).length >= 3, 'and the reasons it WOULD have been held are still on the record');
+  eq(row.message, null, 'a delivered row still never keeps the message content — that rule is unrelated to screening');
 }
 
-// ── the review page ──────────────────────────────────────────────────────────
-group('the Filtered Mail page');
+// Even the honeypot — filled only by something that cannot see the page — no
+// longer holds a submission back. Screening off means off.
+group('even the honeypot no longer holds anything back');
 {
   const { env } = freshEnv();
   sentEmails = []; chmsPosts = [];
-  await screenSubmission(env, req(), { kind: 'contact', name: 'Sarah Glover', email: 'sarah@thelumitoonstudios.com', message: LUMITOON, token: '' });
+  const screen = await screenSubmission(env, req(), {
+    kind: 'contact', name: 'Bot', email: 'a@b.co', message: 'hi', honeypot: 'filled in by a script', token: '',
+  });
+  eq(screen.held, false, 'not held');
+  eq(screen.score, 99, 'the score still reads the honeypot as decisive');
+  eq(await heldCount(env), 0, 'and nothing sits in the review queue');
+}
+
+// ── the review page still has to work, for any row already sitting in it ─────
+group('the Filtered Mail page still works on a row that is already held');
+{
+  const { env, raw } = freshEnv();
+  sentEmails = []; chmsPosts = [];
+  // Nothing screens into 'held' any more, so this seeds the shape directly —
+  // the row a pre-2026-08-25 pitch left behind, or one released and re-held by
+  // hand. The page, the drawer and release/delete all still have to work on it.
+  raw.prepare(
+    `INSERT INTO form_submissions (kind, name, email, message, ip, score, reasons, status)
+     VALUES ('contact','Sarah Glover','sarah@thelumitoonstudios.com',?,?,?,?,'held')`
+  ).run(LUMITOON, '203.0.113.7', 8, JSON.stringify(['bulk-mail opt-out line', 'contains a link', 'guest-post pitch']));
 
   const page = await handleFilteredRoutes(new Request('https://admin.timothystl.org/filtered'), env, '/filtered', 'GET', admin, {});
   const body = await page.text();
@@ -185,8 +210,10 @@ group('the Filtered Mail page');
 
 group('deleting a held message');
 {
-  const { env } = freshEnv();
-  await screenSubmission(env, req(), { kind: 'contact', name: 'Spammer', email: 'a@b.co', message: LUMITOON, token: '' });
+  const { env, raw } = freshEnv();
+  raw.prepare(
+    `INSERT INTO form_submissions (kind, name, email, message, status) VALUES ('contact','Spammer','a@b.co',?,'held')`
+  ).run(LUMITOON);
   const id = (await env.DB.prepare("SELECT id FROM form_submissions WHERE status='held'").first()).id;
   const fd = new FormData(); fd.append('id', String(id));
   await handleFilteredRoutes(new Request('https://admin.timothystl.org/filtered/delete', { method: 'POST', body: fd }),
@@ -195,18 +222,20 @@ group('deleting a held message');
 }
 
 // ── flooding ─────────────────────────────────────────────────────────────────
-group('one address firing repeatedly');
+// The flood signal still adds to the score (so a future re-enable inherits
+// it), but screening being off means it no longer holds anything either.
+group('one address firing repeatedly is no longer held, screening is off');
 {
   const { env } = freshEnv();
   const clean = { kind: 'contact', name: 'Bot', email: 'a@b.co', message: 'Hello, I would like more information about your services.', token: '' };
   const results = [];
   for (let i = 0; i < 12; i++) results.push(await screenSubmission(env, req({ ip: '198.51.100.4' }), clean));
   eq(results[0].held, false, 'the first one is delivered');
-  ok(results[11].held, 'the twelfth from the same address is held');
+  eq(results[11].held, false, 'and so is the twelfth from the same address');
+  ok(results[11].score > results[0].score, 'the flood still raises the score, it just is not acted on');
 
-  // A different address is unaffected by the first one's flood.
   const other = await screenSubmission(env, req({ ip: '198.51.100.99' }), clean);
-  eq(other.held, false, 'a different visitor is not caught in it');
+  eq(other.held, false, 'a different visitor was never at risk of this anyway');
 }
 
 // ── retention ────────────────────────────────────────────────────────────────

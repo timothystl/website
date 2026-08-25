@@ -5905,6 +5905,77 @@ a glance.
   address is attacker-supplied, so replying to it turned the form into a way to
   mail someone else's inbox (part of AW-5 in the July 2026 review).
 
+### Screening is switched off (2026-08-25)
+
+Dinger, after a Christmas Market vendor application (Shelley Watkins-Parker's)
+turned up in his Gmail Spam folder and her confirmation email never arrived:
+*"I think the filtering is not worth keeping. It is causing too many
+issues."*
+
+**The false-positive cost had grown larger than the marketing spam this was
+ever built to catch, and it was traced to a real, confirmed misconfiguration
+first.** `TURNSTILE_SECRET_KEY` was set on the Worker, but no
+`turnstile_site_key` had ever been saved on the Filtered Mail screen — so the
+Turnstile widget never rendered anywhere on the public site, no submission
+could ever produce a token, and every single one — contact, prayer,
+subscribe, Christmas Market, event registration — scored `Turnstile check
+missing` (verified directly in `form_submissions`, live). That alone was
+enough to land a genuine application in `suspect`, which by design (see
+above) suppressed the sender's own confirmation email, and the `[likely
+spam]` subject prefix on the office's copy — meant to be delivered, not held
+— was exactly the phrase Gmail's own classifier looks for, so it landed in
+Spam anyway. Fixing that subject text (now `[flagged for review]`, one shared
+`SUSPECT_SUBJECT_PREFIX` in `admin/spam.js` instead of four copies of the
+string) was the first pass, in PR #538; this is the second, larger call —
+turn scoring's *effect* off rather than keep chasing false positives one at a
+time.
+
+- **`screenSubmission()` in `admin/forms.js` still calls `scoreSubmission()`
+  and still logs the score and reasons to `form_submissions` on every
+  submission** — that costs nothing, and it is what makes this reversible and
+  what keeps `/filtered`'s machinery meaningful for anything already sitting
+  in it. What changed is exactly two lines: `held` and `suspect` are now
+  hardcoded `false`, whatever the score says. **Not a threshold change** —
+  raising `HOLD_SCORE`/`SUSPECT_SCORE` would still eventually re-trip on a
+  bad-enough case; this is "off," not "less sensitive."
+- **⚠ Even the honeypot no longer holds anything back.** It used to
+  short-circuit straight to `verdict:'spam'` before any other scoring ran;
+  that path is untouched inside `scoreSubmission()` (still logged as a score
+  of 99), it simply no longer changes what happens to the submission either.
+  Andrew's instruction was "the filtering," not "the filtering except the
+  honeypot" — and a hidden field an autofill extension blindly fills is
+  exactly the kind of false positive this whole change exists to stop causing.
+- **Nothing is deleted.** `admin/spam.js`'s scoring, `HOLD_SCORE` /
+  `SUSPECT_SCORE` / `SUSPECT_SUBJECT_PREFIX`, the `/filtered` review screen,
+  and release/delete on a row already held (from before this shipped, or
+  hand-inserted) are all still there and still work — verified directly:
+  `admin/forms.test.mjs`'s Filtered Mail group now seeds a `held` row by hand
+  rather than by scoring one into existence, and release/delete both still
+  behave exactly as before. Turning screening back on is reverting the two
+  hardcoded lines in `screenSubmission()`, once a Turnstile site key actually
+  exists on the Filtered Mail screen — doing that first is what would keep
+  this from recurring.
+- **`heldCount()` and the dashboard's "needs your attention" badge are
+  unaffected** — they read `form_submissions.status='held'` directly, so any
+  row left over from before this shipped is still surfaced and still
+  reachable; there is simply nothing left to add new ones.
+- `public/manual.html`'s Filtered Mail section says the same thing to office
+  staff, plainly: screening is off, why, and what "Extra protection" (the
+  Turnstile site-key field, already on that screen) would need before turning
+  it back on.
+
+Run: `node admin/spam.test.mjs` (scoring itself is untouched — 59 still
+passing), `node admin/forms.test.mjs` — rewritten, 48 passing, verified
+non-vacuous by reverting the two hardcoded lines and confirming seven
+assertions fail with the exact prior behavior (a pitch held, a flooded
+address held, a delivered row's content wrongly kept). Also
+`node admin/market.test.mjs` (318) and
+`node --experimental-loader ./test/html-loader.mjs test/events-admin.test.mjs`
+(147) and `test/admin-redesign.test.mjs` (1604, one pre-existing unrelated
+failure — a gym-rentals date-link test keyed to a hardcoded date), all still
+green — neither touches `screenSubmission`'s internals, so nothing there
+needed rewriting.
+
 ### Ministry Page Editor (added 2026-07-30)
 
 Ministry pages are an ordered list of typed **blocks** rather than one TinyMCE box,
