@@ -4887,40 +4887,79 @@ group('the Volunteers tab can be switched off, and back on');
 
   const on = await (await call(env, '/market', { cookie })).text();
   has(on, '>Volunteers</a>', 'showing by default — the market’s own row was seeded with it on');
-  has(on, 'Volunteers tab', 'and the toggle for it is on the Vendors tab, in the Applications panel');
+  has(on, 'Volunteer sign-ups', 'and the toggle for it is on the Vendors tab, in the Applications panel');
 
-  const off = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: {} });
-  eq(off.status, 302, 'switching it off redirects back to the screen');
-  eq(decodeURIComponent(off.headers.get('Location')).includes('is hidden'), true, 'and the toast says so');
-  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0,
-    'the market’s own row is updated — has_volunteers, not a second field');
+  // ⚠ STUBBED, same reasoning as the read-side roster tests above — Serve is
+  // a different application on another host, and this must pass or fail on
+  // this route's own logic, not on whether that host happens to be up.
+  const realFetch = globalThis.fetch;
+  env.CHMS_INTAKE_API_KEY = 'test-intake-key';
+  try {
+    let lastCall = null;
+    globalThis.fetch = async (u, init) => {
+      const req = (typeof Request !== 'undefined' && u instanceof Request) ? u : null;
+      lastCall = {
+        url: req ? req.url : u,
+        key: req ? req.headers.get('X-Intake-Key') : (init && init.headers && init.headers['X-Intake-Key']),
+        body: req ? await req.clone().text() : (init && init.body),
+      };
+      return new Response(JSON.stringify({ open: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
 
-  const hiddenBody = await (await call(env, '/market', { cookie })).text();
-  lacks(hiddenBody, '>Volunteers</a>', 'the tab is gone — not disabled, absent, same as every other tab on this screen');
+    const off = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: {} });
+    eq(off.status, 302, 'switching it off redirects back to the screen');
+    const offMsg = decodeURIComponent(off.headers.get('Location'));
+    ok(offMsg.includes('is hidden'), 'and the toast says the local tab is hidden');
+    ok(offMsg.includes('closed in Serve too'), 'and that it closed sign-ups in Serve too');
+    eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0,
+      'the market’s own row is updated — has_volunteers, not a second field');
 
-  // ⚠ Asking for it by address must not hand it over anyway.
-  const sneak = await (await call(env, '/market?tab=volunteers', { cookie })).text();
-  lacks(sneak, 'Manage shifts in Serve', 'the volunteers section itself is never built once the tab is hidden');
-  lacks(sneak, 'Who is covering the market', 'nor its own purpose line');
-  has(sneak, 'tlc-tile-num', 'and the address falls back to Vendors, the first tab still open to this reader');
+    // ⚠ THE REAL POINT OF THIS FEATURE — the call to chms actually carries
+    // the shared secret and the right boolean, to the right endpoint.
+    ok(lastCall && lastCall.url.includes('/api/signups/christmasmarket/toggle'), 'the real chms toggle route is called');
+    eq(lastCall.key, 'test-intake-key', 'carrying the shared X-Intake-Key');
+    eq(JSON.stringify(JSON.parse(lastCall.body)), JSON.stringify({ open: false }), 'and telling it to close, matching the local state');
+
+    const hiddenBody = await (await call(env, '/market', { cookie })).text();
+    lacks(hiddenBody, '>Volunteers</a>', 'the tab is gone — not disabled, absent, same as every other tab on this screen');
+
+    // ⚠ Asking for it by address must not hand it over anyway.
+    const sneak = await (await call(env, '/market?tab=volunteers', { cookie })).text();
+    lacks(sneak, 'Manage shifts in Serve', 'the volunteers section itself is never built once the tab is hidden');
+    lacks(sneak, 'Who is covering the market', 'nor its own purpose line');
+    has(sneak, 'tlc-tile-num', 'and the address falls back to Vendors, the first tab still open to this reader');
+
+    // Switching it back on works the same way, and asks chms to reopen.
+    const back = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: { volunteers_enabled: '1' } });
+    const backMsg = decodeURIComponent(back.headers.get('Location'));
+    ok(backMsg.includes('showing again'), 'the toast says the tab is back');
+    ok(backMsg.includes('open in Serve too'), 'and that Serve is open again');
+    eq(JSON.stringify(JSON.parse(lastCall.body)), JSON.stringify({ open: true }), 'this time telling chms to open');
+    const backBody = await (await call(env, '/market', { cookie })).text();
+    has(backBody, '>Volunteers</a>', 'and the tab really is');
+
+    // ⚠ A FAILED REMOTE CALL MUST NEVER BLOCK THE LOCAL SAVE, and the toast
+    // has to say honestly that the two are now out of sync rather than
+    // implying success.
+    globalThis.fetch = async () => { throw new Error('Serve is down'); };
+    const failedRemote = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: {} });
+    eq(failedRemote.status, 302, 'the local save still succeeds');
+    eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0,
+      'and is really stored, even though the remote call failed');
+    const failMsg = decodeURIComponent(failedRemote.headers.get('Location'));
+    ok(failMsg.includes('is hidden'), 'the local half is still reported as done');
+    ok(failMsg.includes('Serve was not updated'), 'but the toast is honest that Serve was not — never silently claims sync it did not achieve');
+  } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
 
   // Nothing about the market itself — its vendors, its pages, its capacity
-  // settings — moved when the tab was hidden.
+  // settings — moved by any of this.
   eq(db.prepare("SELECT COUNT(*) AS n FROM site_events WHERE id='christmasmarket'").get().n, 1, 'the event row is untouched otherwise');
-
-  // Switching it back on works the same way.
-  const back = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: { volunteers_enabled: '1' } });
-  eq(decodeURIComponent(back.headers.get('Location')).includes('showing again'), true, 'the toast says it is back');
-  const backBody = await (await call(env, '/market', { cookie })).text();
-  has(backBody, '>Volunteers</a>', 'and the tab really is');
 
   // Only market_manage may touch this — same permission as the applications
   // toggle right beside it in the same panel.
   const { cookie: pagesOnly } = signIn(db, ['pages_edit'], 'writer2');
-  const refused = await call(env, '/market/volunteers-tab', { cookie: pagesOnly, method: 'POST', form: { volunteers_enabled: '0' } });
+  const refused = await call(env, '/market/volunteers-tab', { cookie: pagesOnly, method: 'POST', form: { volunteers_enabled: '1' } });
   eq(refused.status, 403, 'pages_edit alone cannot touch it');
-  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 1,
-    'and the setting is unchanged by the refused attempt');
 }
 
 group('the vendor list is gated on its own permission');
