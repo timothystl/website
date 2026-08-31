@@ -2040,7 +2040,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-22-2'; // bumped: newsletters.updated_at/updated_by, so a concurrent save cannot silently overwrite somebody else's just-typed content
+    const SCHEMA_VERSION = '2026-08-31-1'; // bumped: site_events.waitlist_cap, for the market's confirmed-then-soft-reserve table cap
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2858,6 +2858,11 @@ export default {
     // this, for anything paid by check/cash, and for anything on Tithe.ly.
     try { await env.DB.prepare('ALTER TABLE site_event_registrations ADD COLUMN square_order_id TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_site_event_registrations_square_order ON site_event_registrations (square_order_id)').run(); } catch (_) {}
+
+    // The hard ceiling past a full registration_cap — see capacityDecision()
+    // in admin/events.js and DB_INIT_SITE_EVENTS's own comment. NULL (every
+    // row before this) means an unbounded waitlist, unchanged.
+    try { await env.DB.prepare('ALTER TABLE site_events ADD COLUMN waitlist_cap INTEGER').run(); } catch (_) {}
 
     for (const p of PARTNER_SEED) {
       try {
@@ -4231,6 +4236,35 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
 
         const price = priceBreakdown(value.tables, settings);
 
+        // ── HOW MANY TABLES ARE LEFT ──────────────────────────────────────
+        // 60 confirmed, then a soft reserve of up to 70 total, then nothing —
+        // see capacityDecision() in admin/events.js and the settings panel on
+        // /market?tab=money. A held application (screened above) is given no
+        // capacity decision at all, same reasoning as everywhere else a held
+        // submission is handled: it must never take a table — confirmed or
+        // reserved — nobody has read yet.
+        let waitlisted = false;
+        if (!screen.held) {
+          const ev = await getEvent(env, 'christmasmarket');
+          if (ev && ev.registration_cap) {
+            const counts = await env.DB.prepare(
+              `SELECT
+                 COALESCE(SUM(CASE WHEN waitlisted = 0 THEN qty ELSE 0 END), 0) AS confirmed,
+                 COALESCE(SUM(qty), 0) AS total
+               FROM site_event_registrations WHERE event_id = 'christmasmarket' AND payment_status != 'dropped'`
+            ).first().catch(() => ({ confirmed: 0, total: 0 }));
+            const decision = capacityDecision(
+              ev, (counts && counts.confirmed) || 0, value.tables, (counts && counts.total) || 0
+            );
+            if (decision.refused) {
+              return new Response(JSON.stringify({
+                error: `The market is full for this year. Please email ${settings.coordinatorEmail} to ask about a waiting list.`
+              }), { status: 409, headers: corsH });
+            }
+            waitlisted = decision.waitlisted;
+          }
+        }
+
         // Photos — optional, never a reason to fail. They are read only after
         // the fields have passed and the screener has run, so a bot cannot
         // make this Worker buffer 40MB by posting files with no application
@@ -4239,7 +4273,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
 
         let id = null;
         try {
-          id = await insertRegistration(env, marketInsertArgs(value, price, photos));
+          id = await insertRegistration(env, marketInsertArgs(value, price, photos, { waitlisted }));
         } catch (e) {
           // ⚠ The one failure a vendor must be told about. Everything else here
           // fails quietly on purpose, but if the row did not save then the
@@ -4289,8 +4323,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         // silently, the same shape every other integration on this site
         // degrades by (Turnstile, the ChMS intake key, VAPID). A vendor must
         // never be unable to pay because Square's API had a bad minute.
+        //
+        // ⚠ A SOFT-RESERVED APPLICATION GETS NO LINK EITHER, whatever payment
+        // method was chosen — that is the whole point of the reserve. Nothing
+        // is charged until the coordinator takes it off the waiting list from
+        // the Vendors tab (see /market/confirm-reserve below), which is a
+        // deliberate hand action, not automatic.
         let payUrl = '';
-        if (value.payment_method !== 'check') {
+        if (!waitlisted && value.payment_method !== 'check') {
           if (settings.paymentProvider === 'square') {
             try {
               const link = await createSquarePaymentLink(env, {
@@ -4319,8 +4359,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         // read to a maker as "your application failed".
         ctx.waitUntil((async () => {
           await sendTransactionalEmail(env, {
-            subject: `${screen.suspect ? SUSPECT_SUBJECT_PREFIX : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
-            htmlContent: coordinatorEmailHtml(value, { totalCents: amountDueCents, photos, suspect: screen.suspect }),
+            subject: `${screen.suspect ? SUSPECT_SUBJECT_PREFIX : ''}${waitlisted ? 'Waiting list — ' : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
+            htmlContent: coordinatorEmailHtml(value, { totalCents: amountDueCents, photos, suspect: screen.suspect, waitlisted }),
             toEmails: [settings.coordinatorEmail],
             replyTo: { email: value.email, name: value.participant_names },
           });
@@ -4330,22 +4370,22 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           // else's inbox (AW-5).
           if (!screen.suspect) {
             await sendTransactionalEmail(env, {
-              subject: 'Your Christmas Market table — Timothy Lutheran Church',
-              htmlContent: vendorEmailHtml(value, { totalCents: amountDueCents, payUrl, settings }),
+              subject: waitlisted ? "You're on the waiting list — Timothy Christmas Market" : 'Your Christmas Market table — Timothy Lutheran Church',
+              htmlContent: vendorEmailHtml(value, { totalCents: amountDueCents, payUrl, settings, waitlisted }),
               toEmails: [value.email],
             });
           }
         })());
 
         ctx.waitUntil(pushToAllSubscribers(env, {
-          title: 'Christmas Market vendor application',
-          body: `${value.business_name || value.participant_names} — ${value.tables} table${value.tables === 1 ? '' : 's'}, ${marketMoney(amountDueCents)}`,
+          title: waitlisted ? 'Christmas Market — waiting list' : 'Christmas Market vendor application',
+          body: `${value.business_name || value.participant_names} — ${value.tables} table${value.tables === 1 ? '' : 's'}${waitlisted ? ', soft reserve — confirmed tables are full' : `, ${marketMoney(amountDueCents)}`}`,
           tag: 'market-vendor', url: '/market',
         }));
 
         return new Response(JSON.stringify({
           success: true, id, payUrl, total: marketMoney(amountDueCents), totalCents: amountDueCents,
-          checkPay: value.payment_method === 'check',
+          checkPay: value.payment_method === 'check', waitlisted,
         }), { headers: corsH });
       } catch (e) {
         console.error('Market application failed:', e?.message);

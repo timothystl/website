@@ -157,6 +157,12 @@ export function eventFeeConfig(ev, giveUrl = '') {
     dateLabel: ev.date_label || '',
     hoursLabel: ev.hours_label || '',
     open: !!Number(ev.registration_open ?? 1),
+    // ⚠ Blank/NULL means uncapped — read as '' rather than 0, so a form field
+    // built from this renders empty rather than a misleading literal 0.
+    registrationCap: ev.registration_cap == null ? '' : Number(ev.registration_cap),
+    waitlistEnabled: !!Number(ev.waitlist_enabled),
+    waitlistCap: ev.waitlist_cap == null ? '' : Number(ev.waitlist_cap),
+    volunteersEnabled: !!Number(ev.has_volunteers),
     giveUrl: giveUrl || '',
     paymentProvider: ev.payment_provider === 'square' ? 'square' : 'tithely',
     squareLinks: safeJsonObject(ev.square_links),
@@ -380,12 +386,27 @@ export function splitRegistrationFields(value, fields) {
 // across every registration that is not dropped and not already
 // waitlisted — the same "counts against capacity" set a coordinator would
 // expect. A cap of null/0 means uncapped.
-export function capacityDecision(ev, currentQty, addingQty) {
+//
+// ⚠ `currentTotalQty` is a SECOND sum — everything `currentQty` counts, PLUS
+// whatever is already sitting on the waitlist — and it is what
+// `ev.waitlist_cap` is checked against, never `currentQty` alone. The
+// Christmas Market's own shape is the reason this exists: 60 confirmed
+// tables (`registration_cap`) plus a soft-reserve waitlist of up to 10 more
+// (`waitlist_cap` = 70) before the market is genuinely full and starts
+// refusing outright. Defaults to `currentQty` for every existing caller that
+// never passes it, which reproduces the exact behavior this function has
+// always had — an unbounded waitlist — for every event whose `waitlist_cap`
+// is NULL.
+export function capacityDecision(ev, currentQty, addingQty, currentTotalQty = currentQty) {
   const cap_ = Number(ev.registration_cap);
   if (!Number.isFinite(cap_) || cap_ <= 0) return { waitlisted: false, refused: false };
   if (currentQty + addingQty <= cap_) return { waitlisted: false, refused: false };
-  if (Number(ev.waitlist_enabled)) return { waitlisted: true, refused: false };
-  return { waitlisted: false, refused: true };
+  if (!Number(ev.waitlist_enabled)) return { waitlisted: false, refused: true };
+  const hardCap = Number(ev.waitlist_cap);
+  if (Number.isFinite(hardCap) && hardCap > 0 && currentTotalQty + addingQty > hardCap) {
+    return { waitlisted: false, refused: true };
+  }
+  return { waitlisted: true, refused: false };
 }
 
 // ── THE GENERIC EVENTS ADMIN (/events, /events/new, /events/:id) ────────────
@@ -800,6 +821,8 @@ async function renderEventScreen(env, currentUser, url, badges, id) {
               ${renderField({ kind: 'toggle', name: 'registration_open', label: 'Taking sign-ups', value: Number(ev.registration_open ?? 1), on: 'Open', off: 'Closed' })}
               ${renderField({ kind: 'number', name: 'registration_cap', label: 'Capacity (blank = uncapped)', value: ev.registration_cap == null ? '' : ev.registration_cap, min: 0 })}
               ${renderField({ kind: 'toggle', name: 'waitlist_enabled', label: 'Waitlist once full', value: Number(ev.waitlist_enabled), on: 'Yes', off: 'No, refuse instead' })}
+              ${Number(ev.waitlist_enabled) ? renderField({ kind: 'number', name: 'waitlist_cap', label: 'Hard maximum, waitlist included (blank = unbounded)', value: ev.waitlist_cap == null ? '' : ev.waitlist_cap, min: 0,
+                hint: 'Once capacity is reached, sign-ups queue on the waitlist until this total is reached too — then they are refused outright.' }) : ''}
             ` : ''}
             ${Number(ev.has_volunteers) ? renderField({ name: 'volunteer_slug', label: 'Serve slug', value: ev.volunteer_slug,
               hint: 'The address this event answers to on serve.timothystl.org.' }) : ''}
@@ -1032,6 +1055,7 @@ export async function handleEventsRoutes(request, env, path, method, currentUser
       registration_open: form.getAll('registration_open').includes('1') ? 1 : 0,
       registration_cap: form.get('registration_cap') ? Math.max(0, parseInt(form.get('registration_cap'), 10) || 0) : null,
       waitlist_enabled: form.getAll('waitlist_enabled').includes('1') ? 1 : 0,
+      waitlist_cap: form.get('waitlist_cap') ? Math.max(0, parseInt(form.get('waitlist_cap'), 10) || 0) : null,
       volunteer_slug: cap(form.get('volunteer_slug'), 200) || null,
       photo_folder: cap(form.get('photo_folder'), 200) || null,
       updated_at: new Date().toISOString(),

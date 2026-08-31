@@ -208,6 +208,10 @@ export function marketRowFromRegistration(reg) {
     square_order_id: reg.square_order_id || '',
     staff_notes: reg.staff_notes || '',
     created_at: reg.created_at,
+    // A soft reserve — see marketInsertArgs() and capacityDecision() in
+    // admin/events.js. Confirming a row (below) clears this, exactly the
+    // action that turns it back into an ordinary paying application.
+    waitlisted: !!reg.waitlisted,
   };
 }
 
@@ -224,7 +228,7 @@ export function marketRowFromRegistration(reg) {
 // block editor follows.
 export const VENDOR_CATEGORIES = [
   'Baked goods', 'Candles & soap', 'Jewelry', 'Wood', 'Textiles',
-  'Ornaments', 'Food & drink', 'Art & prints', 'Wreaths & greens', 'Other',
+  'Ornaments', 'Food & drink', 'Art & prints', 'Wreaths & greens', 'Ministry', 'Other',
 ];
 
 // Blank stays blank — "not categorized yet" is a real state, and defaulting
@@ -271,12 +275,19 @@ export function checkState(row) {
 // tableFee`, the same number the "1 table × $X" line already shows — so
 // this needs no second pricing function, only the right field of the one
 // that already exists.
-export function marketInsertArgs(value, price, photos) {
+export function marketInsertArgs(value, price, photos, { waitlisted = false } = {}) {
   return {
     event_id: 'christmasmarket',
     qty: value.tables,
     payment_status: 'unpaid',
     amount_due_cents: value.payment_method === 'check' ? price.subtotalCents : price.totalCents,
+    // A soft-reserved table is exactly what `waitlisted` already means on
+    // every other event's registrations — no payment link was offered, and
+    // it does not count against the confirmed-tables pause (see
+    // capacityDecision() in admin/events.js) until the coordinator confirms
+    // it by hand, which is the same action that turns it back into an
+    // ordinary paying row.
+    waitlisted,
     contact_name: value.participant_names,
     contact_email: value.email,
     contact_phone: value.phone,
@@ -342,6 +353,7 @@ export function vendorCellState(row) {
     tables: row.tables,
     table_number: row.table_number || '',
     due: money(row.amount_due_cents),
+    waitlisted: !!row.waitlisted,
   };
 }
 
@@ -390,9 +402,10 @@ export async function marketConfig(env) {
 // ── EMAIL ────────────────────────────────────────────────────────────────────
 const row = (label, v) => (v ? `<p style="margin:0 0 6px"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(v))}</p>` : '');
 
-export function coordinatorEmailHtml(v, { totalCents, photos = [], suspect = false }) {
+export function coordinatorEmailHtml(v, { totalCents, photos = [], suspect = false, waitlisted = false }) {
   const addr = [v.street, [v.city, v.state].filter(Boolean).join(', '), v.zip].filter(Boolean).join(' · ');
   return `${suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>This one was flagged for review by the screening filter.</strong> It is almost certainly a real application — this note is just so you read it twice.</p>' : ''}
+${waitlisted ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>Soft reserve — confirmed tables are full.</strong> No payment link was sent. Confirm this one from the Vendors tab once a table opens, and it will be asked to pay.</p>' : ''}
 <p style="margin:0 0 12px"><strong>${escapeHtml(v.participant_names)}</strong>${v.business_name ? ` — ${escapeHtml(v.business_name)}` : ''} applied for ${v.tables} table${v.tables === 1 ? '' : 's'}.</p>
 ${row('Email', v.email)}
 ${row('Phone', v.phone)}
@@ -410,15 +423,17 @@ ${row('Agreed as', v.signature_name)}
 <p style="margin:12px 0 0;font-size:13px;color:#4A4860">Whether they actually paid is not something the website can see — mark it on the vendor list in the admin.</p>`;
 }
 
-export function vendorEmailHtml(v, { totalCents, payUrl, settings }) {
+export function vendorEmailHtml(v, { totalCents, payUrl, settings, waitlisted = false }) {
   const byCheck = v.payment_method === 'check';
   return `<p>Hi ${escapeHtml(v.participant_names)},</p>
 <p>Thank you for applying for a table at the Timothy Christmas Market on ${escapeHtml(settings.dateLabel)}, ${escapeHtml(settings.hoursLabel)}.</p>
-<p>You asked for <strong>${v.tables} table${v.tables === 1 ? '' : 's'}</strong>, which comes to <strong>${escapeHtml(money(totalCents))}</strong>${byCheck ? '' : ' including the card processing fee'}.</p>
+${waitlisted
+  ? `<p><strong>Confirmed tables are full right now, so you are on our waiting list.</strong> Nothing is due and no payment has been taken — we will reach out the moment a table opens up, and only ask for payment then. Your spot for ${v.tables} table${v.tables === 1 ? '' : 's'} would come to <strong>${escapeHtml(money(totalCents))}</strong>${byCheck ? '' : ' including the card processing fee'} once confirmed.</p>`
+  : `<p>You asked for <strong>${v.tables} table${v.tables === 1 ? '' : 's'}</strong>, which comes to <strong>${escapeHtml(money(totalCents))}</strong>${byCheck ? '' : ' including the card processing fee'}.</p>
 ${byCheck
   ? `<p><strong>Please bring a check made out to Timothy Lutheran Church, or exact cash, on the day</strong> — Marla, our market coordinator, marks your table paid when it arrives.</p>`
-  : (payUrl ? `<p><strong>Your space is held once payment arrives.</strong> If you closed the payment page before finishing, you can pay here: <a href="${escapeHtml(payUrl)}">${escapeHtml(money(totalCents))} for your table${v.tables === 1 ? '' : 's'}</a>.</p>` : '')}
-<p>Marla will confirm your table number by email. ${byCheck ? 'If' : 'If you would rather pay by check or cash, or if'} you need to change anything, reply to this message or write to <a href="mailto:${escapeHtml(settings.coordinatorEmail)}">${escapeHtml(settings.coordinatorEmail)}</a>.</p>
+  : (payUrl ? `<p><strong>Your space is held once payment arrives.</strong> If you closed the payment page before finishing, you can pay here: <a href="${escapeHtml(payUrl)}">${escapeHtml(money(totalCents))} for your table${v.tables === 1 ? '' : 's'}</a>.</p>` : '')}`}
+<p>Marla will confirm your table number by email. ${waitlisted ? 'If' : byCheck ? 'If' : 'If you would rather pay by check or cash, or if'} you need to change anything, reply to this message or write to <a href="mailto:${escapeHtml(settings.coordinatorEmail)}">${escapeHtml(settings.coordinatorEmail)}</a>.</p>
 <p>Doors open to vendors at 8:30 am. Please be set up by 10:30 and stay until the market closes at 6:00.</p>
 <p>We are glad you are coming,<br>Timothy Lutheran Church</p>`;
 }
@@ -489,11 +504,17 @@ function vendorRow(r, settings, cats) {
   return `<div class="tlc-mkt-row${r.payment_status === 'dropped' ? ' is-out' : ''}" data-row="${r.id}" ${sorts}
     data-filter="${escapeHtml(paymentState(r.payment_status).value)}"
     data-check-pending="${chk.pending ? '1' : '0'}"
+    data-waitlisted="${r.waitlisted ? '1' : '0'}"
     data-search="${escapeHtml(`${r.participant_names || ''} ${r.business_name || ''} ${r.email || ''} ${sells} ${cell.category} ${r.table_number || ''}`.toLowerCase())}">
     <div class="tlc-mkt-cells">
       <div class="tlc-mkt-name">
         <span class="tlc-mkt-biz">${escapeHtml(name)}</span>
         ${sub ? `<span class="tlc-mkt-sub">${escapeHtml(sub)}</span>` : ''}
+        ${r.waitlisted ? `<span class="tlc-mkt-waitbadge">
+            Waiting list — confirmed tables are full
+            <button type="button" class="tlc-mkt-waitbtn" data-confirmreserve="1" data-id="${r.id}"
+              title="Take this table off the waiting list and open it to payment">Confirm table</button>
+          </span>` : ''}
       </div>
       <select class="tlc-mkt-sel" ${d('category')} data-cell="1" aria-label="Category for ${escapeHtml(name)}">
         <option value=""${cell.category ? '' : ' selected'}>—</option>
@@ -595,10 +616,41 @@ const VENDOR_FILTERS = [
   { label: 'All', value: 'all' },
   { label: 'Not paid yet', value: 'unpaid' },
   { label: 'Awaiting check', value: 'check' },
+  { label: 'Waiting list', value: 'waitlist' },
   { label: 'Paid', value: 'paid' },
   { label: 'Fee waived', value: 'waived' },
   { label: 'Dropped out', value: 'dropped' },
 ];
+
+// ── A VENDOR ENTERED BY HAND ─────────────────────────────────────────────────
+// The public application is the only door onto the vendor list for everybody
+// EXCEPT a church-related ministry (MDO, the Word of Life 8th grade, the
+// youth group) that takes a table and is never asked to pay for it. Making
+// one of those fill out the public form and then marking the fee waived
+// would be asking a real ministry to pretend it is a paying vendor for a
+// minute — this is the direct route instead.
+//
+// ⚠ A COLLAPSED <details>, NOT ITS OWN ADDRESS. This is a rare action —
+// maybe half a dozen a season — sitting above a list somebody opens dozens of
+// times, so it must not cost a second screen or crowd the vendor list's own
+// tools every time the page loads.
+function manualAddPanel(settings) {
+  return `<details class="tlc-mkt-add">
+    <summary class="tlc-mkt-add-summary">+ Add a vendor by hand</summary>
+    <div class="tlc-mkt-add-body">
+      <p class="tlc-hint" style="margin:0 0 12px;">For a church ministry taking a table at no charge — MDO, Word of Life, the youth group — not for a maker who should use the public application. The fee is waived automatically and nobody is emailed a payment link.</p>
+      <form method="POST" action="/market/add">
+        ${renderField({ name: 'business_name', label: 'Ministry or group name', required: true })}
+        ${renderField({ name: 'participant_names', label: 'Contact person', placeholder: 'Who to reach about this table' })}
+        ${renderField({ kind: 'number', name: 'tables', label: 'Tables', value: 1, min: 1, max: 20, step: 1 })}
+        ${renderField({ kind: 'choice', name: 'category', label: 'Category', value: 'Ministry',
+          options: [{ value: '', label: '— Not categorized —' }, ...VENDOR_CATEGORIES.map((c) => ({ value: c, label: c }))] })}
+        ${renderField({ kind: 'textarea', name: 'staff_notes', label: 'Notes', placeholder: 'Only ever seen here — nothing is emailed for this row.' })}
+        <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Add, fee waived</button></div>
+      </form>
+    </div>
+  </details>`;
+}
 
 export function vendorTable(rows, settings, cfg) {
   const cats = VENDOR_CATEGORIES;
@@ -1394,6 +1446,16 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       fieldPatch.check_date = row.check_date || churchDate();
       patch.payment_status = 'paid';
       patch.amount_paid_cents = before.amount_due_cents || 0;
+    } else if (field === 'confirm_reserve') {
+      // ── TAKING A ROW OFF THE WAITING LIST ─────────────────────────────
+      // This is the ONLY door — a soft-reserved row never leaves the
+      // waitlist by itself, and nothing else on this screen writes the
+      // `waitlisted` column. It does not take payment or generate a link;
+      // it only turns the row back into an ordinary application the
+      // coordinator now works the same way she works every other one —
+      // by email, by phone, or by pointing the vendor at the market page
+      // to pay. A row that was never waitlisted is a harmless no-op.
+      patch.waitlisted = 0;
     } else if (field === 'table_number') {
       patch.table_number = cap(form.get('value'), 40) || null;
     } else if (field === 'payment_status') {
@@ -1461,13 +1523,15 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     await updateRegistration(env, id, patch);
     const beforeState = { table_number: before.table_number, payment_status: before.payment_status,
       amount_paid_cents: before.amount_paid_cents, qty: before.qty,
-      category: row.category, check_no: row.check_no, check_date: row.check_date };
+      category: row.category, check_no: row.check_no, check_date: row.check_date,
+      waitlisted: row.waitlisted };
     const afterRow = marketRowFromRegistration({ ...before, ...patch });
     await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), before.contact_name,
       beforeState,
       { table_number: afterRow.table_number, payment_status: afterRow.payment_status,
         amount_paid_cents: afterRow.amount_paid_cents, qty: afterRow.tables,
-        category: afterRow.category, check_no: afterRow.check_no, check_date: afterRow.check_date });
+        category: afterRow.category, check_no: afterRow.check_no, check_date: afterRow.check_date,
+        waitlisted: afterRow.waitlisted });
 
     if (wantsJson) {
       // The cell that saved gets back the row as it now stands, so the
@@ -1479,6 +1543,51 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         { headers: { 'Content-Type': 'application/json' } });
     }
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
+  }
+
+  // ── A VENDOR ENTERED BY HAND ─────────────────────────────────────────────
+  // See manualAddPanel() above for who this is for. The row it creates is
+  // ordinary in every other way — it appears in the list, sorts, filters,
+  // exports and can be edited exactly like a real application — except that
+  // it starts `payment_status: 'waived'` and asks for nothing, so it never
+  // reaches the unpaid band or the coordinator's chase list.
+  //
+  // ⚠ NEVER COUNTS AGAINST THE CONFIRMED-TABLES PAUSE AS A WAITLIST ROW. A
+  // ministry the coordinator is adding by hand is a decision she has already
+  // made, not a public application arriving after the pause — it is inserted
+  // `waitlisted: 0`, occupying a real table the same as any paid one, so the
+  // "Tables confirmed" tile and the pause itself both count it honestly.
+  if (path === '/market/add' && method === 'POST') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const businessName = cap(form.get('business_name'), 200);
+    if (!businessName) {
+      return new Response('', { status: 302, headers: { Location: '/market?msg=addname' } });
+    }
+    const tables = clampTables(form.get('tables'), 20);
+    const value = {
+      participant_names: cap(form.get('participant_names'), 300) || businessName,
+      business_name: businessName,
+      website_or_social: '', returning_vendor: '', email: '', phone: '',
+      street: '', city: '', state: '', zip: '',
+      product_description: '', sells_food: 0, appliances_power: '', special_requests: '',
+      tables, signature_name: currentUser?.username || 'staff', payment_method: 'card',
+    };
+    const price = priceBreakdown(tables, settings);
+    const args = marketInsertArgs(value, price, [], { waitlisted: false });
+    // Waived, and nothing owed — the whole reason this door exists.
+    args.payment_status = 'waived';
+    args.amount_due_cents = 0;
+    args.amount_paid_cents = 0;
+    const notes = cap(form.get('staff_notes'), 2000);
+    if (notes) args.staff_notes = notes;
+    const category = cleanCategory(form.get('category'));
+    if (category) args.fields = { ...args.fields, category };
+
+    const id = await insertRegistration(env, args);
+    await logAudit(env.DB, currentUser, 'create', 'market_vendor', String(id), businessName,
+      null, { business_name: businessName, tables, payment_status: 'waived', category });
+    return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent(`${businessName} added, fee waived · written to the audit log`) } });
   }
 
   if (path === '/market/delete' && method === 'POST') {
@@ -1511,6 +1620,33 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     });
   }
 
+  // ── SHOWING OR HIDING THE VOLUNTEERS TAB ─────────────────────────────────
+  // `has_volunteers` already existed as a capability flag on `site_events` —
+  // the generic events admin only ever sets it once, at creation, and never
+  // offers a way back. The market's own row was seeded with it ON, and
+  // nothing here ever read it at all: the Volunteers tab showed to every
+  // canMarket account regardless. This is the door that was missing — a real
+  // toggle, same shape and same permission as "Taking vendor applications"
+  // right above it, so the coordinator can turn off the Serve read-out for a
+  // year the market isn't using it without losing anything else on the
+  // screen.
+  //
+  // ⚠ SWITCHED OFF, THE TAB IS ABSENT FROM `TABS`, NOT DISABLED — same rule
+  // every other tab on this screen follows. `active` then falls back to the
+  // first tab this reader can still open, so nobody lands on a dead link.
+  if (path === '/market/volunteers-tab' && method === 'POST') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const enabled = form.getAll('volunteers_enabled').includes('1') ? 1 : 0;
+    await env.DB.prepare("UPDATE site_events SET has_volunteers = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(enabled).run();
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_volunteers_enabled', 'Volunteers tab',
+      { value: settings.volunteersEnabled ? '1' : '0' }, { value: String(enabled) });
+    return new Response('', {
+      status: 302,
+      headers: { Location: '/market?toast=' + encodeURIComponent(enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden — nothing about the market itself changed') },
+    });
+  }
+
   // The seven plain settings — day, hours, table fee, the two processor
   // figures, the coordinator's address — that used to live on the generic
   // Settings screen. Moved here so the coordinator's whole day-to-day picture
@@ -1532,24 +1668,46 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     const feePercent = num(form.get('market_fee_percent'), settings.feePercent);
     const feeFixed = num(form.get('market_fee_fixed'), settings.feeFixed);
     const coordinatorEmail = cap(form.get('market_coordinator_email'), 200);
+    // ── HOW MANY TABLES THE MARKET WILL TAKE, TOTAL ──────────────────────
+    // Two numbers, not one, because "confirmed and paying" and "the market
+    // is entirely full" are different facts. `market_confirmed_cap` (60) is
+    // where a new application stops being taken at face value and starts
+    // being held as a soft reserve instead — no payment link, nothing
+    // charged — until a table frees up or the coordinator confirms one by
+    // hand. `market_hard_cap` (70) is the absolute ceiling PAST the soft
+    // reserve; once confirmed-plus-reserved tables would exceed it, the
+    // application form refuses outright. A blank confirmed cap means
+    // uncapped, same as every other event's registration_cap.
+    const confirmedCap = form.get('market_confirmed_cap')
+      ? Math.max(0, parseInt(form.get('market_confirmed_cap'), 10) || 0) : null;
+    const softReserveOn = form.getAll('market_soft_reserve_enabled').includes('1') ? 1 : 0;
+    const hardCap = form.get('market_hard_cap')
+      ? Math.max(0, parseInt(form.get('market_hard_cap'), 10) || 0) : null;
 
     const before = {
       market_date_label: settings.dateLabel, market_hours_label: settings.hoursLabel,
       market_table_fee: String(settings.tableFee), market_max_tables: String(settings.maxTables),
       market_fee_percent: String(settings.feePercent), market_fee_fixed: String(settings.feeFixed),
       market_coordinator_email: settings.coordinatorEmail,
+      market_confirmed_cap: String(settings.registrationCap), market_soft_reserve_enabled: settings.waitlistEnabled ? '1' : '0',
+      market_hard_cap: String(settings.waitlistCap),
     };
     const after = {
       market_date_label: dateLabel, market_hours_label: hoursLabel,
       market_table_fee: String(tableFee), market_max_tables: String(maxTables),
       market_fee_percent: String(feePercent), market_fee_fixed: String(feeFixed),
       market_coordinator_email: coordinatorEmail,
+      market_confirmed_cap: String(confirmedCap), market_soft_reserve_enabled: String(softReserveOn),
+      market_hard_cap: String(hardCap),
     };
     await env.DB.prepare(
       `UPDATE site_events SET date_label = ?, hours_label = ?, fee_amount = ?, max_qty = ?,
-         fee_percent = ?, fee_fixed = ?, coordinator_email = ?, updated_at = datetime('now'), updated_by = ?
+         fee_percent = ?, fee_fixed = ?, coordinator_email = ?,
+         registration_cap = ?, waitlist_enabled = ?, waitlist_cap = ?,
+         updated_at = datetime('now'), updated_by = ?
        WHERE id = 'christmasmarket'`
-    ).bind(dateLabel, hoursLabel, tableFee, maxTables, feePercent, feeFixed, coordinatorEmail, currentUser?.username || null).run();
+    ).bind(dateLabel, hoursLabel, tableFee, maxTables, feePercent, feeFixed, coordinatorEmail,
+      confirmedCap, softReserveOn, hardCap, currentUser?.username || null).run();
     await logAudit(env.DB, currentUser, 'update', 'settings', 'market_settings', 'Christmas Market settings', before, after);
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
@@ -1633,7 +1791,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       { key: 'vendors', label: 'Vendors', on: canMarket },
       { key: 'pages', label: 'Page & copy', on: canPages },
       { key: 'money', label: 'Money & dates', on: canSettings || canGiving },
-      { key: 'volunteers', label: 'Volunteers', on: canMarket },
+      { key: 'volunteers', label: 'Volunteers', on: canMarket && settings.volunteersEnabled },
       { key: 'photos', label: 'Photos', on: canPhotos },
     ].filter((t) => t.on);
     // ⚠ The default is the first tab this reader can actually open, not a
@@ -1661,8 +1819,14 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     if (active === 'vendors' && canMarket) {
       const rows = await allApplications(env);
 
+      const active = rows.filter((r) => r.payment_status !== 'dropped');
       const counts = {
-        tables: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.tables || 0), 0),
+        tables: active.reduce((a, r) => a + (r.tables || 0), 0),
+        // Confirmed and reserved are the same two sets capacityDecision()
+        // itself weighs — see the settings panel's own two numbers below.
+        confirmedTables: active.filter((r) => !r.waitlisted).reduce((a, r) => a + (r.tables || 0), 0),
+        reserveTables: active.filter((r) => r.waitlisted).reduce((a, r) => a + (r.tables || 0), 0),
+        reserveCount: active.filter((r) => r.waitlisted).length,
         unpaid: rows.filter((r) => r.payment_status === 'unpaid').length,
         // ⚠ "Waiting on a card" and "checks not in yet" are two different
         // problems with two different answers — one is an email, the other is
@@ -1671,7 +1835,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         unpaidCard: rows.filter((r) => r.payment_status === 'unpaid' && r.payment_method !== 'check').length,
         checkOut: rows.filter((r) => checkState(r).pending).length,
         collectedCents: rows.reduce((a, r) => a + (r.amount_paid_cents || 0), 0),
-        askedCents: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.amount_due_cents || 0), 0),
+        askedCents: active.reduce((a, r) => a + (r.amount_due_cents || 0), 0),
       };
 
       const openPanel = panel('Applications', `
@@ -1686,6 +1850,17 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           <button type="submit" class="tlc-btn-primary">Save</button>
         </form>
         <p class="tlc-hint" style="margin-top:12px;">Switched off, the vendor page still explains the market and still lists the coordinator's address — it just stops taking applications and stops asking anybody for money. Nothing already submitted is affected.</p>
+        <form method="POST" action="/market/volunteers-tab" style="margin:16px 0 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <input type="hidden" name="volunteers_enabled" value="0">
+          <label class="tlc-toggle">
+            <input type="checkbox" name="volunteers_enabled" value="1"${settings.volunteersEnabled ? ' checked' : ''}>
+            <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+            <span class="tlc-toggle-label">Volunteers tab</span>
+            <span class="tlc-toggle-state" data-on="Showing" data-off="Hidden">${settings.volunteersEnabled ? 'Showing' : 'Hidden'}</span>
+          </label>
+          <button type="submit" class="tlc-btn-primary">Save</button>
+        </form>
+        <p class="tlc-hint" style="margin-top:8px;">Off hides the Volunteers tab above — it reads live from Serve (serve.timothystl.org) and is worth switching off if the market isn't using Serve for its roster this year. Nothing about the market's own vendors or pages is affected either way.</p>
         <p class="tlc-hint" style="margin-top:8px;">${(() => {
           const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
           if (settings.paymentProvider === 'square') {
@@ -1710,8 +1885,22 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       // because it is the only one of the four that is a job of work. The
       // other three are the state of the market; this one is a list of
       // people the coordinator has to go and find.
+      //
+      // ⚠ THE FIRST TILE SPLITS INTO TWO NUMBERS ONLY ONCE THERE IS A CAP TO
+      // SPLIT AGAINST. A market running uncapped has no "confirmed vs.
+      // reserved" distinction to draw — every table is simply confirmed —
+      // and showing "0 on the waiting list" on a market that has never had
+      // one is the same dead-control failure this admin warns about
+      // elsewhere: a number that can only ever read zero teaches nobody
+      // anything.
+      const tilesFirst = settings.registrationCap
+        ? tile('Tables confirmed', counts.confirmedTables,
+            `of ${settings.registrationCap} before the pause${counts.reserveTables ? ` · ${counts.reserveTables} on the waiting list` : ''}`,
+            counts.confirmedTables >= settings.registrationCap ? 'warn' : undefined)
+        : tile('Tables asked for', counts.tables, `${rows.length} application${rows.length === 1 ? '' : 's'}, dropped-out excluded`);
+
       const tiles = `<div class="tlc-tiles">
-        ${tile('Tables asked for', counts.tables, `${rows.length} application${rows.length === 1 ? '' : 's'}, dropped-out excluded`)}
+        ${tilesFirst}
         ${tile('Recorded as paid', money(counts.collectedCents), `of ${money(counts.askedCents)} asked for`)}
         ${tile('Waiting on a card', counts.unpaidCard, 'Applied online and never finished paying')}
         ${tile('Checks not in yet', counts.checkOut, 'Said they would mail or bring one', 'warn')}
@@ -1735,8 +1924,23 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           </div>`
         : '';
 
+      // Confirmed tables paused at the cap, so this many are a soft
+      // reserve rather than a normal application — no payment link was
+      // ever sent, and nothing is charged until the coordinator confirms
+      // one from its own row (the "Confirm table" button next to its
+      // name), which is what opens it to payment.
+      const reserveBand = counts.reserveCount
+        ? `<div class="alert alert-warn tlc-mkt-band">
+            <strong>${counts.reserveCount} application${counts.reserveCount === 1 ? ' is' : 's are'} on the waiting list</strong>
+            (${counts.reserveTables} table${counts.reserveTables === 1 ? '' : 's'}) — confirmed tables were full when they applied, so no payment was asked for.
+            <button type="button" class="tlc-mkt-bandlink" data-mktfilter="waitlist">Show only those</button>
+          </div>`
+        : '';
+
       alertHtml = msg === 'gone'
-        ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>` : '';
+        ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>`
+        : msg === 'addname'
+        ? `<div class="alert alert-warn">A ministry or group name is needed to add a vendor by hand.</div>` : '';
 
       vendorSection = `<section class="tlc-section tlc-mkt-section" data-mkt="1">
         <header class="tlc-section-head">
@@ -1750,7 +1954,9 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         </header>
         ${tiles}
         ${openPanel}
+        ${manualAddPanel(settings)}
         ${unpaidBand}
+        ${reserveBand}
         ${vendorTable(rows, settings, cfg)}
       </section>`;
     }
@@ -1775,6 +1981,25 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           hint: 'The per-transaction charge on top of the percentage.' })}
         ${renderField({ name: 'market_coordinator_email', label: 'Coordinator email', value: settings.coordinatorEmail,
           hint: 'Where a vendor application is sent, and the address printed on the vendor page for anything the form cannot handle.' })}
+        ${renderField({ kind: 'number', name: 'market_confirmed_cap', label: 'Pause confirmed tables at (blank = uncapped)', value: settings.registrationCap, min: 0, step: 1,
+          hint: 'Once this many tables have been asked for, a new application stops being taken at face value — see Soft reserve below.' })}
+        <label class="tlc-toggle" style="margin:10px 0;">
+          <input type="hidden" name="market_soft_reserve_enabled" value="0">
+          <input type="checkbox" name="market_soft_reserve_enabled" value="1"${settings.waitlistEnabled ? ' checked' : ''}>
+          <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+          <span class="tlc-toggle-label">Soft reserve once the pause is reached</span>
+          <span class="tlc-toggle-state" data-on="On" data-off="Off">${settings.waitlistEnabled ? 'On' : 'Off'}</span>
+        </label>
+        <p class="tlc-hint" style="margin:-4px 0 12px;">A vendor applying past the pause is put on a waiting list instead of being turned away — the application is saved, no payment link is offered and nothing is charged, until the coordinator confirms one by hand from the Vendors tab. Off means the pause above simply refuses anything past it.</p>
+        ${settings.waitlistEnabled ? renderField({ kind: 'number', name: 'market_hard_cap', label: 'Absolute maximum, waiting list included (blank = unbounded)', value: settings.waitlistCap, min: 0, step: 1,
+          hint: 'The market’s own hard ceiling — 70 tables is the most the space can physically hold. Once confirmed plus the waiting list would reach it, the application form refuses outright rather than adding another name to the list.' })
+          // ⚠ HIDDEN, NOT OMITTED, WHEN THE TOGGLE IS OFF. Switching the
+          // reserve off collapses this field out of the form; without a
+          // hidden carrier the route would read no `market_hard_cap` at all
+          // and quietly clear the number back to blank the moment the
+          // coordinator saved with the toggle off — losing the figure she
+          // typed for no reason connected to what she actually changed.
+          : `<input type="hidden" name="market_hard_cap" value="${escapeHtml(String(settings.waitlistCap ?? ''))}">`}
         <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
       </form>
     `) : '';
@@ -1879,7 +2104,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // login. Nothing here writes back, and nothing should: two places editing
     // one roster is two rosters.
     let volunteersSection = '';
-    if (active === 'volunteers' && canMarket) {
+    if (active === 'volunteers' && canMarket && settings.volunteersEnabled) {
       const { vol, volError } = await fetchRoster(env);
 
       const roster = normalizeRoster(vol || {});

@@ -411,6 +411,12 @@ export const DB_INIT_SITE_EVENTS = `CREATE TABLE IF NOT EXISTS site_events (
   registration_open       INTEGER NOT NULL DEFAULT 1,
   registration_cap        INTEGER,
   waitlist_enabled        INTEGER NOT NULL DEFAULT 0,
+  -- The hard ceiling on registration_cap PLUS the waitlist — how far past a
+  -- full cap the waitlist itself is allowed to fill before a sign-up is
+  -- refused outright rather than queued. NULL means the waitlist is
+  -- unbounded (the original behavior, unchanged for every event that never
+  -- sets this). See capacityDecision() below.
+  waitlist_cap            INTEGER,
   -- Passed to GET /api/signups/<slug>/summary on Serve. NULL means this event
   -- has no roster there yet — the Volunteers tab says so rather than guessing.
   volunteer_slug          TEXT,

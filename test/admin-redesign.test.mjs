@@ -4123,6 +4123,195 @@ group('the price is decided by the server, never by the browser');
   ok(!d.payUrl || d.payUrl.includes('amount=9300'), 'the payment link asks for the recomputed figure');
 }
 
+// ── ONLY SO MANY TABLES ──────────────────────────────────────────────────────
+// 60 confirmed, then a soft reserve up to 70, then the market is genuinely
+// full. Driven through the real /api/market/apply route rather than only the
+// pure capacityDecision() unit — what matters here is that the two counts the
+// route computes against the live table (confirmed, and confirmed+reserved)
+// are the RIGHT two counts, and that a soft-reserved row really gets no
+// payment link.
+group('confirmed tables pause at the cap, then a soft reserve, then the market is full');
+{
+  const { db, env } = await boot();
+  db.prepare("UPDATE site_events SET registration_cap = 3, waitlist_enabled = 1, waitlist_cap = 5 WHERE id = 'christmasmarket'").run();
+
+  // Three one-table applications fill the confirmed pause exactly.
+  for (const email of ['a@example.com', 'b@example.com', 'c@example.com']) {
+    const res = await applyAsVendor(env, { email, tables: '1' });
+    eq(res.status, 200, `${email} is accepted while under the pause`);
+    const d = await res.json();
+    eq(d.waitlisted, false, `${email} is an ordinary application, not a reserve`);
+  }
+  const confirmedCount = db.prepare(
+    "SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket' AND waitlisted = 0"
+  ).get().n;
+  eq(confirmedCount, 3, 'all three landed as ordinary, confirmed rows');
+
+  // A fourth application, past the pause but inside the hard cap, is a soft
+  // reserve: saved, no payment link, nothing charged.
+  const fourth = await applyAsVendor(env, { email: 'd@example.com', tables: '1' });
+  eq(fourth.status, 200, 'a fourth application past the pause is still accepted');
+  const dFourth = await fourth.json();
+  eq(dFourth.waitlisted, true, 'and marked as a soft reserve');
+  eq(dFourth.payUrl, '', 'with no payment link at all');
+  const fourthRow = db.prepare("SELECT * FROM site_event_registrations WHERE contact_email = 'd@example.com'").get();
+  eq(fourthRow.waitlisted, 1, 'stored as waitlisted');
+  eq(fourthRow.payment_status, 'unpaid', 'still unpaid — nothing was charged, but the debt is recorded');
+  ok(fourthRow.amount_due_cents > 0, 'and what it would owe once confirmed is still on the row');
+
+  // A fifth lands exactly on the hard cap (5 of 5) — still a reserve.
+  const fifth = await applyAsVendor(env, { email: 'e@example.com', tables: '1' });
+  eq((await fifth.json()).waitlisted, true, 'a fifth application lands exactly on the hard cap and is still reserved');
+
+  // A sixth would exceed the hard cap outright — refused, not queued.
+  const sixth = await applyAsVendor(env, { email: 'f@example.com', tables: '1' });
+  eq(sixth.status, 409, 'a sixth application, past the hard cap, is refused outright');
+  const dSixth = await sixth.json();
+  ok(dSixth.error && /full/i.test(dSixth.error), 'and told plainly that the market is full');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE contact_email = 'f@example.com'").get().n, 0,
+    'nothing is stored for a refused application');
+
+  // The coordinator can see and act on a reserved row from the Vendors tab.
+  const { cookie } = signIn(db);
+  const listBody = await (await call(env, '/market', { cookie })).text();
+  has(listBody, 'Waiting list', 'the reserved row carries the waiting-list badge');
+  has(listBody, 'data-mktfilter="waitlist"', 'and the filter that isolates them');
+  has(listBody, 'Tables confirmed', 'and the capacity tile now speaks in confirmed/paused terms');
+
+  const dRow = db.prepare("SELECT id FROM site_event_registrations WHERE contact_email = 'd@example.com'").get();
+  const confirm = await call(env, '/market/update', {
+    cookie, method: 'POST', accept: 'application/json',
+    form: { id: String(dRow.id), field: 'confirm_reserve', value: '' },
+  });
+  eq(confirm.status, 200, 'confirming a reserved row off the waiting list succeeds');
+  eq(JSON.parse(await confirm.text()).row.waitlisted, false, 'and answers that it is no longer reserved');
+  eq(db.prepare('SELECT waitlisted FROM site_event_registrations WHERE id = ?').get(dRow.id).waitlisted, 0,
+    'the database agrees — the row is now an ordinary confirmed application');
+  eq(db.prepare('SELECT payment_status FROM site_event_registrations WHERE id = ?').get(dRow.id).payment_status, 'unpaid',
+    'confirming does not itself take payment — the coordinator still collects it the ordinary way');
+
+  // Only market_manage may confirm a row off the waiting list.
+  const { cookie: settingsOnly } = signIn(db, ['settings_manage'], 'office2');
+  const refusedConfirm = await call(env, '/market/update', {
+    cookie: settingsOnly, method: 'POST', accept: 'application/json',
+    form: { id: String(dRow.id), field: 'confirm_reserve', value: '' },
+  });
+  eq(refusedConfirm.status, 403, 'settings_manage alone cannot touch the vendor list');
+}
+
+group('the settings panel is where the two caps are set, and only settings_manage can set them');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const money = await (await call(env, '/market?tab=money', { cookie })).text();
+  has(money, 'Pause confirmed tables at', 'the confirmed pause is on the Money & dates tab');
+  has(money, 'Soft reserve once the pause is reached', 'with the toggle beside it');
+
+  const save = await call(env, '/market/settings', { cookie, method: 'POST', form: {
+    market_date_label: 'Saturday, Dec 12', market_hours_label: '10:00 am – 5:00 pm',
+    market_table_fee: '30', market_max_tables: '9', market_fee_percent: '2.9', market_fee_fixed: '0.30',
+    market_coordinator_email: 'marla@example.com',
+    market_confirmed_cap: '60', market_soft_reserve_enabled: '1', market_hard_cap: '70',
+  } });
+  eq(save.status, 302, 'saved');
+  eq(marketEvent(db).registration_cap, 60, 'the confirmed pause is stored on the event’s own registration_cap');
+  eq(marketEvent(db).waitlist_enabled, 1, 'the soft reserve toggle is stored');
+  eq(marketEvent(db).waitlist_cap, 70, 'and the absolute maximum is stored too');
+
+  const moneyOn = await (await call(env, '/market?tab=money', { cookie })).text();
+  has(moneyOn, 'id="fld-market_hard_cap"', 'while the reserve is on, the hard-cap field is a real, visible number input');
+
+  // Toggling the reserve off — a real browser posts whatever `market_hard_cap`
+  // was last in the DOM, which is the number the field above was showing.
+  // The route must keep it rather than treat an untouched save as "clear it".
+  const toggleOff = await call(env, '/market/settings', { cookie, method: 'POST', form: {
+    market_date_label: 'Saturday, Dec 12', market_hours_label: '10:00 am – 5:00 pm',
+    market_table_fee: '30', market_max_tables: '9', market_fee_percent: '2.9', market_fee_fixed: '0.30',
+    market_coordinator_email: 'marla@example.com', market_confirmed_cap: '60', market_hard_cap: '70',
+  } });
+  eq(toggleOff.status, 302, 'saved with the reserve switched off');
+  eq(marketEvent(db).waitlist_enabled, 0, 'the reserve is now off');
+  eq(marketEvent(db).waitlist_cap, 70, 'and the hard cap the coordinator had set is NOT lost by toggling the reserve off');
+
+  // Now that the reserve is off, a re-load replaces the number field with a
+  // HIDDEN carrier of that same value — so a coordinator who saves some
+  // OTHER field on this screen (never touching the reserve at all) still
+  // posts `market_hard_cap`, and it still must not be read as "clear it".
+  const moneyOff = await (await call(env, '/market?tab=money', { cookie })).text();
+  lacks(moneyOff, 'id="fld-market_hard_cap"', 'the visible number field is gone now that the reserve is off');
+  const hiddenMatch = moneyOff.match(/type="hidden" name="market_hard_cap" value="(\d*)"/);
+  ok(hiddenMatch, 'a hidden carrier still exists for the field, so a browser posts it regardless');
+  eq(hiddenMatch && hiddenMatch[1], '70', 'and it still carries the number that was saved, not blank');
+
+  const untouchedSave = await call(env, '/market/settings', { cookie, method: 'POST', form: {
+    market_date_label: 'Saturday, Dec 12', market_hours_label: '10:00 am – 5:00 pm',
+    market_table_fee: '30', market_max_tables: '9', market_fee_percent: '2.9', market_fee_fixed: '0.30',
+    market_coordinator_email: 'marla2@example.com', market_confirmed_cap: '60',
+    market_hard_cap: hiddenMatch[1],
+  } });
+  eq(untouchedSave.status, 302, 'a later, unrelated save (a new coordinator email) still succeeds');
+  eq(marketEvent(db).waitlist_cap, 70, 'and the hard cap survives it too, carried by the hidden field');
+
+  const { cookie: marketOnly } = signIn(db, ['market_manage'], 'marla4');
+  const refused = await call(env, '/market/settings', {
+    cookie: marketOnly, method: 'POST', form: { market_confirmed_cap: '1' },
+  });
+  eq(refused.status, 403, 'market_manage alone cannot change the caps — that stays an office/pastor decision');
+}
+
+group('a ministry can be entered by hand, fee waived, taking no public application');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The panel itself defaults the Category field to Ministry — this IS a
+  // ministry-only door, and picking that off a dropdown every single time
+  // would be one more click for the least-used form on the screen.
+  const panelBody = await (await call(env, '/market', { cookie })).text();
+  has(panelBody, '<option value="Ministry" selected>Ministry</option>', 'the manual-add form defaults its Category field to Ministry');
+
+  const add = await call(env, '/market/add', {
+    cookie, method: 'POST',
+    form: { business_name: 'Timothy MDO', participant_names: 'Front office', tables: '2', category: 'Ministry', staff_notes: 'No charge — MDO' },
+  });
+  eq(add.status, 302, 'the ministry is added');
+
+  const row = db.prepare("SELECT * FROM site_event_registrations WHERE event_id='christmasmarket'").get();
+  ok(row, 'a real row was created, on the same table every application lands on');
+  eq(row.payment_status, 'waived', 'the fee is waived automatically');
+  eq(row.amount_due_cents, 0, 'nothing is asked for');
+  eq(row.amount_paid_cents, 0, 'nothing is recorded as paid, either — there is nothing to reconcile');
+  eq(row.qty, 2, 'with the tables asked for');
+  eq(row.waitlisted, 0, 'and it is never a soft reserve — a staff decision takes a real table immediately');
+  eq(JSON.parse(row.fields_json).category, 'Ministry', 'and its category is Ministry, not one of the craft categories');
+
+  const body = await (await call(env, '/market', { cookie })).text();
+  has(body, 'Timothy MDO', 'it appears on the coordinator’s list like any other row');
+  has(body, 'Fee waived', 'marked waived, not unpaid');
+  lacks(body, 'no payment recorded', 'and is never counted among the unpaid ones the coordinator has to chase');
+
+  // A name is required — nothing is created without one.
+  const blank = await call(env, '/market/add', { cookie, method: 'POST', form: { tables: '1' } });
+  eq(blank.status, 302, 'a blank name does not error, it redirects with a message');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket'").get().n, 1,
+    'and nothing extra was created');
+
+  // A manually-added table counts toward the confirmed pause, same as a paid
+  // one — it really is occupying a table at the market.
+  db.prepare("UPDATE site_events SET registration_cap = 2, waitlist_enabled = 1, waitlist_cap = 10 WHERE id = 'christmasmarket'").run();
+  const res = await applyAsVendor(env, { email: 'past-mdo@example.com', tables: '1' });
+  eq((await res.json()).waitlisted, true,
+    'with MDO’s 2 tables already confirmed and a cap of 2, the next public application is a soft reserve');
+
+  // Only market_manage may add a vendor by hand.
+  const { cookie: settingsOnly } = signIn(db, ['settings_manage'], 'office3');
+  const refused = await call(env, '/market/add', {
+    cookie: settingsOnly, method: 'POST', form: { business_name: 'Should not land', tables: '1' },
+  });
+  eq(refused.status, 403, 'settings_manage alone cannot add a vendor');
+}
+
 group('an application with a required field missing is refused with a sentence');
 {
   const { db, env } = await boot();
@@ -4641,6 +4830,56 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
     const noKey = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
     has(noKey, 'CHMS_INTAKE_API_KEY is not set on this Worker', 'an unset key says so, rather than a generic failure');
   } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
+}
+
+// ── THE VOLUNTEERS TAB HAS A REAL OFF SWITCH ─────────────────────────────────
+// `has_volunteers` already existed as a column on `site_events` and was
+// simply never read by the market's own tab list — every canMarket account
+// saw the Volunteers tab regardless. This is the door: a toggle in the
+// Vendors tab's own Applications panel (same shape and permission as
+// "Taking vendor applications" beside it), so a year the market isn't using
+// Serve for its roster, the tab can be hidden without losing anything else.
+group('the Volunteers tab can be switched off, and back on');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const on = await (await call(env, '/market', { cookie })).text();
+  has(on, '>Volunteers</a>', 'showing by default — the market’s own row was seeded with it on');
+  has(on, 'Volunteers tab', 'and the toggle for it is on the Vendors tab, in the Applications panel');
+
+  const off = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: {} });
+  eq(off.status, 302, 'switching it off redirects back to the screen');
+  eq(decodeURIComponent(off.headers.get('Location')).includes('is hidden'), true, 'and the toast says so');
+  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0,
+    'the market’s own row is updated — has_volunteers, not a second field');
+
+  const hiddenBody = await (await call(env, '/market', { cookie })).text();
+  lacks(hiddenBody, '>Volunteers</a>', 'the tab is gone — not disabled, absent, same as every other tab on this screen');
+
+  // ⚠ Asking for it by address must not hand it over anyway.
+  const sneak = await (await call(env, '/market?tab=volunteers', { cookie })).text();
+  lacks(sneak, 'Manage shifts in Serve', 'the volunteers section itself is never built once the tab is hidden');
+  lacks(sneak, 'Who is covering the market', 'nor its own purpose line');
+  has(sneak, 'tlc-tile-num', 'and the address falls back to Vendors, the first tab still open to this reader');
+
+  // Nothing about the market itself — its vendors, its pages, its capacity
+  // settings — moved when the tab was hidden.
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_events WHERE id='christmasmarket'").get().n, 1, 'the event row is untouched otherwise');
+
+  // Switching it back on works the same way.
+  const back = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: { volunteers_enabled: '1' } });
+  eq(decodeURIComponent(back.headers.get('Location')).includes('showing again'), true, 'the toast says it is back');
+  const backBody = await (await call(env, '/market', { cookie })).text();
+  has(backBody, '>Volunteers</a>', 'and the tab really is');
+
+  // Only market_manage may touch this — same permission as the applications
+  // toggle right beside it in the same panel.
+  const { cookie: pagesOnly } = signIn(db, ['pages_edit'], 'writer2');
+  const refused = await call(env, '/market/volunteers-tab', { cookie: pagesOnly, method: 'POST', form: { volunteers_enabled: '0' } });
+  eq(refused.status, 403, 'pages_edit alone cannot touch it');
+  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 1,
+    'and the setting is unchanged by the refused attempt');
 }
 
 group('the vendor list is gated on its own permission');
