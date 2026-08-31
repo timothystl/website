@@ -173,6 +173,63 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The toggle now closes sign-ups in Serve too, not just the local tab (2026-08-31)
+
+Dinger, once told the toggle below was display-only: *"i see that i can also
+control that at https://connect.timothystl.org/#volunteers"* — then, asked
+whether the toggle should reach through and control that too: *"can we make it
+control that in connect?"*
+
+**The chms repo already had the real flag — `serve_events.hidden`, the same
+column the Scheduler screen's own checkbox at connect.timothystl.org/#volunteers
+already writes, and the same one `handleSignup()` already refuses a public
+sign-up against ("Registrations for this event are currently on hold").** It
+just had no door onto it from outside that app. The read-only summary route
+(`GET /api/signups/christmasmarket/summary`, see "Christmas Market signup
+summary" in the chms repo's own NOTES.md, MKT1) already reported `open:
+!ev.hidden`; there was simply no write twin.
+
+- **`chms` gained `POST /api/signups/christmasmarket/toggle`** (`{ "open":
+  true|false }`), in `src/api-scheduler.js` beside `handleChristmasMarketSummary`
+  — same event lookup (slug `christmasmarket`, falling back to name `Christmas
+  Market`), same shared-secret auth (`X-Intake-Key` / `CHMS_INTAKE_API_KEY`,
+  already configured on both Workers for the summary route), same
+  server-to-server-only shape (no CORS). Routed above the `/api/*` Breeze-proxy
+  catch-all and excluded from `isSchedCorsPath()`, same as the summary route.
+  A missing Christmas Market event answers 404 rather than a silent no-op or a
+  fabricated row. See that repo's own NOTES.md (MKT2).
+- **This repo's own `setSignupsOpen(env, open)`** (`admin/market.js`, beside
+  `fetchRoster()`) is the write twin of the read Volunteers tab already used —
+  same `env.VOLUNTEER_WORKER` service binding (not a hostname `fetch()`, for
+  the identical reason `fetchRoster()`'s own comment gives: a plain fetch from
+  inside this Worker to serve.timothystl.org answered 404 persistently where
+  the service binding never did), same `X-Intake-Key` header, same 4-second
+  timeout. Returns `{ ok, error }` rather than throwing.
+- **`POST /market/volunteers-tab` now does both in one save**: it still writes
+  the local `has_volunteers` flag (below) AND calls `setSignupsOpen()` with the
+  same boolean. ⚠ **The remote call is best-effort and never blocks the local
+  save** — the same resilience every other cross-app call in this admin
+  already has — but unlike a stale roster tab, a failed WRITE here means the
+  coordinator's actual intent silently did not happen on the side that
+  matters, so the toast says exactly which half succeeded: *"The Volunteers
+  tab is hidden — but Serve was not updated: \<reason\>"* rather than
+  implying both sides are now in sync when they are not.
+- **The control is relabeled to say what it now does**: "Volunteer sign-ups",
+  Open/Closed (was "Volunteers tab", Showing/Hidden) — because it is no longer
+  only a display switch, and the hint text says outright that this is the same
+  thing Connect's Scheduler screen controls, so the coordinator does not have
+  to open a second application to pause the roster for the year.
+
+Run: the rewritten `the Volunteers tab can be switched off, and back on` group
+in `node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1684) — stubs `globalThis.fetch`, asserts the real chms route is called with
+the shared secret and the matching boolean on both open and close, and that a
+failed remote call still lets the local save through while the toast says so
+honestly rather than claiming sync it didn't achieve. `node admin/market.test.mjs`
+(357, 14 new) covers `setSignupsOpen()` directly — no key configured (never
+even makes the request), a real request's URL/method/header/body, a 404 (no
+event yet in Serve), any other failing status, and an unreachable host.
+
 ### The hero banner gets a finer photo position and a color of its own (v5.51.0, 2026-08-31)
 
 Dinger, on the Christmas Market hero, whose banner is essentially navy-on-navy
@@ -240,6 +297,13 @@ selected, and its Banner-color chip clicked, with the computed
 changes what paints.
 
 ### The Volunteers tab can be switched off (2026-08-31)
+
+⚠ **Extended the same day — see the entry above.** The toggle described below
+was originally display-only (it hid the local read-only tab and touched
+nothing on Serve); it now also opens/closes sign-ups in Serve itself. Kept
+here as the record of why the toggle exists at all — the reasoning about
+where it sits (the Vendors tab, which never disappears) and why a hidden tab
+is absent rather than disabled is unchanged.
 
 Dinger: *"now for the volunteering portion of the christmas market can we have
 a toggle to turn that off?"*
