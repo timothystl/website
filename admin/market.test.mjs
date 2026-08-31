@@ -22,6 +22,7 @@ import {
   VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState,
   parseClock, parseShiftLabel, fmtClock, fmtRange, fmtDay,
   normalizeRoster, jobsFor, slotsFor, peopleFor, volunteerCsvRows, volunteerCsv,
+  setSignupsOpen,
 } from './market.js';
 import { capacityDecision } from './events.js';
 
@@ -741,6 +742,69 @@ group('the confirmation emails say “waiting list”, not “pay now”, for a 
   const coordOrdinary = coordinatorEmailHtml({ ...vendor, product_description: 'Ornaments', signature_name: 'Sue Lin' },
     { totalCents: 6210 });
   ok(!coordOrdinary.includes('Soft reserve'), 'an ordinary application carries no such notice — waitlisted defaults to false');
+}
+
+group('setSignupsOpen calls chms with the shared secret and the right boolean');
+{
+  const realFetch = globalThis.fetch;
+
+  // No key configured on this Worker at all: never even tries the network.
+  {
+    let called = false;
+    globalThis.fetch = async () => { called = true; return new Response('{}'); };
+    const r = await setSignupsOpen({}, false);
+    eq(r.ok, false, 'refused without a network call');
+    ok(r.error.includes('CHMS_INTAKE_API_KEY'), 'and says which secret is missing');
+    eq(called, false, 'a request Serve would only 401 anyway is never made');
+  }
+
+  // A real request: the right URL, header and body.
+  {
+    let seen = null;
+    globalThis.fetch = async (u, init) => {
+      const req = (typeof Request !== 'undefined' && u instanceof Request) ? u : null;
+      seen = {
+        url: req ? req.url : u,
+        method: req ? req.method : (init && init.method),
+        key: req ? req.headers.get('X-Intake-Key') : (init && init.headers && init.headers['X-Intake-Key']),
+        body: req ? await req.clone().text() : (init && init.body),
+      };
+      return new Response(JSON.stringify({ open: true }), { status: 200 });
+    };
+    const r = await setSignupsOpen({ CHMS_INTAKE_API_KEY: 'k' }, true);
+    eq(r.ok, true, 'a 200 from chms reads as success');
+    eq(seen.url, 'https://serve.timothystl.org/api/signups/christmasmarket/toggle', 'the real write route');
+    eq(seen.method, 'POST', 'as a POST');
+    eq(seen.key, 'k', 'carrying the shared secret');
+    eq(seen.body, JSON.stringify({ open: true }), 'and the boolean, exactly');
+  }
+
+  // A 404 — no Christmas Market event yet in Serve — gets its own message,
+  // not a bare "Serve answered 404."
+  {
+    globalThis.fetch = async () => new Response('{}', { status: 404 });
+    const r = await setSignupsOpen({ CHMS_INTAKE_API_KEY: 'k' }, false);
+    eq(r.ok, false, 'a 404 is not success');
+    ok(r.error.includes('No Christmas Market event'), 'and says plainly there is nothing to toggle yet');
+  }
+
+  // Any other failure status.
+  {
+    globalThis.fetch = async () => new Response('{}', { status: 500 });
+    const r = await setSignupsOpen({ CHMS_INTAKE_API_KEY: 'k' }, false);
+    eq(r.ok, false, 'a 500 is not success');
+    ok(r.error.includes('500'), 'and names the status');
+  }
+
+  // Unreachable entirely.
+  {
+    globalThis.fetch = async () => { throw new Error('boom'); };
+    const r = await setSignupsOpen({ CHMS_INTAKE_API_KEY: 'k' }, false);
+    eq(r.ok, false, 'a network failure is not success');
+    ok(r.error.includes('boom'), 'and the underlying reason is in the message');
+  }
+
+  globalThis.fetch = realFetch;
 }
 
 console.log(`\nmarket.test.mjs: ${pass} passed, ${fail} failed`);

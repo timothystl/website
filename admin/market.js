@@ -1289,6 +1289,43 @@ if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serv
   return { vol, volError };
 }
 
+// ── OPENING OR CLOSING SIGN-UPS IN SERVE ─────────────────────────────────────
+// The write twin of fetchRoster() above — same service binding, same shared
+// secret, same reasoning for using `env.VOLUNTEER_WORKER` over a hostname
+// fetch. Calls chms's `POST /api/signups/christmasmarket/toggle`, which flips
+// `serve_events.hidden` for the Christmas Market event — the SAME column the
+// Scheduler screen at connect.timothystl.org/#volunteers already writes, and
+// the same one the public sign-up route already refuses new sign-ups against.
+// This is the one other door onto it, not a second idea of what "closed" means.
+//
+// ⚠ Returns `{ ok, error }` rather than throwing, and the caller decides what
+// to do with a failure — this Worker's own `has_volunteers` toggle (the tab's
+// visibility here) must still save even when Serve cannot be reached, the same
+// resilience every other cross-app call in this admin already has. The
+// difference from fetchRoster() is that this one is a WRITE, so unlike a
+// stale roster tab, a failure here means the coordinator's actual intent —
+// "close it" — silently did not happen on the side that matters. The caller
+// is expected to say so.
+export async function setSignupsOpen(env, open) {
+  const intakeKey = env.CHMS_INTAKE_API_KEY || '';
+  if (!intakeKey) return { ok: false, error: 'CHMS_INTAKE_API_KEY is not set on this Worker.' };
+  try {
+    const req = new Request('https://serve.timothystl.org/api/signups/christmasmarket/toggle', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Intake-Key': intakeKey },
+      body: JSON.stringify({ open: !!open }),
+    });
+    const res = env.VOLUNTEER_WORKER
+      ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+      : await fetch(req, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) return { ok: true };
+    if (res.status === 404) return { ok: false, error: 'No Christmas Market event exists yet in Serve to open or close.' };
+    return { ok: false, error: `Serve answered ${res.status}.` };
+  } catch (e) {
+    return { ok: false, error: `Serve could not be reached: ${e.message || e}` };
+  }
+}
+
 export async function handleMarketRoutes(request, env, path, method, currentUser, url, badges = {}) {
   if (path !== '/market' && !path.startsWith('/market/')) return null;
 
@@ -1641,9 +1678,20 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     await env.DB.prepare("UPDATE site_events SET has_volunteers = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(enabled).run();
     await logAudit(env.DB, currentUser, 'update', 'settings', 'market_volunteers_enabled', 'Volunteers tab',
       { value: settings.volunteersEnabled ? '1' : '0' }, { value: String(enabled) });
+
+    // ── ALSO OPENS OR CLOSES SIGN-UPS IN SERVE ─────────────────────────
+    // One control, two places — see setSignupsOpen() above. Best-effort: the
+    // local toggle above has already saved, so a Serve outage must not read
+    // as "nothing happened." What it must NOT do is claim the two are in sync
+    // when they are not — the toast says exactly which half succeeded.
+    const remote = await setSignupsOpen(env, enabled === 1);
+    const localMsg = enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden';
+    const toast = remote.ok
+      ? `${localMsg}, and sign-ups are ${enabled === 1 ? 'open' : 'closed'} in Serve too`
+      : `${localMsg} — but Serve was not updated: ${remote.error}`;
     return new Response('', {
       status: 302,
-      headers: { Location: '/market?toast=' + encodeURIComponent(enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden — nothing about the market itself changed') },
+      headers: { Location: '/market?toast=' + encodeURIComponent(toast) },
     });
   }
 
@@ -1855,12 +1903,12 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           <label class="tlc-toggle">
             <input type="checkbox" name="volunteers_enabled" value="1"${settings.volunteersEnabled ? ' checked' : ''}>
             <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
-            <span class="tlc-toggle-label">Volunteers tab</span>
-            <span class="tlc-toggle-state" data-on="Showing" data-off="Hidden">${settings.volunteersEnabled ? 'Showing' : 'Hidden'}</span>
+            <span class="tlc-toggle-label">Volunteer sign-ups</span>
+            <span class="tlc-toggle-state" data-on="Open" data-off="Closed">${settings.volunteersEnabled ? 'Open' : 'Closed'}</span>
           </label>
           <button type="submit" class="tlc-btn-primary">Save</button>
         </form>
-        <p class="tlc-hint" style="margin-top:8px;">Off hides the Volunteers tab above — it reads live from Serve (serve.timothystl.org) and is worth switching off if the market isn't using Serve for its roster this year. Nothing about the market's own vendors or pages is affected either way.</p>
+        <p class="tlc-hint" style="margin-top:8px;">Two things at once: it hides the Volunteers tab above, AND it opens or closes sign-ups on Serve (serve.timothystl.org) for the market — the same thing the Scheduler screen at connect.timothystl.org/#volunteers controls, so you don't need to open a second application to pause it. Nothing about the market's own vendors, pages or payments is affected either way.</p>
         <p class="tlc-hint" style="margin-top:8px;">${(() => {
           const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
           if (settings.paymentProvider === 'square') {
