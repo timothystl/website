@@ -174,7 +174,18 @@ export const BANNER_HEIGHTS = [
 // How much dark is laid over the photograph. The gradient shape is fixed and
 // only its top stop moves, because the BOTTOM stop is what keeps the headline
 // legible and is not somebody's decision to weaken.
+// ⚠ 'none' IS A FOURTH, SEPARATE STATE — NOT A FOURTH ALPHA. Reported: with a
+// photograph that is already dark, none of Light/Medium/Heavy read as doing
+// anything at all, because the veil is the same navy the photo already was.
+// 'none' does not lower the top stop's alpha further (it was already the
+// lowest one available); it switches the WHOLE overlay off, bottom stop
+// included, so the raw photograph shows through — see the render branch.
+// That is a real trade the office is making on purpose, not the "bottom
+// stop never weakens" rule broken: that rule is about the three shaded
+// levels staying legible relative to EACH OTHER, not about there being no
+// way to turn the overlay off.
 export const VEILS = [
+  { key: 'none', label: 'None', top: 0 },
   { key: 'light', label: 'Light', top: 0.5 },
   { key: 'medium', label: 'Medium', top: 0.72 },
   { key: 'heavy', label: 'Heavy', top: 0.88 },
@@ -215,12 +226,51 @@ export const IMG_POSITIONS = [
 // for every color here — see the comment on .tlcb-hero::before. Only the top
 // stop takes this color, the same "one stop moves, one is not somebody's
 // decision to weaken" rule "Photo shading" already follows.
+//
+// ⚠ TWO OF THE SEVEN ARE LIGHT FIELDS, AND CARRY THEIR OWN INK. Reported:
+// every option so far read as "still dark" — true, because the hero's
+// headline has been hardcoded white since the block shipped, which is only
+// ever legible on a dark field. Gold and Parchment are genuinely light, so
+// each carries its own `title`/`eyebrow`/`sub` ink — reusing pairs already
+// established elsewhere (Gold's is TONES' own Gold pairing; Parchment's is
+// the Paper/White 1b fields' own head/eyebrow ink, from the BG palette
+// above) rather than inventing a third contrast pair to check by hand. The
+// five dark entries carry none of that — they fall through to the ORIGINAL
+// white title / gold eyebrow / translucent-white subtitle, byte-for-byte —
+// see wrapperVars().
+// ⚠ Ink follows the color CHOSEN, not whether a photo is behind it — the
+// same "picking Gold recolors an empty hero" reasoning `bg` already
+// follows. A photograph's own brightness is not something this can see, so
+// pairing a light color with a photo and shading is the office's own call;
+// the inspector note says so.
 export const HERO_COLORS = [
-  { key: 'navy', label: 'Navy', bg: '#1E2D4A', rgb: '30,45,74' },
-  { key: 'ink', label: 'Ink', bg: '#101B2E', rgb: '16,27,46' },
-  { key: 'moss', label: 'Moss', bg: '#4A5E3A', rgb: '74,94,58' },
-  { key: 'teal', label: 'Teal', bg: '#2E7EA6', rgb: '46,126,166' },
-  { key: 'slate', label: 'Slate', bg: '#3A4E5C', rgb: '58,78,92' },
+  { key: 'navy', label: 'Navy', bg: '#1E2D4A', rgb: '30,45,74', dark: true },
+  { key: 'ink', label: 'Ink', bg: '#101B2E', rgb: '16,27,46', dark: true },
+  { key: 'moss', label: 'Moss', bg: '#4A5E3A', rgb: '74,94,58', dark: true },
+  { key: 'teal', label: 'Teal', bg: '#2E7EA6', rgb: '46,126,166', dark: true },
+  { key: 'slate', label: 'Slate', bg: '#3A4E5C', rgb: '58,78,92', dark: true },
+  // The site's own Gold, at the exact TONES pairing already proven readable
+  // (bg #C9973A / ink #1B1608) — one ink for eyebrow, title and subtitle
+  // alike, the same "gold ink is for EVERYTHING" rule the BG palette's own
+  // Gold field already follows.
+  { key: 'gold', label: 'Gold', bg: '#C9973A', rgb: '201,151,58', dark: false,
+    title: '#1B1608', eyebrow: '#1B1608', sub: 'rgba(27,22,8,.78)' },
+  // The site's own Parchment, with the Paper/White 1b fields' own two-tone
+  // ink (a near-black navy heading, a warm terracotta eyebrow).
+  { key: 'parchment', label: 'Parchment', bg: '#FBF8F3', rgb: '251,248,243', dark: false,
+    title: '#101B2E', eyebrow: '#B44A2E', sub: 'rgba(16,27,46,.72)' },
+];
+
+// What a countdown counts down to. Shared between the standalone Countdown
+// block (all three) and Photo banner's own countdown switch (Automatic and
+// A date I set only — it has no post-picker, see its own choices entry).
+// 'post' is offered only where a real post picker exists to go with it; a
+// bare label with nothing to select from would be a control that looks
+// live and does nothing, which this editor's own rule already warns against.
+export const COUNTDOWN_SOURCES = [
+  { key: 'auto', label: 'Automatic' },
+  { key: 'post', label: 'A specific post' },
+  { key: 'custom', label: 'A date I set' },
 ];
 
 // ── THE SECOND LAYER OVER A HERO ─────────────────────────────────────────────
@@ -1206,11 +1256,12 @@ export const BLOCK_DEFS = {
   photobanner: {
     label: 'Photo banner', glyph: '◧',
     align: true, photo: true, subtitle: true, richSubtitle: true, banner: true, infoCard: true,
+    customCountdown: true,
     defaults: {
       eyebrow: 'Happening next', title: 'The thing everyone should know about.',
       subtitle: 'Where it is, when it starts, and who it is for.',
       spaceAbove: 0, spaceBelow: 0, bg: 6, ink: 3,
-      bannerHeight: 'mid', veil: 'medium', countdown: true, pulse: true,
+      bannerHeight: 'mid', veil: 'medium', countdown: true, countdownSrc: 'auto', customAt: '', pulse: true,
     },
     choices: [
       { key: 'bannerHeight', label: 'Banner height', def: 'mid', options: BANNER_HEIGHTS,
@@ -1219,10 +1270,15 @@ export const BLOCK_DEFS = {
         note: 'How much dark is laid over the photograph so the white headline stays readable. Heavier if the picture is bright or busy. With no photo there is nothing to shade and this does nothing.' },
       { key: 'glow', label: 'Warm glow', def: 'clay', options: GLOWS,
         note: 'A soft warm light from one corner. It is what keeps a banner from reading gray \u2014 with a photograph and without one. Clay on news and sermons, gold on worship and ministries, green on the values page.' },
+      // \u26a0 ADDITIVE, ON PURPOSE. 'auto' is the ORIGINAL and only behavior
+      // this switch ever had, so an untouched banner (or one saved before
+      // this existed) counts down exactly as it always did.
+      { key: 'countdownSrc', label: 'Counts down to', def: 'auto', options: COUNTDOWN_SOURCES.filter((s) => s.key !== 'post'),
+        note: 'Automatic follows whichever dated News & Events post is soonest. Pick "A date I set" to count down to something with no post behind it \u2014 the table-fee deadline, say \u2014 using the date field below. Only matters while Countdown, below, is switched on.' },
     ],
     switches: [
       { key: 'countdown', label: 'Countdown', def: true,
-        note: 'Counts down to the next dated event in News & Events, and moves itself on to the following one when that passes. Nothing to reset, and nothing shows if there is no upcoming event.' },
+        note: 'Ticks down to whatever "Counts down to" above points at, and moves itself on to the next one when that passes (Automatic only). Nothing shows if there is nothing to count down to.' },
       { key: 'pulse', label: 'Pulsing dot', def: true,
         note: 'The small gold dot beside the label. It holds still for anyone whose device asks for reduced motion.' },
     ],
@@ -1257,12 +1313,15 @@ export const BLOCK_DEFS = {
   countdown: {
     label: 'Countdown', glyph: '\u23F1',
     align: true,
-    defaults: { eyebrow: 'Coming up', spaceAbove: 24, spaceBelow: 24, newsId: '', pulse: true },
+    defaults: { eyebrow: 'Coming up', spaceAbove: 24, spaceBelow: 24, newsId: '', customAt: '', pulse: true },
     // Which post to count down to. Blank \u2014 the default \u2014 means the next
     // upcoming one, the same rule `giveFund` and `contactEmail` already use:
     // the common case needs nothing picked. See the render branch and
-    // sanitizeBlock's `newsRef` handling.
+    // sanitizeBlock's `newsRef` handling. `customCountdown` widens `newsId`
+    // to also accept 'custom' \u2014 a date with no post behind it at all,
+    // typed in directly \u2014 see sanitizeBlock and the render branch.
     newsRef: true,
+    customCountdown: true,
     switches: [
       { key: 'pulse', label: 'Pulsing dot', def: true,
         note: 'The small gold dot beside the label. It holds still for anyone whose device asks for reduced motion.' },
@@ -1969,9 +2028,31 @@ export function sanitizeBlock(b) {
   // shape `giveFund` is for `give_funds`. Stored only when set; blank is the
   // common case and means "the next upcoming one", so it must not land in
   // every generated seed as a value that means nothing.
+  // ⚠ THE LITERAL STRING 'custom' IS A THIRD LEGAL VALUE, NOT A THIRD FIELD.
+  // Reported: a countdown could only ever point at a News & Events post, and
+  // the office wanted to count down to something that has no post behind it
+  // — a market day with its own date, in its own words. Widening the same
+  // field (rather than adding a `countdownMode` alongside it) means an
+  // already-stored pinned post id is never at risk of being read against a
+  // separate mode flag that could default the wrong way and silently drop
+  // the pin.
   if (def.newsRef) {
-    const id = Math.floor(Number(b.newsId));
-    if (Number.isFinite(id) && id > 0) out.newsId = id;
+    if (def.customCountdown && b.newsId === 'custom') {
+      out.newsId = 'custom';
+    } else {
+      const id = Math.floor(Number(b.newsId));
+      if (Number.isFinite(id) && id > 0) out.newsId = id;
+    }
+  }
+
+  // The office's own date and time for a custom countdown — one field,
+  // shaped exactly like a `datetime-local` input's own value ('YYYY-MM-
+  // DDTHH:MM'), so there is nothing to recombine at render time. Checked
+  // against that shape rather than trusted, since it is handed straight to
+  // churchInstant(). Stored only when it actually looks like one, the same
+  // "blank means nothing chosen" rule newsId/giveFund already follow.
+  if (def.customCountdown) {
+    out.customAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(b.customAt || '') ? b.customAt : '';
   }
 
   // Which event a `registration` block belongs to — an ID reference into
@@ -2534,14 +2615,14 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
   background:linear-gradient(135deg,rgba(var(--tlcb-hero-veil-top-rgb,30,45,74),var(--tlcb-hero-veil-top,.82)),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
-.tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
-.tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:#fff;margin:0;}
+.tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--tlcb-hero-eyebrow-ink,#E8C070);margin-bottom:8px;}
+.tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:var(--tlcb-hero-title-ink,#fff);margin:0;}
 /* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
    own base) already puts this flush left; a flex item's own horizontal auto
    margins self-center regardless of the container's align-items, which is
    what let the subtitle alone drift centered even in "left" mode before Hero
    had a real Alignment control. .tlcb--center.tlcb--hero below restores them. */
-.tlcb-hero-sub{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px 0 0;font-weight:300;line-height:1.5;}
+.tlcb-hero-sub{font-size:17px;color:var(--tlcb-hero-sub-ink,rgba(255,255,255,.72));max-width:600px;margin:12px 0 0;font-weight:300;line-height:1.5;}
 .tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#1E2D4A;}
 .tlcb-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 .tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;}
@@ -3501,7 +3582,7 @@ export function blocksClientConfig(data) {
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund, eventRef: !!d.eventRef,
-      newsRef: !!d.newsRef,
+      newsRef: !!d.newsRef, customCountdown: !!d.customCountdown,
       shade: SHADEABLE_TYPES.has(key), appear: APPEARABLE_TYPES.has(key), btn: BTN_TYPES.has(key),
       partnerSource: !!d.partnerSource, embedGate: !!d.embedGate,
       choices: d.choices || [], switches: d.switches || [],
@@ -3509,7 +3590,8 @@ export function blocksClientConfig(data) {
     };
   }
   return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, SHADOWS, SHADES, APPEARS, BTNS,
-    bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, imgPositions: IMG_POSITIONS, heroColors: HERO_COLORS, embedHeights: EMBED_HEIGHTS,
+    bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, imgPositions: IMG_POSITIONS, heroColors: HERO_COLORS,
+    countdownSources: COUNTDOWN_SOURCES, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
     // Just the one field, so the Contact block's inspector can name the address
     // it is falling back to rather than saying "the church email" and making
@@ -3668,11 +3750,26 @@ function wrapperVars(b) {
     const hc = HERO_COLORS.find((x) => x.key === b.heroColor) || HERO_COLORS[0];
     v.push('--tlcb-hero-bg:' + hc.bg);
     v.push('--tlcb-hero-veil-top-rgb:' + hc.rgb);
+    // The light colors' own ink, falling back to the ORIGINAL hardcoded
+    // white/gold/translucent-white the hero has always used — so a dark
+    // color (which carries none of these three keys) renders byte-for-byte
+    // as it always has.
+    v.push('--tlcb-hero-title-ink:' + (hc.title || '#fff'));
+    v.push('--tlcb-hero-eyebrow-ink:' + (hc.eyebrow || '#E8C070'));
+    v.push('--tlcb-hero-sub-ink:' + (hc.sub || 'rgba(255,255,255,.72)'));
   }
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
-    v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
-    v.push('--tlcb-hero-veil-top:' + (VEILS.find((x) => x.key === b.veil) || VEILS[1]).top);
+    // ⚠ 'none' turns the WHOLE overlay off — both gradient stops — rather
+    // than only lowering the top stop's alpha further. See the note on
+    // VEILS for why that is a fourth state and not a weakening of the fixed
+    // bottom stop. Every other value still turns the veil on unconditionally
+    // with any photo, exactly as before 'none' existed.
+    v.push('--tlcb-hero-veil:' + (b.veil === 'none' ? 0 : 1));
+    // ⚠ Falls back by KEY ('medium'), not by array index — VEILS grew a
+    // fourth entry ('none') at the FRONT, so a positional fallback would
+    // have quietly started defaulting to 'light'.
+    v.push('--tlcb-hero-veil-top:' + (VEILS.find((x) => x.key === b.veil) || VEILS.find((x) => x.key === 'medium')).top);
     // ⚠ Falls back by KEY ('center'), not by array index — IMG_POSITIONS grew
     // from three entries to five and a positional fallback would have quietly
     // started defaulting to 'upper'.
@@ -4707,11 +4804,24 @@ function renderInner(b, opts) {
     const eyebrow = (b.eyebrow || opts.editing)
       ? `<div class="tlcb-pb-eyebrow">${dot}${field(opts, b, 'eyebrow', 'span', 'tlcb-pb-eyebrow-t', esc(b.eyebrow || ''), ' data-ph="Happening next"')}</div>`
       : '';
-    const next = b.countdown ? upcoming()[0] : null;
-    // Church time, not the visitor's and not the Worker's. A countdown is
-    // arithmetic against Date.now() in a browser that may be anywhere, so the
-    // target has to be an instant rather than a date somebody reads.
-    const target = next ? churchInstant(next.event_date, '09:00') : '';
+    // ⚠ ADDITIVE: 'custom' is the one new path. `countdownSrc` defaults to
+    // 'auto', which is the ORIGINAL and only behavior this switch ever had —
+    // so a banner saved before this existed, or one that never touches the
+    // new field, counts down exactly as it always did.
+    let target = '';
+    if (b.countdown) {
+      if (b.countdownSrc === 'custom') {
+        // Church time, not the visitor's and not the Worker's — the office
+        // picks a date and a time and means the church's own clock by it.
+        target = b.customAt ? churchInstant(b.customAt.slice(0, 10), b.customAt.slice(11, 16)) : '';
+      } else {
+        const next = upcoming()[0];
+        // Church time, not the visitor's and not the Worker's. A countdown is
+        // arithmetic against Date.now() in a browser that may be anywhere, so
+        // the target has to be an instant rather than a date somebody reads.
+        target = next ? churchInstant(next.event_date, '09:00') : '';
+      }
+    }
     const clock = target
       ? `<div class="tlcb-pb-count"><span class="tlcb-pb-count-l">Starts in</span>
            <span class="tlcb-pb-count-v" data-countdown="${esc(target)}">\u2014</span></div>`
@@ -4849,35 +4959,57 @@ function renderInner(b, opts) {
   }
 
   if (t === 'countdown') {
-    // Blank means automatic — the same next-upcoming-post `upcoming()[0]`
-    // already computes for the banner switch and the Coming-up strip. A
-    // picked id that no longer has a date (the post was edited, or deleted)
-    // is treated exactly like nothing picked at all, never as an error.
-    const auto = !b.newsId;
-    const target = auto
-      ? upcoming()[0]
-      : (data.news || []).find((n) => Number(n.id) === Number(b.newsId) && n.event_date);
+    // Three states in one field. Blank means automatic — the same
+    // next-upcoming-post `upcoming()[0]` already computes for the banner
+    // switch and the Coming-up strip. A picked id that no longer has a date
+    // (the post was edited, or deleted) is treated exactly like nothing
+    // picked at all, never as an error. The literal string 'custom' is the
+    // third state — a date with no post behind it, typed in directly — see
+    // sanitizeBlock's `newsRef`/`customCountdown` handling for why it lives
+    // in this same field rather than a separate mode flag.
+    const customMode = String(b.newsId) === 'custom';
+    const auto = !customMode && !b.newsId;
+    let at = '', headText = '';
+    if (customMode) {
+      // Church time, not the visitor's and not the Worker's — the office
+      // picks a date and a time and MEANS the church's own clock by it, the
+      // same reasoning churchInstant() itself is built around.
+      at = b.customAt ? churchInstant(b.customAt.slice(0, 10), b.customAt.slice(11, 16)) : '';
+      headText = b.title || '';
+    } else {
+      const target = auto
+        ? upcoming()[0]
+        : (data.news || []).find((n) => Number(n.id) === Number(b.newsId) && n.event_date);
+      if (target) {
+        at = churchInstant(target.event_date, '09:00');
+        headText = target.title || '';
+      }
+    }
     // ⚠ RENDERS NOTHING WHEN THERE IS NOTHING TO COUNT DOWN TO — the same rule
     // the Coming-up strip follows, for the same reason: a countdown block that
     // shows a dash forever, or a sentence explaining its own emptiness, is
     // worse than the block simply not being there. The editor says why,
     // because a block that vanishes from the canvas is one somebody thinks
     // they broke.
-    if (!target) {
+    if (!at) {
       return opts.editing
-        ? `<div class="tlcb-stack">${renderEyebrow(opts, b)}<span class="tlcb-note">${auto
-            ? 'Nothing dated is coming up in News & Events, so this block will not appear on the page.'
-            : 'That post no longer has a date, so this block will not appear on the page. Pick another in the panel on the right.'}</span></div>`
+        ? `<div class="tlcb-stack">${renderEyebrow(opts, b)}<span class="tlcb-note">${customMode
+            ? 'Pick a date and time in the panel on the right to count down to it.'
+            : auto
+              ? 'Nothing dated is coming up in News & Events, so this block will not appear on the page.'
+              : 'That post no longer has a date, so this block will not appear on the page. Pick another in the panel on the right.'}</span></div>`
         : '';
     }
     const dot = b.pulse ? '<span class="tlcb-pulse"></span>' : '';
-    // Church time, not the visitor's and not the Worker's — same reasoning as
-    // the banner's own countdown, restated here because this is a second
-    // place the arithmetic has to be right.
-    const at = churchInstant(target.event_date, '09:00');
+    // ⚠ Only the CUSTOM headline is editable here — a post's own title is
+    // pulled from News & Events and edited there, not on this block, the
+    // same rule every other self-filling block already follows.
+    const head = customMode
+      ? field(opts, b, 'title', 'div', 'tlcb-head', esc(headText), ' data-ph="What is counting down"')
+      : `<div class="tlcb-head">${esc(headText)}</div>`;
     return `<div class="tlcb-stack">
       <div class="tlcb-inline">${dot}${field(opts, b, 'eyebrow', 'span', 'tlcb-eyebrow', esc(b.eyebrow || ''), ' data-ph="Coming up"')}</div>
-      <div class="tlcb-head">${esc(target.title || '')}</div>
+      ${head}
       <div class="tlcb-inline"><span class="tlcb-cd-l">Starts in</span>
         <span class="tlcb-cd-v" data-countdown="${esc(at)}">—</span></div>
       ${COUNTDOWN_SCRIPT}

@@ -173,6 +173,120 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The hero banner: a "No shading" option, two lighter colors, and a countdown that takes the office's own words (v5.54.0, 2026-08-31)
+
+Three follow-ups from the same conversation as the section below, right after it shipped.
+
+**"No shading" — a fourth state, not a fourth alpha.** Dinger: adjusting "Photo
+shading" on the Christmas Market hero produced no visible change at all. It
+never could have: the photograph is itself a dark navy snowflake pattern, and
+Light/Medium/Heavy only ever moved the veil's TOP-STOP alpha, over a bottom
+stop that has always been the same fixed near-black. On a photo that dark,
+every step of that range reads as "still dark."
+
+- **`VEILS` gains `{ key: 'none', top: 0 }`, at the front of the list.** ⚠ It
+  is not simply the lowest available alpha — the whole point is that lowering
+  the alpha further does not fix a photo this dark, since the fixed bottom
+  stop is still there regardless. `wrapperVars()` (and its client mirror in
+  `styleVars()`) sets `--tlcb-hero-veil:0` — turning the ENTIRE overlay off,
+  both stops — whenever `veil==='none'`, rather than only touching the top
+  stop's own alpha. Every other value still turns the veil on unconditionally
+  with any photo, exactly as before this existed.
+- **⚠ This does not weaken the "bottom stop never moves" rule** — that rule
+  is about the three shaded LEVELS staying legible relative to each other; it
+  says nothing about there being no way to turn the overlay off altogether,
+  which is a real trade the office is making on purpose when a photo is dark
+  enough that the raw picture reads better than any amount of veil.
+- **⚠ Two existing fallbacks were still keyed by ARRAY INDEX**
+  (`VEILS[1]` for "the default veil"), left over from before `none` existed
+  at index 0 — that positional fallback would have quietly started
+  defaulting to Light. Both (`wrapperVars()` and `styleVars()`) now fall back
+  by KEY (`'medium'`), the same fix `IMG_POSITIONS`' own growth needed in the
+  section below.
+
+**Two of the five colors are now genuinely light, not just five shades of
+dark.** Dinger: "those are all so dark." He was right — Navy/Ink/Moss/Teal/
+Slate are all dark fields by design (the hero's headline has been hardcoded
+white since the block shipped, which is only ever legible on a dark field),
+so no amount of variety within that set stops reading as "still dark."
+
+- **Gold and Parchment are real, light fields**, each carrying its own
+  `title`/`eyebrow`/`sub` ink rather than the original white/gold/
+  translucent-white — reusing pairs already proven readable elsewhere rather
+  than inventing a third contrast pair to check by hand: Gold is the exact
+  `TONES` pairing (`#C9973A` / `#1B1608`) already used for stamps and
+  buttons, with one ink for eyebrow, title and subtitle alike — the same
+  "gold ink is for EVERYTHING" rule the `BG` palette's own Gold field
+  already follows. Parchment reuses the Paper/White 1b fields' own two-tone
+  ink (a near-black navy heading, a warm terracotta eyebrow).
+- **⚠ Ink follows the CHOSEN COLOR, not whether a photo is behind it** — the
+  same "picking a color recolors an empty hero" reasoning `heroColor` itself
+  already follows, restated in the other direction. A photograph's own
+  brightness is not something this can see, so pairing a light color with an
+  actual photo (and shading weaker than Heavy) is the office's own call to
+  get right; the inspector's note says so rather than pretending to guard
+  against it.
+- **`--tlcb-hero-title-ink` / `-eyebrow-ink` / `-sub-ink`** are the three new
+  custom properties, always emitted (like `--tlcb-hero-bg`, for the same
+  reason — it is also the ink a photo-less hero needs). ⚠ **The five dark
+  colors carry none of the three keys**, so they fall through to the
+  fallback values written directly into the `var()` calls — the ORIGINAL
+  hardcoded white title / gold eyebrow / translucent-white subtitle,
+  byte-for-byte. An untouched hero, or one on any dark color, is unchanged.
+
+**The Countdown block can target the office's own words and date — not only
+a News & Events post.** Dinger: he wanted free text and his own time, not
+whichever post's title happened to be pinned.
+
+- **The literal string `'custom'` is a THIRD legal value of the existing
+  `newsId` field — not a new mode flag alongside it.** That was a deliberate
+  choice against the more obvious design (a `countdownMode` choice): this
+  field already carries real meaning today (blank = automatic, a number =
+  pinned), and a separate mode flag defaulting to `'auto'` on any block that
+  predates this feature would have silently ignored an already-stored pin
+  the moment it was read. Widening the same field means there is nothing
+  for a new default to disagree with.
+- **`customAt`** is one new field, shaped exactly like a browser's own
+  `datetime-local` input value (`'YYYY-MM-DDTHH:MM'`) — checked against that
+  shape in `sanitizeBlock` rather than trusted, since it goes straight into
+  `churchInstant()`. A malformed value is dropped, the same "blank means
+  nothing chosen" rule `newsId`/`giveFund` already follow.
+- **The headline is the block's own `title` field, reused rather than
+  invented.** Every block already carries a base `title` (the generic
+  "field the sanitizer always cleans"); the Countdown block simply never
+  rendered it before. In custom mode it is a real, directly-editable field
+  on the canvas, exactly like a Hero banner's own title — in automatic or
+  pinned mode it stays a read-only reflection of the News & Events post's
+  own title, edited there, not here.
+- **⚠ RENDERS NOTHING WHEN THERE IS NOTHING TO COUNT DOWN TO, still** — the
+  same rule the other two states already followed. Custom mode with no date
+  typed yet is the third empty state, and the editor explains it by name
+  rather than the block silently vanishing.
+- **Photo banner's own countdown switch gained the identical capability**,
+  additively. It never had a post-picker at all (always `upcoming()[0]`), so
+  there was no existing field to widen — `countdownSrc` is a new `choices`
+  entry (`Automatic` / `A date I set`, reusing `COUNTDOWN_SOURCES` with
+  `'post'` filtered out, since this type has nowhere to pin a post to), and
+  it defaults to `'auto'` — the ORIGINAL and only behavior this switch ever
+  had, so a banner saved before this shipped, or one that never touches the
+  new field, counts down exactly as it always did. The switch itself
+  (Countdown, on/off) is untouched.
+
+Run: the extended `The hero photo can be shaded lighter and repositioned`
+group and the rewritten `a standalone countdown, automatic, pinned to a
+post, or a date the office typed in` group, both in `node admin/blocks.test.mjs`
+— None as a real fourth state rather than a fourth alpha, both light colors'
+ink reaching the wrapper, a dark color's byte-identical fallback, the
+malformed-date guard, and the three empty states (nothing dated, a stale
+pin, no custom date yet). Plus new assertions in the photobanner render
+group covering `countdownSrc`'s additive default and that the Countdown
+switch still gates a custom date. Verified in a real, headless-Chromium
+editor session: a Countdown block was added, switched to "Type my own," a
+date typed into a real `datetime-local` field, and the headline typed
+directly on the canvas — and a Hero block's Banner color switched to Gold,
+with the computed title color read before and after to confirm the ink
+actually swapped from white to dark.
+
 ### The toggle now closes sign-ups in Serve too, not just the local tab (2026-08-31)
 
 Dinger, once told the toggle below was display-only: *"i see that i can also
