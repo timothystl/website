@@ -173,6 +173,52 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The Volunteers tab can be switched off (2026-08-31)
+
+Dinger: *"now for the volunteering portion of the christmas market can we have
+a toggle to turn that off?"*
+
+**The column already existed and nothing ever read it.** `site_events.has_volunteers`
+is the same capability flag every generic event's Volunteers tab is gated on
+(`admin/events.js:673`, `on: canEvent && Number(ev.has_volunteers)`) — but the
+market's own row was seeded with it hardcoded `1` at the one-time migration,
+and `admin/market.js`'s `TABS` array never checked it at all: `{ key:
+'volunteers', label: 'Volunteers', on: canMarket }`. Every `market_manage`
+account saw the tab with no way to hide it.
+
+- **A real toggle now lives in the Vendors tab's own Applications panel**,
+  right below "Taking vendor applications" — same shape (a labeled switch,
+  its own tiny form, `Save`), same permission (`market_manage`), and the same
+  reasoning for where it sits: the Vendors tab itself never disappears, so a
+  coordinator who hides the Volunteers tab always has a way back to turn it
+  on again. Putting the switch *inside* the tab it controls would have locked
+  her out of her own control the moment she used it.
+- **`POST /market/volunteers-tab`** writes `has_volunteers` on the market's
+  `site_events` row — the same column, not a second field. ⚠ It is written
+  with `getAll(...).includes('1')`, the same toggle-posts-a-hidden-0-first
+  rule every other switch in this admin follows.
+- **⚠ SWITCHED OFF, THE TAB IS ABSENT FROM `TABS`, NOT DISABLED** — the same
+  rule every tab on this screen already follows. `active` then falls back to
+  the first tab the reader can still open, so a stale bookmark to
+  `/market?tab=volunteers` lands on Vendors rather than a dead tab or an
+  error. The volunteers section itself is also gated a second time where it
+  is actually built (`active === 'volunteers' && canMarket &&
+  settings.volunteersEnabled`) — belt and braces against a crafted request,
+  the same shape this repo always uses for a control that must not be
+  reachable once hidden.
+- **Nothing about the market's vendors, pages, or capacity settings moves.**
+  This is purely a display toggle on one read-only window into Serve
+  (serve.timothystl.org) — worth switching off for a year the market isn't
+  using Serve for its roster, and switching back on costs nothing since
+  nothing underneath it was ever touched.
+
+Run: the `the Volunteers tab can be switched off, and back on` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1675) — on by default (the seeded row), switching it off hides the tab and
+the section it builds, a crafted `?tab=volunteers` request still falls back
+to Vendors, switching it back on restores it, and only `market_manage` may
+touch the route at all. `node admin/market.test.mjs` (343, unaffected).
+
 ### The market has only so many tables: confirmed pauses at 60, a soft reserve to 70, and a manual door for ministries (2026-08-31)
 
 Dinger: *"for the christmas market we only have so many tables to allow people
