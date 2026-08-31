@@ -5313,6 +5313,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
         ]);
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'alt' ? `<div class="alert alert-success">✓ Alt text saved.</div>`
+          : msg === 'uploaded' ? `<div class="alert alert-success">✓ Uploaded.</div>`
           : msg === 'deleted' ? `<div class="alert alert-info">Removed from the library. The file itself is still in storage, so anything already using it keeps working.</div>` : '';
 
         // "Used nowhere" is answered by searching every page's blocks for the
@@ -5430,6 +5431,128 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
         await env.DB.prepare('UPDATE ministry_media SET alt = ? WHERE id = ?').bind(alt, id).run();
         await logAudit(env.DB, currentUser, 'update', 'media', id, before?.filename || '', before, { alt });
         return new Response('', { status: 302, headers: { Location: '/media?msg=alt' } });
+      }
+
+      // ── UPLOAD ─────────────────────────────────────────────────
+      // The list's own "+ Upload" action pointed here and nothing answered it
+      // — an unmatched authenticated path falls through to the newsletter
+      // dashboard (AW-13), which is exactly the "takes me to newsletters"
+      // symptom this closes. Two-step, same shape voters' own file uploader
+      // already uses: the browser posts the file to the real upload route
+      // first (so this screen never re-implements R2 storage, EXIF
+      // stripping or the type/size allowlists — one of each, already tested),
+      // then a small POST here records it in the library.
+      if (path === '/media/upload' && method === 'GET') {
+        return html(`
+${sidebarShell('media', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: 'Upload',
+  purpose: 'A photo goes through the same 1MB check the library warns about; a file is a PDF for now, the same as the voters page uploads.',
+  action: '/media/upload',
+  cancelHref: '/media',
+  saveLabel: 'Upload',
+  fields: [
+    { kind: 'chips', name: 'kind', label: 'What is this', value: 'photo',
+      options: [{ value: 'photo', label: 'Photo' }, { value: 'file', label: 'File (PDF)' }] },
+    { name: 'alt', label: 'Alt text', placeholder: 'Describes the photo for anyone using a screen reader',
+      hint: 'Required for a photo. A file does not need one.' },
+  ],
+  body: `<div class="tlc-field">
+    <label class="tlc-label" for="media-file">File</label>
+    <input type="file" id="media-file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf">
+    <p class="tlc-hint" id="media-upload-status"></p>
+  </div>`,
+})}
+</div>
+<script>
+(function(){
+  var form = document.querySelector('.tlc-form');
+  if (!form) return;
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var status = document.getElementById('media-upload-status');
+    var fileInput = document.getElementById('media-file');
+    var file = fileInput.files[0];
+    if (!file) { status.textContent = 'Choose a file first.'; return; }
+    var kind = (form.querySelector('input[name="kind"]:checked') || {}).value || 'photo';
+    var alt = (form.querySelector('input[name="alt"]') || {}).value || '';
+    if (kind === 'photo' && !alt.trim()) { status.textContent = 'Describe the photo before uploading it.'; return; }
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; }
+    status.textContent = 'Uploading…';
+    try {
+      var fd = new FormData();
+      fd.append('file', file);
+      var uploadRoute = kind === 'file' ? '/api/upload-doc' : '/api/upload-image';
+      var r = await fetch(uploadRoute, { method: 'POST', body: fd });
+      var d = await r.json();
+      if (!r.ok || d.error) { status.textContent = 'Error: ' + (d.error || r.status); if (btn) btn.disabled = false; return; }
+      var save = new FormData();
+      save.append('kind', kind);
+      save.append('url', d.url);
+      save.append('filename', d.filename || d.name || file.name || '');
+      save.append('alt', alt);
+      save.append('bytes', d.bytes || file.size || 0);
+      var r2 = await fetch('/media/upload/save', { method: 'POST', body: save });
+      if (!r2.ok) { status.textContent = 'Upload succeeded but could not be saved to the library.'; if (btn) btn.disabled = false; return; }
+      window.location.href = '/media?msg=uploaded';
+    } catch (err) {
+      status.textContent = 'Upload failed.';
+      if (btn) btn.disabled = false;
+    }
+  });
+})();
+</script>`, 'Upload — Media');
+      }
+
+      if (path === '/media/upload/save' && method === 'POST') {
+        const form = await request.formData();
+        const kind = form.get('kind') === 'file' ? 'file' : 'photo';
+        const uploadedUrl = safeUrl(String(form.get('url') || ''));
+        if (!uploadedUrl) return jsonResponse({ error: 'That did not look like an uploaded file.' }, 400);
+        const alt = String(form.get('alt') || '').trim().slice(0, 300);
+        if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+        const filename = String(form.get('filename') || uploadedUrl.split('/').pop() || 'upload').slice(0, 160);
+        const bytes = Math.max(0, parseInt(form.get('bytes'), 10) || 0);
+        const res = await env.DB.prepare(
+          'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, bytes, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(filename, kind === 'file' ? 'file' : 'photo', uploadedUrl, kind === 'photo' ? uploadedUrl : '', alt, '', bytes, currentUser?.username || '', new Date().toISOString()).run();
+        await logAudit(env.DB, currentUser, 'create', 'media', String(res.meta?.last_row_id || ''), filename, null, { url: uploadedUrl, kind });
+        return jsonResponse({ ok: true });
+      }
+
+      if (path.startsWith('/media/edit/') && method === 'GET') {
+        const id = path.slice('/media/edit/'.length);
+        const m = await env.DB.prepare('SELECT * FROM ministry_media WHERE id = ?').bind(id).first();
+        if (!m) return new Response('Not found.', { status: 404 });
+        return html(`
+${sidebarShell('media', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: m.filename,
+  purpose: m.kind === 'photo' ? 'The alt text below is what a screen reader says instead of this photo.' : 'The filename and address are set at upload — only the alt text is edited here.',
+  action: `/media/alt/${m.id}`,
+  cancelHref: '/media',
+  saveLabel: 'Save changes',
+  deleteAction: `/media/delete/${m.id}`,
+  deleteConfirm: `Remove “${m.filename}” from the library? The file itself stays in storage, so anything already using it keeps working.`,
+  fields: [
+    { kind: 'static', label: 'File', html: m.kind === 'photo'
+      ? `<img src="${escapeHtml(m.thumb_url || m.url)}" alt="" style="max-width:200px;max-height:150px;border-radius:8px;">`
+      : `<a href="${escapeHtml(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.filename)}</a>` },
+    { name: 'alt', label: 'Alt text', value: m.alt || '', placeholder: 'Describes the photo for anyone using a screen reader' },
+  ],
+})}
+</div>`, `Edit — ${m.filename}`);
+      }
+
+      if (path.startsWith('/media/delete/') && method === 'POST') {
+        const id = path.slice('/media/delete/'.length);
+        const before = await env.DB.prepare('SELECT filename FROM ministry_media WHERE id = ?').bind(id).first();
+        await env.DB.prepare('DELETE FROM ministry_media WHERE id = ?').bind(id).run();
+        await logAudit(env.DB, currentUser, 'delete', 'media', id, before?.filename || '', before, null);
+        return new Response('', { status: 302, headers: { Location: '/media?msg=deleted' } });
       }
     }
     // ── MENU ───────────────────────────────────────────────────
@@ -6887,7 +7010,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       const clean = stripImageMetadata(new Uint8Array(await file.arrayBuffer()));
       await env.IMAGES.put(key, clean, { httpMetadata: { contentType: mimeType } });
       const url = `${new URL(request.url).origin}/images/${key}`;
-      return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ url, location: url, bytes: clean.length, filename: file.name || key }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── UPLOAD VOTER DOCUMENT TO R2 ──
@@ -6910,7 +7033,7 @@ ${PAYROLL_HTML}`, 'Payroll');
         httpMetadata: { contentType: docMime, contentDisposition: `attachment; filename="${safeName}"` }
       });
       const docUrl = `${new URL(request.url).origin}/docs/${key.slice('docs-'.length)}`;
-      return new Response(JSON.stringify({ url: docUrl, key, name: safeName }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ url: docUrl, key, name: safeName, bytes: file.size }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── VOTERS PAGE ADMIN ──
