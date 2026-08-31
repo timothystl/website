@@ -336,6 +336,8 @@ group('category, and where a check has got to');
   eq(cleanCategory('Antiques'), 'Other', 'anything else clamps to Other rather than being written out');
   eq(cleanCategory('<script>'), 'Other', 'including something that is trying to be markup');
   ok(VENDOR_CATEGORIES[VENDOR_CATEGORIES.length - 1] === 'Other', 'Other is last, because it is the fallback');
+  eq(cleanCategory('Ministry'), 'Ministry', 'Ministry is a real category — for the ministries entered by hand, not craft vendors');
+  ok(VENDOR_CATEGORIES.indexOf('Ministry') < VENDOR_CATEGORIES.length - 1, 'and it sits before Other, never after it');
 
   const card = { payment_method: 'card', payment_status: 'unpaid', check_no: '', check_date: '' };
   eq(checkState(card).paying, 'card', 'a card vendor is not somebody a check is expected from');

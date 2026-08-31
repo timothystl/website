@@ -4265,9 +4265,15 @@ group('a ministry can be entered by hand, fee waived, taking no public applicati
   const { db, env } = await boot();
   const { cookie } = signIn(db);
 
+  // The panel itself defaults the Category field to Ministry — this IS a
+  // ministry-only door, and picking that off a dropdown every single time
+  // would be one more click for the least-used form on the screen.
+  const panelBody = await (await call(env, '/market', { cookie })).text();
+  has(panelBody, '<option value="Ministry" selected>Ministry</option>', 'the manual-add form defaults its Category field to Ministry');
+
   const add = await call(env, '/market/add', {
     cookie, method: 'POST',
-    form: { business_name: 'Timothy MDO', participant_names: 'Front office', tables: '2', category: 'Other', staff_notes: 'No charge — MDO' },
+    form: { business_name: 'Timothy MDO', participant_names: 'Front office', tables: '2', category: 'Ministry', staff_notes: 'No charge — MDO' },
   });
   eq(add.status, 302, 'the ministry is added');
 
@@ -4278,6 +4284,7 @@ group('a ministry can be entered by hand, fee waived, taking no public applicati
   eq(row.amount_paid_cents, 0, 'nothing is recorded as paid, either — there is nothing to reconcile');
   eq(row.qty, 2, 'with the tables asked for');
   eq(row.waitlisted, 0, 'and it is never a soft reserve — a staff decision takes a real table immediately');
+  eq(JSON.parse(row.fields_json).category, 'Ministry', 'and its category is Ministry, not one of the craft categories');
 
   const body = await (await call(env, '/market', { cookie })).text();
   has(body, 'Timothy MDO', 'it appears on the coordinator’s list like any other row');

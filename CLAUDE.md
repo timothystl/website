@@ -261,6 +261,16 @@ question at all.
     are left.
   - Only a ministry/group name is required — no email, no phone, no product
     description — because there is no vendor to confirm any of that with.
+  - **`VENDOR_CATEGORIES` gained `Ministry`**, right before `Other` (which
+    must stay last — it is the fallback `cleanCategory()` clamps an
+    unrecognized stored value to). Craft categories say what a maker sells;
+    a table taken by MDO or the youth group sells nothing, so filing it under
+    one of those, or under the catch-all `Other`, would have made "how many
+    ministry tables do we have this year" a question the category list could
+    never answer. The manual-add panel defaults its own Category field to
+    Ministry — this door exists only for ministries, so picking it off a
+    dropdown every single time would be one more click on the form used
+    least on the whole screen.
 - **`admin/events.js`'s own generic `/settings` screen (VBS, the Egg Hunt,
   any future event) gained the identical `waitlist_cap` field**, for the same
   reason the mirror rule holds everywhere else in this admin: the market's
@@ -268,7 +278,7 @@ question at all.
   market, and a second implementation for the next event that wants it would
   be the second copy of one fact this repo keeps warning about.
 
-Run: `node admin/market.test.mjs` (341, three new groups — the pure
+Run: `node admin/market.test.mjs` (343, three new groups — the pure
 `capacityDecision()` shape with all four arguments, the insert/read round
 trip of the `waitlisted` flag, and both confirmation emails), `node
 admin/ui.test.mjs` (the radius rule caught two illegal values on the first

@@ -228,7 +228,7 @@ export function marketRowFromRegistration(reg) {
 // block editor follows.
 export const VENDOR_CATEGORIES = [
   'Baked goods', 'Candles & soap', 'Jewelry', 'Wood', 'Textiles',
-  'Ornaments', 'Food & drink', 'Art & prints', 'Wreaths & greens', 'Other',
+  'Ornaments', 'Food & drink', 'Art & prints', 'Wreaths & greens', 'Ministry', 'Other',
 ];
 
 // Blank stays blank — "not categorized yet" is a real state, and defaulting
@@ -643,7 +643,7 @@ function manualAddPanel(settings) {
         ${renderField({ name: 'business_name', label: 'Ministry or group name', required: true })}
         ${renderField({ name: 'participant_names', label: 'Contact person', placeholder: 'Who to reach about this table' })}
         ${renderField({ kind: 'number', name: 'tables', label: 'Tables', value: 1, min: 1, max: 20, step: 1 })}
-        ${renderField({ kind: 'choice', name: 'category', label: 'Category', value: '',
+        ${renderField({ kind: 'choice', name: 'category', label: 'Category', value: 'Ministry',
           options: [{ value: '', label: '— Not categorized —' }, ...VENDOR_CATEGORIES.map((c) => ({ value: c, label: c }))] })}
         ${renderField({ kind: 'textarea', name: 'staff_notes', label: 'Notes', placeholder: 'Only ever seen here — nothing is emailed for this row.' })}
         <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Add, fee waived</button></div>
