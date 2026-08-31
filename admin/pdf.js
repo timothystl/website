@@ -7,6 +7,14 @@
 // the 14 standard PDF fonts, so nothing has to be embedded) — good enough
 // for a tabular report where alignment matters more than typography.
 //
+// A line can also carry `bg` (a full-bleed filled band behind it — the
+// title banner, a shaded subtotal row) and `rule` (a stroked horizontal
+// line drawn just under it — the underline below a column header) and
+// `color` (its own text color, e.g. white on a navy band). None of that
+// needs a second drawing pass or a graphics library: PDF content streams
+// are just operators, and a filled rectangle or a stroked line is two or
+// three of them, emitted before the BT/ET text block on the same page.
+//
 // ⚠ TEXT IS ASCII ONLY. A simple (non-embedded) PDF font takes single-byte
 // character codes through WinAnsiEncoding; a codepoint outside the ASCII
 // printable range is not a rendering quirk if emitted raw, it is a
@@ -31,16 +39,26 @@ function pdfEscape(s) {
 
 const PAGE_W = 612, PAGE_H = 792, MARGIN = 36;
 
-// lines: [{ text, font: 'R'|'B', size, gap }] — 'gap' adds extra space
-// ABOVE this line (a blank line would also work but a gap reads cleaner
-// in the source that builds these arrays). font/size default to R/9.
+// lines: [{ text, font: 'R'|'B', size, gap, color, bg, rule }] — 'gap' adds
+// extra space ABOVE this line (a blank line would also work but a gap reads
+// cleaner in the source that builds these arrays). font/size default to
+// R/9. `color`/`bg`/`rule` are each an [r,g,b] triple, 0..1 — `color` is
+// the text's own paint, `bg` fills a full-bleed band behind the line, and
+// `rule` strokes a thin line just under it.
 export function buildMonospacePdf(lines) {
   const usableH = PAGE_H - MARGIN * 2;
   const pages = [];
   let cur = [];
   let used = 0;
   for (const raw of lines || []) {
-    const ln = { text: raw.text, font: raw.font === 'B' ? 'B' : 'R', size: raw.size || 9 };
+    const ln = {
+      text: raw.text,
+      font: raw.font === 'B' ? 'B' : 'R',
+      size: raw.size || 9,
+      color: raw.color || null,
+      bg: raw.bg || null,
+      rule: raw.rule || null,
+    };
     const lh = ln.size * 1.5 + (raw.gap || 0);
     if (used + lh > usableH && cur.length) { pages.push(cur); cur = []; used = 0; }
     cur.push({ ...ln, lh });
@@ -54,23 +72,43 @@ export function buildMonospacePdf(lines) {
   const contentIds = [];
   const pageIds = [];
 
+  const rgb3 = (c) => c.map((v) => Number(v.toFixed(3))).join(' ');
+
   for (const pl of pages) {
-    const stream = [];
-    stream.push('BT');
-    let curFont = null, curSize = null;
+    // Graphics (bands and rules) are painted first, as a set of plain path
+    // operators outside any text object — PDF does not allow path
+    // construction inside a BT/ET block, so the two passes are kept apart
+    // rather than interleaved line by line.
+    const graphics = [];
+    const text = ['BT'];
+    let curFont = null, curSize = null, curColor = null;
     let y = PAGE_H - MARGIN;
     for (const ln of pl) {
       y -= ln.lh;
+      if (ln.bg) {
+        graphics.push(`${rgb3(ln.bg)} rg`);
+        graphics.push(`0 ${(y - ln.lh * 0.3).toFixed(2)} ${PAGE_W} ${(ln.lh * 1.15).toFixed(2)} re f`);
+      }
+      if (ln.rule) {
+        graphics.push(`${rgb3(ln.rule)} RG`);
+        graphics.push('1 w');
+        graphics.push(`${MARGIN} ${(y - ln.lh * 0.3).toFixed(2)} m ${(PAGE_W - MARGIN).toFixed(2)} ${(y - ln.lh * 0.3).toFixed(2)} l S`);
+      }
       const f = ln.font === 'B' ? 'F2' : 'F1';
       if (f !== curFont || ln.size !== curSize) {
-        stream.push(`/${f} ${ln.size} Tf`);
+        text.push(`/${f} ${ln.size} Tf`);
         curFont = f; curSize = ln.size;
       }
-      stream.push(`1 0 0 1 ${MARGIN} ${y.toFixed(2)} Tm`);
-      stream.push(`(${pdfEscape(ln.text)}) Tj`);
+      const col = ln.color || [0, 0, 0];
+      if (!curColor || rgb3(col) !== curColor) {
+        text.push(`${rgb3(col)} rg`);
+        curColor = rgb3(col);
+      }
+      text.push(`1 0 0 1 ${MARGIN} ${y.toFixed(2)} Tm`);
+      text.push(`(${pdfEscape(ln.text)}) Tj`);
     }
-    stream.push('ET');
-    const body = stream.join('\n');
+    text.push('ET');
+    const body = graphics.concat(text).join('\n');
     const contentId = nextId++;
     contentIds.push(contentId);
     objects[contentId - 1] = `<< /Length ${body.length} >>\nstream\n${body}\nendstream`;

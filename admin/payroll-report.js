@@ -96,52 +96,77 @@ export function buildPayrollCsv(body) {
 }
 
 // ── PDF ──────────────────────────────────────────────────────
-// Plain monospace columns (see admin/pdf.js) — a printed ledger, not a
-// styled page, which is what a bookkeeper's own reconciliation copy
-// actually needs to be.
+// Monospace columns still, for the same reason as ever — alignment matters
+// more than typography in a table a bookkeeper reconciles by eye — but laid
+// over the site's own navy/gold/cream palette (see Design System → Colors
+// in CLAUDE.md) rather than plain black-on-white, via the band/rule/color
+// support admin/pdf.js carries for exactly this. Every color used here is
+// one already in use elsewhere on the site; nothing new was invented.
+const NAVY = [0.118, 0.176, 0.290]; // #1E2D4A
+const GOLD = [0.788, 0.596, 0.227]; // #C9973A
+const CREAM = [0.969, 0.953, 0.925]; // #F7F3EC
+const LINEN = [0.929, 0.914, 0.878]; // #EDE9E0 — the zebra tint, one shade darker than cream
+const WHITE = [1, 1, 1];
+const GOOD_INK = [0.247, 0.329, 0.145]; // TONES.good.ink #3F5424
+const WAITING_INK = [0.478, 0.357, 0.094]; // TONES.warn.ink #7A5B18
+const PROBLEM_INK = [0.549, 0.227, 0.157]; // TONES.problem.ink #8C3A28
+const GRAY_TEXT = [0.29, 0.28, 0.38]; // close to --text-secondary #4A4860
+
 export function buildPayrollPdfLines(body) {
   const label = String(body.periodLabel || '').slice(0, 80);
   const mdoRows = Array.isArray(body.mdo?.rows) ? body.mdo.rows : [];
   const churchRows = Array.isArray(body.church?.rows) ? body.church.rows : [];
   const lines = [];
 
-  lines.push({ text: 'Timothy Lutheran -- Combined Payroll', font: 'B', size: 14 });
-  lines.push({ text: 'Pay Period: ' + label, size: 10 });
+  // The masthead — one solid navy band, three lines deep, so the report
+  // reads as the church's own the moment it's opened rather than as a
+  // plain text dump. Church name, section title, then the period, in that
+  // order — the same lead a printed bulletin would use.
+  lines.push({ text: 'Timothy Lutheran Church', font: 'B', size: 17, bg: NAVY, color: WHITE });
+  lines.push({ text: 'Combined Payroll', font: 'B', size: 12, bg: NAVY, color: GOLD, gap: 2 });
+  lines.push({ text: 'Pay Period: ' + label, size: 10, bg: NAVY, color: WHITE, gap: 3 });
+
   lines.push({
     text: body.approved
       ? 'Approved' + (body.approvedBy ? ' by ' + String(body.approvedBy).slice(0, 60) : '') + '.'
       : 'Not yet approved -- these figures may still change.',
-    size: 9, gap: 4,
+    size: 9, color: body.approved ? GOOD_INK : WAITING_INK, gap: 8,
   });
   if (body.incomplete) {
-    lines.push({ text: 'INCOMPLETE: the childcare app could not be reached, so no MDO staff are in this report.', font: 'B', size: 9, gap: 2 });
+    lines.push({ text: 'INCOMPLETE: the childcare app could not be reached, so no MDO staff are in this report.', font: 'B', size: 9, color: PROBLEM_INK, gap: 2 });
   }
 
   if (mdoRows.length) {
-    lines.push({ text: 'MDO STAFF', font: 'B', size: 10, gap: 12 });
-    lines.push({ text: pad('Name', 22) + ' ' + pad('Type/Rate', 12) + ' ' + padR('Hours', 8) + ' ' + padR('PTO', 8) + ' ' + padR('Gross Pay', 12), font: 'B', size: 9 });
-    mdoRows.forEach((p) => {
+    lines.push({ text: 'MDO STAFF', font: 'B', size: 10, color: NAVY, bg: CREAM, gap: 12 });
+    lines.push({
+      text: pad('Name', 22) + ' ' + pad('Type/Rate', 12) + ' ' + padR('Hours', 8) + ' ' + padR('PTO', 8) + ' ' + padR('Gross Pay', 12),
+      font: 'B', size: 9, rule: NAVY,
+    });
+    mdoRows.forEach((p, i) => {
       lines.push({
         text: pad(p.name, 22) + ' '
           + pad(p.salaried ? 'Salary' : money(p.rate) + '/hr', 12) + ' '
           + padR(p.salaried ? '-' : n2(p.hours), 8) + ' '
           + padR(p.pto > 0 ? n2(p.pto) : '-', 8) + ' '
           + padR(money(p.gross), 12),
-        size: 9,
+        size: 9, bg: i % 2 ? LINEN : null,
       });
     });
-    lines.push({ text: pad('MDO Subtotal', 43) + ' ' + padR(money(body.mdo?.subtotal), 12), font: 'B', size: 9, gap: 2 });
+    lines.push({
+      text: pad('MDO Subtotal', 43) + ' ' + padR(money(body.mdo?.subtotal), 12),
+      font: 'B', size: 9, color: NAVY, bg: CREAM, gap: 2,
+    });
   }
 
   if (churchRows.length) {
-    lines.push({ text: 'CHURCH STAFF', font: 'B', size: 10, gap: 12 });
+    lines.push({ text: 'CHURCH STAFF', font: 'B', size: 10, color: NAVY, bg: CREAM, gap: 12 });
     lines.push({
       text: pad('Name', 18) + ' ' + padR('Base/Earnings', 24) + ' ' + padR('Housing', 10) + ' '
         + padR('Ins Opt-Out', 11) + ' ' + padR('HSA', 8) + ' ' + padR('Mileage', 9) + ' '
         + padR('403(b)', 10) + ' ' + padR('Gross Pay', 12),
-      font: 'B', size: 8,
+      font: 'B', size: 8, rule: NAVY,
     });
-    churchRows.forEach((p) => {
+    churchRows.forEach((p, i) => {
       lines.push({
         text: pad(p.name, 18) + ' '
           + padR(p.salaried ? money(p.base) : hoursAtRate(p), 24) + ' '
@@ -151,17 +176,17 @@ export function buildPayrollPdfLines(body) {
           + padR(amt(p.mileage), 9) + ' '
           + padR(p.b403 > 0 ? '-' + money(p.b403) : '-', 10) + ' '
           + padR(money(p.gross), 12),
-        size: 8,
+        size: 8, bg: i % 2 ? LINEN : null,
       });
     });
     lines.push({
       text: pad('Church Subtotal', 74) + ' ' + padR(money(body.church?.subtotal), 12),
-      font: 'B', size: 8, gap: 2,
+      font: 'B', size: 8, color: NAVY, bg: CREAM, gap: 2,
     });
   }
 
-  lines.push({ text: 'TOTAL GROSS PAY: ' + money(body.total), font: 'B', size: 12, gap: 14 });
-  lines.push({ text: 'Gross, before withholding. Taxes, withholding and bank details stay with the payroll service.', size: 8, gap: 2 });
+  lines.push({ text: 'TOTAL GROSS PAY: ' + money(body.total), font: 'B', size: 13, color: GOLD, bg: NAVY, gap: 14 });
+  lines.push({ text: 'Gross, before withholding. Taxes, withholding and bank details stay with the payroll service.', size: 8, color: GRAY_TEXT, gap: 4 });
 
   return lines;
 }
