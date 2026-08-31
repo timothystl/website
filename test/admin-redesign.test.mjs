@@ -811,6 +811,47 @@ group('the Media screen answers "used where" from one pass, not one per file');
   has(again, 'On Choir', 'while the photo genuinely on that page still says so');
 }
 
+group('the Media screen\'s own Upload and Edit buttons go somewhere, instead of falling through to the newsletter dashboard');
+{
+  // Reported as "the upload button just takes me to newsletters" — the list's
+  // action pointed at /media/upload and nothing answered it, so it fell
+  // through to whatever an unmatched authenticated path renders (AW-13).
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const uploadPage = await call(env, '/media/upload', { cookie });
+  eq(uploadPage.status, 200, 'the Upload button has a real screen to land on');
+  const uploadBody = await uploadPage.text();
+  has(uploadBody, 'What is this', 'the photo/file choice is on it');
+  has(uploadBody, 'action="/media/upload"', 'and the form actually posts to this screen, not somewhere else');
+
+  // A photo without alt text is refused — same rule the editor's own picker
+  // already enforces, restated here rather than skipped because this is a
+  // second door onto the same library.
+  const noAlt = await call(env, '/media/upload/save', { cookie, method: 'POST',
+    form: { kind: 'photo', url: 'https://admin.timothystl.org/images/pantry-shelf.jpg', filename: 'pantry-shelf.jpg', bytes: '400000' } });
+  eq(noAlt.status, 400, 'a photo with no alt text is refused');
+
+  const saved = await call(env, '/media/upload/save', { cookie, method: 'POST',
+    form: { kind: 'photo', url: 'https://admin.timothystl.org/images/pantry-shelf.jpg', filename: 'pantry-shelf.jpg', alt: 'Shelves at the food pantry', bytes: '400000' } });
+  eq(saved.status, 200, 'a described photo saves');
+
+  const list = await (await call(env, '/media', { cookie, fresh: true })).text();
+  has(list, 'pantry-shelf.jpg', 'the uploaded file is now in the library');
+  has(list, 'Shelves at the food pantry', 'with the alt text it was given');
+
+  const row = db.prepare("SELECT id FROM ministry_media WHERE filename='pantry-shelf.jpg'").get();
+  ok(row, 'and it is a real row, not just a rendered line');
+
+  const editPage = await call(env, `/media/edit/${row.id}`, { cookie });
+  eq(editPage.status, 200, 'the Edit link also has somewhere to go');
+  has(await editPage.text(), 'Shelves at the food pantry', 'showing the alt text as it stands');
+
+  const del = await call(env, `/media/delete/${row.id}`, { cookie, method: 'POST' });
+  eq(del.status, 302, 'and the delete action on that screen removes it');
+  ok(!db.prepare("SELECT id FROM ministry_media WHERE filename='pantry-shelf.jpg'").get(), 'from the library');
+}
+
 group('/sermons shows this week\'s service without anybody posting a link');
 {
   const { db, env } = await boot();
