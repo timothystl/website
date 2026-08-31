@@ -1233,15 +1233,26 @@ function styleVars(b) {
   if (b.type === 'hero') {
     // Byte-identical to wrapperVars() in admin/blocks.js — emitted whether or
     // not there is a photo, since it is also the flat field color when there
-    // is none.
+    // is none. The style attribute is a full replacement (see restyle()
+    // below), so leaving the ink vars out here would drop them the moment a
+    // photo drop or spacing patch runs styleVars() again after a full
+    // server render had set them.
     var hc = (C.heroColors || []).filter(function (x) { return x.key === b.heroColor; })[0] || (C.heroColors || [])[0] || { bg: '#1E2D4A', rgb: '30,45,74' };
     v.push('--tlcb-hero-bg:' + hc.bg);
     v.push('--tlcb-hero-veil-top-rgb:' + hc.rgb);
+    v.push('--tlcb-hero-title-ink:' + (hc.title || '#fff'));
+    v.push('--tlcb-hero-eyebrow-ink:' + (hc.eyebrow || '#E8C070'));
+    v.push('--tlcb-hero-sub-ink:' + (hc.sub || 'rgba(255,255,255,.72)'));
   }
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
-    v.push('--tlcb-hero-veil:1');
-    var vl = (C.veils || []).filter(function (x) { return x.key === b.veil; })[0] || (C.veils || [])[1] || { top: .82 };
+    // ⚠ Byte-identical to wrapperVars() — 'none' turns the WHOLE overlay off,
+    // not just the top stop's alpha. See the matching comment in blocks.js.
+    v.push('--tlcb-hero-veil:' + (b.veil === 'none' ? 0 : 1));
+    // ⚠ Falls back by KEY ('medium'), not by array index — see the matching
+    // comment in wrapperVars() in admin/blocks.js.
+    var vl = (C.veils || []).filter(function (x) { return x.key === b.veil; })[0] ||
+      (C.veils || []).filter(function (x) { return x.key === 'medium'; })[0] || { top: .82 };
     v.push('--tlcb-hero-veil-top:' + vl.top);
     // ⚠ Falls back by KEY ('center'), not by array index — see the matching
     // comment in wrapperVars() in admin/blocks.js.
@@ -2018,30 +2029,50 @@ function inspectorSections(b, d) {
     }
   }
 
-  // Which News & Events post a countdown targets. Same shape as the Fund
-  // picker above — a select rather than chips, because the list is however
-  // many dated posts News & Events holds. Unlike Fund, an empty list is not
-  // an error to report: it just means nobody has dated anything yet.
+  // Which News & Events post a countdown targets — or, since this shipped,
+  // a date with no post behind it at all. Same shape as the Fund picker
+  // above — a select rather than chips, because the list is however many
+  // dated posts News & Events holds. Unlike Fund, an empty list is not an
+  // error to report: it just means nobody has dated anything yet, and
+  // "Type my own" is still offered regardless.
   if (d.newsRef) {
     var dated = S.config.upcomingNews || [];
-    if (!dated.length) {
-      out += '<div class="ed-sec"><span class="ed-lab">Counting down to</span>' +
-        '<span class="ed-note">Nothing in News &amp; Events has a date yet, so this block will not appear on the page. It will pick up the next dated post automatically once one exists.</span></div>';
-    } else {
-      var cdPicked = dated.filter(function (n) { return Number(n.id) === Number(b.newsId); })[0];
-      out += '<div class="ed-sec"><label class="ed-lab" for="edCdNews">Counting down to</label>' +
-        '<select class="ed-field" id="edCdNews" data-in="newsId" data-k="newsId">' +
-        '<option value=""' + (cdPicked ? '' : ' selected') + '>The next upcoming post, automatically</option>' +
-        dated.map(function (n) {
-          return '<option value="' + esc(String(n.id)) + '"' +
-            (cdPicked && Number(cdPicked.id) === Number(n.id) ? ' selected' : '') + '>' +
-            esc(n.title + ' — ' + n.date) + '</option>';
-        }).join('') +
-        '</select><span class="ed-note">' + (cdPicked
+    var cdCustom = String(b.newsId) === 'custom';
+    var cdPicked = cdCustom ? null : dated.filter(function (n) { return Number(n.id) === Number(b.newsId); })[0];
+    out += '<div class="ed-sec"><label class="ed-lab" for="edCdNews">Counting down to</label>' +
+      '<select class="ed-field" id="edCdNews" data-in="newsId" data-k="newsId">' +
+      '<option value=""' + (!cdCustom && !cdPicked ? ' selected' : '') + '>The next upcoming post, automatically</option>' +
+      dated.map(function (n) {
+        return '<option value="' + esc(String(n.id)) + '"' +
+          (cdPicked && Number(cdPicked.id) === Number(n.id) ? ' selected' : '') + '>' +
+          esc(n.title + ' — ' + n.date) + '</option>';
+      }).join('') +
+      '<option value="custom"' + (cdCustom ? ' selected' : '') + '>Type my own</option>' +
+      '</select><span class="ed-note">' + (cdCustom
+        ? 'Counts down to the date below, in the office’s own words above — both are edited right here, not in News &amp; Events.'
+        : cdPicked
           ? 'Counts down to this post specifically, and disappears from the page once it has passed.'
-          : 'Counts down to whichever dated post in News &amp; Events is soonest, and moves on by itself as each one passes.') +
-        '</span></div>';
+          : dated.length
+            ? 'Counts down to whichever dated post in News &amp; Events is soonest, and moves on by itself as each one passes.'
+            : 'Nothing in News &amp; Events has a date yet, so this stays empty until one does — pick "Type my own" for a date with no post behind it.') +
+      '</span></div>';
+    if (cdCustom) {
+      out += '<div class="ed-sec"><label class="ed-lab" for="edCdAt">Date and time</label>' +
+        '<input class="ed-field" id="edCdAt" type="datetime-local" data-in="customAt" data-k="customAt" value="' + esc(b.customAt || '') + '">' +
+        '<span class="ed-note">Church time — the time you type is the time it counts down to here in St. Louis, whatever timezone a visitor is in. The words above the countdown are typed right on the block, on the canvas.</span></div>';
     }
+  }
+
+  // Photo banner's own custom date. The identical field (`customAt`) the
+  // Countdown block above uses, but this type has no post-picker at all —
+  // see its own "Counts down to" choice, rendered generically above — so it
+  // needs its own trigger and its own place to type it. `!d.newsRef` keeps
+  // this from doubling up with the section just above on the one type
+  // (Countdown) that carries both flags.
+  if (d.customCountdown && !d.newsRef && b.countdown && b.countdownSrc === 'custom') {
+    out += '<div class="ed-sec"><label class="ed-lab" for="edPbAt">Date and time</label>' +
+      '<input class="ed-field" id="edPbAt" type="datetime-local" data-in="customAt" data-k="customAt" value="' + esc(b.customAt || '') + '">' +
+      '<span class="ed-note">Church time — the time you type is the time it counts down to here in St. Louis, whatever timezone a visitor is in.</span></div>';
   }
 
   // Who a contact block writes to. Blank is the normal case and the note says
@@ -2727,7 +2758,16 @@ function inspectorInput(target) {
     // Structural, same reasoning as giveFund: the target's own title and its
     // countdown instant both come from the pick, so the canvas has nothing to
     // patch in place — it has to ask the Worker to redraw.
-    patch(b.id, { newsId: Number(value) || 0 }, 'Changed what the countdown targets', 'rerender');
+    // ⚠ 'custom' is a real, literal value here, not a number to coerce away —
+    // see sanitizeBlock's newsRef/customCountdown handling. Everything else
+    // still goes through Number(), exactly as before this existed.
+    patch(b.id, { newsId: value === 'custom' ? 'custom' : (Number(value) || 0) }, 'Changed what the countdown targets', 'rerender');
+    return;
+  }
+  if (spec === 'customAt') {
+    // Structural too: the countdown's own instant is computed at render
+    // time from this, so there is nothing for the canvas to patch in place.
+    patch(b.id, { customAt: value }, 'Changed the countdown’s date', 'rerender');
     return;
   }
   if (spec === 'url') b.url = value;
