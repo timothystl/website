@@ -1620,6 +1620,33 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     });
   }
 
+  // ── SHOWING OR HIDING THE VOLUNTEERS TAB ─────────────────────────────────
+  // `has_volunteers` already existed as a capability flag on `site_events` —
+  // the generic events admin only ever sets it once, at creation, and never
+  // offers a way back. The market's own row was seeded with it ON, and
+  // nothing here ever read it at all: the Volunteers tab showed to every
+  // canMarket account regardless. This is the door that was missing — a real
+  // toggle, same shape and same permission as "Taking vendor applications"
+  // right above it, so the coordinator can turn off the Serve read-out for a
+  // year the market isn't using it without losing anything else on the
+  // screen.
+  //
+  // ⚠ SWITCHED OFF, THE TAB IS ABSENT FROM `TABS`, NOT DISABLED — same rule
+  // every other tab on this screen follows. `active` then falls back to the
+  // first tab this reader can still open, so nobody lands on a dead link.
+  if (path === '/market/volunteers-tab' && method === 'POST') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const enabled = form.getAll('volunteers_enabled').includes('1') ? 1 : 0;
+    await env.DB.prepare("UPDATE site_events SET has_volunteers = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(enabled).run();
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_volunteers_enabled', 'Volunteers tab',
+      { value: settings.volunteersEnabled ? '1' : '0' }, { value: String(enabled) });
+    return new Response('', {
+      status: 302,
+      headers: { Location: '/market?toast=' + encodeURIComponent(enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden — nothing about the market itself changed') },
+    });
+  }
+
   // The seven plain settings — day, hours, table fee, the two processor
   // figures, the coordinator's address — that used to live on the generic
   // Settings screen. Moved here so the coordinator's whole day-to-day picture
@@ -1764,7 +1791,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       { key: 'vendors', label: 'Vendors', on: canMarket },
       { key: 'pages', label: 'Page & copy', on: canPages },
       { key: 'money', label: 'Money & dates', on: canSettings || canGiving },
-      { key: 'volunteers', label: 'Volunteers', on: canMarket },
+      { key: 'volunteers', label: 'Volunteers', on: canMarket && settings.volunteersEnabled },
       { key: 'photos', label: 'Photos', on: canPhotos },
     ].filter((t) => t.on);
     // ⚠ The default is the first tab this reader can actually open, not a
@@ -1823,6 +1850,17 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           <button type="submit" class="tlc-btn-primary">Save</button>
         </form>
         <p class="tlc-hint" style="margin-top:12px;">Switched off, the vendor page still explains the market and still lists the coordinator's address — it just stops taking applications and stops asking anybody for money. Nothing already submitted is affected.</p>
+        <form method="POST" action="/market/volunteers-tab" style="margin:16px 0 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <input type="hidden" name="volunteers_enabled" value="0">
+          <label class="tlc-toggle">
+            <input type="checkbox" name="volunteers_enabled" value="1"${settings.volunteersEnabled ? ' checked' : ''}>
+            <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+            <span class="tlc-toggle-label">Volunteers tab</span>
+            <span class="tlc-toggle-state" data-on="Showing" data-off="Hidden">${settings.volunteersEnabled ? 'Showing' : 'Hidden'}</span>
+          </label>
+          <button type="submit" class="tlc-btn-primary">Save</button>
+        </form>
+        <p class="tlc-hint" style="margin-top:8px;">Off hides the Volunteers tab above — it reads live from Serve (serve.timothystl.org) and is worth switching off if the market isn't using Serve for its roster this year. Nothing about the market's own vendors or pages is affected either way.</p>
         <p class="tlc-hint" style="margin-top:8px;">${(() => {
           const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
           if (settings.paymentProvider === 'square') {
@@ -2066,7 +2104,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // login. Nothing here writes back, and nothing should: two places editing
     // one roster is two rosters.
     let volunteersSection = '';
-    if (active === 'volunteers' && canMarket) {
+    if (active === 'volunteers' && canMarket && settings.volunteersEnabled) {
       const { vol, volError } = await fetchRoster(env);
 
       const roster = normalizeRoster(vol || {});

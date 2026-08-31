@@ -4832,6 +4832,56 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
   } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
 }
 
+// ── THE VOLUNTEERS TAB HAS A REAL OFF SWITCH ─────────────────────────────────
+// `has_volunteers` already existed as a column on `site_events` and was
+// simply never read by the market's own tab list — every canMarket account
+// saw the Volunteers tab regardless. This is the door: a toggle in the
+// Vendors tab's own Applications panel (same shape and permission as
+// "Taking vendor applications" beside it), so a year the market isn't using
+// Serve for its roster, the tab can be hidden without losing anything else.
+group('the Volunteers tab can be switched off, and back on');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const on = await (await call(env, '/market', { cookie })).text();
+  has(on, '>Volunteers</a>', 'showing by default — the market’s own row was seeded with it on');
+  has(on, 'Volunteers tab', 'and the toggle for it is on the Vendors tab, in the Applications panel');
+
+  const off = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: {} });
+  eq(off.status, 302, 'switching it off redirects back to the screen');
+  eq(decodeURIComponent(off.headers.get('Location')).includes('is hidden'), true, 'and the toast says so');
+  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0,
+    'the market’s own row is updated — has_volunteers, not a second field');
+
+  const hiddenBody = await (await call(env, '/market', { cookie })).text();
+  lacks(hiddenBody, '>Volunteers</a>', 'the tab is gone — not disabled, absent, same as every other tab on this screen');
+
+  // ⚠ Asking for it by address must not hand it over anyway.
+  const sneak = await (await call(env, '/market?tab=volunteers', { cookie })).text();
+  lacks(sneak, 'Manage shifts in Serve', 'the volunteers section itself is never built once the tab is hidden');
+  lacks(sneak, 'Who is covering the market', 'nor its own purpose line');
+  has(sneak, 'tlc-tile-num', 'and the address falls back to Vendors, the first tab still open to this reader');
+
+  // Nothing about the market itself — its vendors, its pages, its capacity
+  // settings — moved when the tab was hidden.
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_events WHERE id='christmasmarket'").get().n, 1, 'the event row is untouched otherwise');
+
+  // Switching it back on works the same way.
+  const back = await call(env, '/market/volunteers-tab', { cookie, method: 'POST', form: { volunteers_enabled: '1' } });
+  eq(decodeURIComponent(back.headers.get('Location')).includes('showing again'), true, 'the toast says it is back');
+  const backBody = await (await call(env, '/market', { cookie })).text();
+  has(backBody, '>Volunteers</a>', 'and the tab really is');
+
+  // Only market_manage may touch this — same permission as the applications
+  // toggle right beside it in the same panel.
+  const { cookie: pagesOnly } = signIn(db, ['pages_edit'], 'writer2');
+  const refused = await call(env, '/market/volunteers-tab', { cookie: pagesOnly, method: 'POST', form: { volunteers_enabled: '0' } });
+  eq(refused.status, 403, 'pages_edit alone cannot touch it');
+  eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 1,
+    'and the setting is unchanged by the refused attempt');
+}
+
 group('the vendor list is gated on its own permission');
 {
   const { db, env } = await boot();

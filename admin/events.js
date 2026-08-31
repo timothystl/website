@@ -162,6 +162,7 @@ export function eventFeeConfig(ev, giveUrl = '') {
     registrationCap: ev.registration_cap == null ? '' : Number(ev.registration_cap),
     waitlistEnabled: !!Number(ev.waitlist_enabled),
     waitlistCap: ev.waitlist_cap == null ? '' : Number(ev.waitlist_cap),
+    volunteersEnabled: !!Number(ev.has_volunteers),
     giveUrl: giveUrl || '',
     paymentProvider: ev.payment_provider === 'square' ? 'square' : 'tithely',
     squareLinks: safeJsonObject(ev.square_links),
