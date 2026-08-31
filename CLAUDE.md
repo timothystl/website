@@ -173,6 +173,72 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The hero banner gets a finer photo position and a color of its own (v5.51.0, 2026-08-31)
+
+Dinger, on the Christmas Market hero, whose banner is essentially navy-on-navy
+(a dark snowflake photo over the hero's own navy field): the Top/Center/Bottom
+photo-position jump was too coarse, and adjusting "Photo shading" produced no
+visible change at all.
+
+**The shading complaint was real, and it was never a bug in the shading
+control — it was that the field under it was always the same navy the veil
+itself is tinted.** `.tlcb-hero`'s flat, no-photo background has been a
+hardcoded `#1E2D4A` since the block shipped, and the veil gradient laid over a
+photo has always been that identical navy at varying alpha
+(`rgba(30,45,74,…)`). A dark, already-near-navy photo (like this one) puts the
+veil right on top of a color it cannot be told apart from — "Light" vs "Heavy"
+moves an alpha value nobody can see move.
+
+- **`HERO_COLORS`** (`admin/blocks.js`) is a new choice, **Banner color** —
+  five options, each reusing a hex already established elsewhere on the site
+  (the BG palette above it, Design System → Colors): Navy (the original,
+  unchanged default), Ink, Moss, Teal, Slate. It is not a free color picker,
+  the same "a palette, not a picker" rule this file already holds the
+  calendar and the header to. One field does two jobs: it is the flat color a
+  photo-less hero renders as, **and** the tint of the veil's top stop over a
+  photo — so picking Moss both recolors an empty hero and gives a dark photo's
+  overlay something other than navy-on-navy to contrast against.
+- **⚠ The veil's BOTTOM stop stays the fixed near-black it has always been,
+  for every color.** That is the existing rule ("only the top stop moves, the
+  bottom stop is what keeps the headline legible") — extended to "and whatever
+  color the top stop takes," not weakened. It still lives in `BLOCK_CSS`,
+  unconditional, not in the per-block wrapper vars.
+- **⚠ Emitted whether or not there is a photo**, unlike the veil's own toggle
+  and alpha (`--tlcb-hero-veil` / `--tlcb-hero-veil-top`), which stay gated on
+  `b.photo` exactly as before. `--tlcb-hero-bg` has to reach a photo-less hero
+  too, since it is also that hero's flat field color.
+- **`IMG_POSITIONS` grew from three steps to five** — Top / Upper / Center /
+  Lower / Bottom, at the quarter marks (`center 25%` / `center 75%`) either
+  side of Center. The original three keys keep their exact original CSS
+  values byte-for-byte, so a block already carrying `top`/`center`/`bottom`
+  needed no migration.
+- **⚠ Neither is a free coordinate or a slider** — both stay short, named
+  lists, the pastor's own standing rule for this editor: a typed-in number is
+  exactly the kind of thing that can break a page, a chip from a fixed list
+  cannot.
+- **`admin/page-seeds.js` / `admin/site-pages.js` needed `"heroColor": "navy"`
+  added to every already-generated hero block**, the same "seeds are already
+  sanitized" requirement `IMG_POSITIONS`/`VEILS` themselves were added under in
+  v5.17.0 — purely additive, so no already-published hero moved.
+- **⚠ Regenerating via `tools/extract-pages.mjs` was tried first and reverted.**
+  `public/index.html`'s hardcoded `/calendar` markup has drifted from what
+  `admin/site-pages.js` was last extracted from (its calendar blocks now
+  extract as plain text rather than `calendar` blocks) — re-running the
+  extractor for this change would have picked up that unrelated drift. The two
+  generated files were patched by hand instead, inserting only the one new key
+  at the exact position `sanitizeBlock`'s own choices loop would put it. The
+  extractor drift itself is a separate, pre-existing gap, not touched here.
+
+Run: the extended `The hero photo can be shaded lighter and repositioned`
+group in `node admin/blocks.test.mjs` — the new color choice, the two new
+position steps, the fixed veil bottom stop (now read from `BLOCK_CSS` itself
+rather than the per-block wrapper), and the client-config mirror agreeing on
+five position options and five colors. Verified in a real, headless-Chromium
+editor session against the actual rendered markup — a hero block was added,
+selected, and its Banner-color chip clicked, with the computed
+`background-color` read before and after to confirm Navy → Moss actually
+changes what paints.
+
 ### The Volunteers tab can be switched off (2026-08-31)
 
 Dinger: *"now for the volunteering portion of the christmas market can we have
