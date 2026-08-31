@@ -1230,12 +1230,23 @@ function styleVars(b) {
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'hero') {
+    // Byte-identical to wrapperVars() in admin/blocks.js — emitted whether or
+    // not there is a photo, since it is also the flat field color when there
+    // is none.
+    var hc = (C.heroColors || []).filter(function (x) { return x.key === b.heroColor; })[0] || (C.heroColors || [])[0] || { bg: '#1E2D4A', rgb: '30,45,74' };
+    v.push('--tlcb-hero-bg:' + hc.bg);
+    v.push('--tlcb-hero-veil-top-rgb:' + hc.rgb);
+  }
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
     v.push('--tlcb-hero-veil:1');
     var vl = (C.veils || []).filter(function (x) { return x.key === b.veil; })[0] || (C.veils || [])[1] || { top: .82 };
     v.push('--tlcb-hero-veil-top:' + vl.top);
-    var ip = (C.imgPositions || []).filter(function (x) { return x.key === b.imgPos; })[0] || (C.imgPositions || [])[1] || { css: 'center' };
+    // ⚠ Falls back by KEY ('center'), not by array index — see the matching
+    // comment in wrapperVars() in admin/blocks.js.
+    var ip = (C.imgPositions || []).filter(function (x) { return x.key === b.imgPos; })[0] ||
+      (C.imgPositions || []).filter(function (x) { return x.key === 'center'; })[0] || { css: 'center' };
     v.push('--tlcb-hero-pos:' + ip.css);
   }
   return v.join(';');
