@@ -5460,7 +5460,11 @@ ${renderFormSection({
   ],
   body: `<div class="tlc-field">
     <label class="tlc-label" for="media-file">File</label>
-    <input type="file" id="media-file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf">
+    <div id="media-dropzone" style="border:2px dashed var(--border);border-radius:10px;padding:28px 16px;text-align:center;background:var(--paper);transition:border-color .15s,background .15s;cursor:pointer;">
+      <div style="font-size:14px;color:var(--charcoal);">Drag a photo or PDF here, or <label for="media-file" style="color:var(--steel);text-decoration:underline;cursor:pointer;" onclick="event.stopPropagation();">choose a file</label></div>
+      <div id="media-dropzone-name" style="font-size:13px;color:var(--gray);margin-top:6px;"></div>
+      <input type="file" id="media-file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
+    </div>
     <p class="tlc-hint" id="media-upload-status"></p>
   </div>`,
 })}
@@ -5469,11 +5473,63 @@ ${renderFormSection({
 (function(){
   var form = document.querySelector('.tlc-form');
   if (!form) return;
+  var status = document.getElementById('media-upload-status');
+  var fileInput = document.getElementById('media-file');
+  var zone = document.getElementById('media-dropzone');
+  var nameEl = document.getElementById('media-dropzone-name');
+  var selectedFile = null;
+
+  // A dropped photo or PDF picks its own "What is this" chip — the office can
+  // still override it, this just saves the click for the common case.
+  function pickKindFor(file) {
+    var target = (file && file.type === 'application/pdf') ? 'file' : 'photo';
+    form.querySelectorAll('input[name="kind"]').forEach(function(r){ r.checked = (r.value === target); });
+  }
+  function setFile(file) {
+    selectedFile = file || null;
+    nameEl.textContent = selectedFile ? selectedFile.name : '';
+    if (selectedFile) pickKindFor(selectedFile);
+  }
+  function highlight(on) {
+    zone.style.borderColor = on ? 'var(--steel)' : 'var(--border)';
+    zone.style.background = on ? 'var(--linen)' : 'var(--paper)';
+  }
+
+  fileInput.addEventListener('change', function(){ setFile(fileInput.files[0] || null); });
+  zone.addEventListener('click', function(e){ if (e.target === zone || e.target === nameEl) fileInput.click(); });
+
+  // ⚠ ON dragover THE FILE LIST IS EMPTY — every browser withholds the files
+  // until the drop itself lands, so only 'types' is readable here. Reading
+  // for it is also what tells a dragged file apart from dragged page text,
+  // which must not light the zone up as a valid target.
+  ['dragenter', 'dragover'].forEach(function(evt){
+    zone.addEventListener(evt, function(e){
+      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') === -1) return;
+      e.preventDefault();
+      highlight(true);
+    });
+  });
+  ['dragleave', 'dragend'].forEach(function(evt){ zone.addEventListener(evt, function(){ highlight(false); }); });
+  zone.addEventListener('drop', function(e){
+    e.preventDefault();
+    highlight(false);
+    var dropped = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (dropped) setFile(dropped);
+  });
+
+  // ⚠ A file dropped ANYWHERE ELSE on this page must not navigate the browser
+  // away to display it — missing the zone by a little would otherwise
+  // replace the whole upload screen with the photo just dropped on it.
+  ['dragover', 'drop'].forEach(function(evt){
+    window.addEventListener(evt, function(e){
+      if (zone.contains(e.target)) return;
+      e.preventDefault();
+    });
+  });
+
   form.addEventListener('submit', async function(e){
     e.preventDefault();
-    var status = document.getElementById('media-upload-status');
-    var fileInput = document.getElementById('media-file');
-    var file = fileInput.files[0];
+    var file = selectedFile || fileInput.files[0];
     if (!file) { status.textContent = 'Choose a file first.'; return; }
     var kind = (form.querySelector('input[name="kind"]:checked') || {}).value || 'photo';
     var alt = (form.querySelector('input[name="alt"]') || {}).value || '';
