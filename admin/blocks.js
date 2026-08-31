@@ -4517,8 +4517,15 @@ const MARKET_APP_SCRIPT = '<script>' + MARKET_PRICING_JS + `
         .then(function (res) {
           if (!res.ok || res.d.error) throw new Error(res.d.error || 'Server error');
           if (res.d.payUrl) { say(w, 'Application received — taking you to payment…', 'ok'); window.location.href = res.d.payUrl; return; }
-          say(w, 'Your application is in. We could not open the payment page from here — email '
-            + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take payment and hold your space.', 'ok');
+          if (res.d.waitlisted) {
+            say(w, "Confirmed tables are full, so you're on our waiting list — your application is saved and nothing is charged. "
+              + "We will email you if a table opens up.", 'ok');
+          } else if (res.d.checkPay) {
+            say(w, 'Your application is in. Bring or mail your payment as described in the confirmation email we just sent you.', 'ok');
+          } else {
+            say(w, 'Your application is in. We could not open the payment page from here — email '
+              + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take payment and hold your space.', 'ok');
+          }
           if (btn) { btn.disabled = true; btn.textContent = 'Application received'; }
         })
         .catch(function (err) {

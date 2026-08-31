@@ -173,6 +173,115 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The market has only so many tables: confirmed pauses at 60, a soft reserve to 70, and a manual door for ministries (2026-08-31)
+
+Dinger: *"for the christmas market we only have so many tables to allow people
+to reserve. 70 is the absolute max, but would like the system to pause it at
+60 for confirmed table and then we can have a soft reserve of the next 10 —
+no payment taken. And i need a way to manually enter someone in from the
+backend that are church related ministries that will not pay."*
+
+**There was no capacity concept on the market at all before this.** The
+generic events system already had one — `registration_cap` /
+`waitlist_enabled` on `site_events`, and `capacityDecision()` in
+`admin/events.js` — built for a plain sign-up (VBS, the Egg Hunt) where "full"
+means "refuse or waitlist." The market's own `/api/market/apply` route never
+called it. Two things had to change, not one: a second, harder ceiling past
+the ordinary waitlist (the market's "10 more, then genuinely full" is not the
+same shape as an unbounded waitlist), and the market actually asking the
+question at all.
+
+- **`site_events.waitlist_cap` is the new column** — the hard ceiling PAST a
+  full `registration_cap`, counted against confirmed **plus** whatever is
+  already reserved, not against confirmed alone. `capacityDecision(ev,
+  currentQty, addingQty, currentTotalQty)` takes a fourth, optional argument
+  for it; every existing caller that never passes one gets back the exact
+  behavior it always had — a `waitlist_cap` of NULL means the waitlist is
+  unbounded, which is what every event created before this still has.
+- **60 confirmed, then a soft reserve to 70, then refused outright** is three
+  states, not two: under the pause, an application is ordinary — saved, then
+  sent to pay. Past the pause and under 70 total, it is a **soft reserve**:
+  saved, `waitlisted: 1`, and **no payment link at all**, whatever payment
+  method was chosen — nothing is charged until the coordinator confirms it by
+  hand. Past 70, it is refused outright with a plain "the market is full"
+  message, the same shape `/api/events/register` already used for a
+  no-waitlist event.
+  - ⚠ **THE HARD CAP IS CHECKED AGAINST CONFIRMED PLUS RESERVED, NEVER
+    CONFIRMED ALONE.** A market sitting at 60 confirmed and 8 already
+    reserved has room for 2 more, not 10 — `capacityDecision()`'s fourth
+    argument is exactly that second sum, and `/api/market/apply` computes
+    both in one query (`waitlisted = 0` for confirmed, no filter for total,
+    both excluding `payment_status = 'dropped'`).
+  - **A soft-reserved row is a real registration**, not a separate list — it
+    sorts, filters, exports and edits exactly like any other application. It
+    carries a "Waiting list" badge and a **Confirm table** button next to its
+    name (`/market/update`'s new `confirm_reserve` field, allowlisted the
+    same way every other single-cell save is), which does exactly one
+    thing — clears `waitlisted` — and nothing else. Confirming does **not**
+    itself take payment or generate a link; the coordinator collects it the
+    same way she always has, now that the row reads as ordinary.
+  - **Both confirmation emails say so.** The vendor is told they are on the
+    waiting list and asked for nothing; the coordinator is told the same,
+    with a note that no payment link was sent, so she does not go looking
+    for a payment that was never asked for.
+  - The Vendors tab's own capacity tile switches from "Tables asked for" to
+    **"Tables confirmed · of 60 before the pause"** the moment a cap is set,
+    with a "· N on the waiting list" clause only when there are any — an
+    always-zero clause on a market that has never had a reserve is the
+    dead-control rule this repo keeps warning about elsewhere.
+- **The two numbers live on `/market?tab=money`**, next to the existing seven
+  settings, gated `settings_manage` like the rest of that panel — not
+  `market_manage`, for the same reason the table fee and the market day
+  already are not: this is an office/pastor decision, not the coordinator's
+  day-to-day one. "Soft reserve once the pause is reached" is a real toggle
+  (`waitlist_enabled`); switched off, the pause simply refuses anything past
+  it, matching the generic event's own "No, refuse instead" choice.
+  - ⚠ **THE HARD-CAP FIELD IS A HIDDEN CARRIER, NOT OMITTED, WHEN THE
+    TOGGLE IS OFF.** Its `renderField` only appears while the reserve is on;
+    without a hidden input standing in when it is off, a coordinator saving
+    some *other* field on the same screen — the coordinator's email, say —
+    would silently null out a hard cap she had already set, for a reason
+    that has nothing to do with what she actually changed. A test drives
+    exactly that sequence: set both numbers, turn the reserve off, save an
+    unrelated field, confirm the hard cap survives.
+- **A ministry entered by hand never touches the public form.** `+ Add a
+  vendor by hand` is a collapsed `<details>` above the vendor list (rare
+  enough — half a dozen a season — that it must not compete with the tools
+  used dozens of times a day), posting to the new `/market/add`, gated
+  `market_manage`. The row it creates is ordinary in every way except three:
+  `payment_status: 'waived'`, `amount_due_cents: 0`, `amount_paid_cents: 0` —
+  set automatically, not offered as a choice, because the whole point of this
+  door is that nobody is asked to pay.
+  - ⚠ **NEVER A SOFT RESERVE, WHATEVER THE CAP SAYS.** A staff member adding
+    MDO or Word of Life by hand has already decided the ministry has a
+    table; it is inserted `waitlisted: 0` and counts against the confirmed
+    pause immediately, the same as a paid application — which is also
+    correct: a table a ministry is sitting at is a table the public
+    application has to count as taken, or the pause is lying about how many
+    are left.
+  - Only a ministry/group name is required — no email, no phone, no product
+    description — because there is no vendor to confirm any of that with.
+- **`admin/events.js`'s own generic `/settings` screen (VBS, the Egg Hunt,
+  any future event) gained the identical `waitlist_cap` field**, for the same
+  reason the mirror rule holds everywhere else in this admin: the market's
+  shape — a hard ceiling past an ordinary waitlist — is not unique to the
+  market, and a second implementation for the next event that wants it would
+  be the second copy of one fact this repo keeps warning about.
+
+Run: `node admin/market.test.mjs` (341, three new groups — the pure
+`capacityDecision()` shape with all four arguments, the insert/read round
+trip of the `waitlisted` flag, and both confirmation emails), `node
+admin/ui.test.mjs` (the radius rule caught two illegal values on the first
+pass, fixed to 8/11 from the legal set), and three new groups in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+driving the real `/api/market/apply`, `/market/settings`, `/market/update` and
+`/market/add` routes end to end — the pause-then-reserve-then-refuse sequence
+by table count, the settings panel round trip (including the hidden-carrier
+case), and a hand-added ministry counting toward the pause. `node
+--experimental-loader ./test/html-loader.mjs test/events-admin.test.mjs`
+(147, unaffected) confirms the generic event's own capacity test still passes
+with `capacityDecision()`'s new fourth argument defaulted away.
+
 ### Contact and Prayer publish through the block editor now (2026-08-22)
 
 Dinger: *"i want to publish the page. i dont want any page now to be hardcoded

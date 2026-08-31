@@ -1506,6 +1506,11 @@ export const MARKET_CSS = `
 .tlc-mkt-band{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 16px;}
 .tlc-mkt-bandlink{background:transparent;border:0;padding:0;font:600 13px var(--tlc-sans);
   color:var(--tlc-navy);text-decoration:underline;cursor:pointer;}
+.tlc-mkt-add{margin-bottom:16px;border:1px solid var(--tlc-edge);border-radius:11px;background:#fff;}
+.tlc-mkt-add-summary{list-style:none;cursor:pointer;padding:12px 16px;font:600 13.5px var(--tlc-sans);color:var(--tlc-navy);}
+.tlc-mkt-add-summary::-webkit-details-marker{display:none;}
+.tlc-mkt-add[open] .tlc-mkt-add-summary{border-bottom:1px solid var(--tlc-edge);}
+.tlc-mkt-add-body{padding:16px;max-width:480px;}
 .tlc-mkt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .tlc-mkt-search{flex:1;min-width:200px;max-width:300px;display:flex;align-items:center;gap:8px;
   background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:0 12px;color:var(--tlc-muted);}
@@ -1549,6 +1554,10 @@ export const MARKET_CSS = `
 .tlc-mkt-name{min-width:0;display:flex;flex-direction:column;gap:2px;}
 .tlc-mkt-biz{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
 .tlc-mkt-sub{font-size:11.5px;line-height:1.35;color:var(--tlc-muted);overflow-wrap:anywhere;}
+.tlc-mkt-waitbadge{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:600 11px var(--tlc-sans);color:${TONES.warn.fg};}
+.tlc-mkt-waitbtn{font:600 11px var(--tlc-sans);color:var(--tlc-navy);background:var(--tlc-parchment);
+  border:1px solid var(--tlc-edge);border-radius:8px;padding:2px 8px;cursor:pointer;}
+.tlc-mkt-waitbtn:hover{background:var(--tlc-sand);}
 .tlc-mkt-sells{font-size:12.5px;line-height:1.4;color:var(--tlc-body);min-width:0;overflow-wrap:anywhere;}
 .tlc-mkt-quiet{font-size:12px;line-height:1.5;color:var(--tlc-muted);}
 /* ⚠ A cell is transparent until it is reached for. The row has eight of them
@@ -1757,6 +1766,7 @@ export const MARKET_JS = `
     rows().forEach(function(r){
       var inFilter = filter === 'all' ? true
         : filter === 'check' ? r.getAttribute('data-check-pending') === '1'
+        : filter === 'waitlist' ? r.getAttribute('data-waitlisted') === '1'
         : r.getAttribute('data-filter') === filter;
       if (inFilter) reach++;
       var hit = !q || (r.getAttribute('data-search') || '').indexOf(q) !== -1;
@@ -1853,6 +1863,14 @@ export const MARKET_JS = `
     } else if (col && st.checkMode === 'received') {
       col.querySelector('.tlc-mkt-checkin').textContent = st.checkLabel;
     }
+    // Confirming off the waiting list is the one way this ever goes from 1
+    // to 0 — never the other way from this screen — so the badge is simply
+    // removed rather than redrawn on.
+    row.setAttribute('data-waitlisted', st.waitlisted ? '1' : '0');
+    if (!st.waitlisted) {
+      var badge = row.querySelector('.tlc-mkt-waitbadge');
+      if (badge) badge.remove();
+    }
   }
 
   function save(el, field, value){
@@ -1897,6 +1915,8 @@ export const MARKET_JS = `
     if (h) { sortBy(h.getAttribute('data-sort'), h.getAttribute('data-num') === '1'); return; }
     var chk = e.target.closest('[data-checkin]');
     if (chk) { save(chk, 'check_in', ''); return; }
+    var wl = e.target.closest('[data-confirmreserve]');
+    if (wl) { save(wl, 'confirm_reserve', ''); return; }
     var x = e.target.closest('[data-expand]');
     if (x) {
       var row = x.closest('.tlc-mkt-row');

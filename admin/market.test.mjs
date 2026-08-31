@@ -23,6 +23,7 @@ import {
   parseClock, parseShiftLabel, fmtClock, fmtRange, fmtDay,
   normalizeRoster, jobsFor, slotsFor, peopleFor, volunteerCsvRows, volunteerCsv,
 } from './market.js';
+import { capacityDecision } from './events.js';
 
 import { execFileSync } from 'node:child_process';
 
@@ -624,6 +625,120 @@ group('the roster as a spreadsheet');
   ok(nasty.includes(`"'-Bobby"`), 'and so is a person’s');
 
   eq(volunteerCsvRows([]).length, 1, 'an empty roster is the header alone, never a row of nothing');
+}
+
+// ── TABLE CAPACITY: PAUSE CONFIRMED, THEN A SOFT RESERVE, THEN NOTHING ──────
+// capacityDecision() itself lives in admin/events.js, generalized for any
+// event that takes registrations — this pins the exact shape the Christmas
+// Market asks of it: 60 confirmed, then a soft reserve up to 70, then
+// refused outright. See tlc-admin-worker.js's /api/market/apply route for
+// where the two counts it is handed (confirmed, and confirmed+reserved) are
+// actually computed against the live table.
+group('a table cap pauses confirmed applications, then softly reserves, then refuses');
+{
+  const ev = { registration_cap: 60, waitlist_enabled: 1, waitlist_cap: 70 };
+
+  // Under the pause: neither waitlisted nor refused.
+  eq(JSON.stringify(capacityDecision(ev, 55, 3, 55)), JSON.stringify({ waitlisted: false, refused: false }),
+    '58 of 60 confirmed — a 3-table application is accepted outright');
+
+  // Exactly at the pause: still accepted outright — the pause is where
+  // NEW applications stop being taken at face value, not a table short of it.
+  eq(JSON.stringify(capacityDecision(ev, 58, 2, 58)), JSON.stringify({ waitlisted: false, refused: false }),
+    'landing exactly on 60 confirmed is still an ordinary application');
+
+  // Past the pause, inside the hard cap: soft-reserved.
+  eq(JSON.stringify(capacityDecision(ev, 60, 5, 60)), JSON.stringify({ waitlisted: true, refused: false }),
+    '60 confirmed plus 5 more (65 of 70) is a soft reserve, not a refusal');
+
+  // Past the pause AND past the hard cap: refused outright, not queued.
+  eq(JSON.stringify(capacityDecision(ev, 60, 11, 60)), JSON.stringify({ waitlisted: false, refused: true }),
+    '60 confirmed plus 11 more would be 71 — past the 70 absolute maximum — refused');
+
+  // The hard cap counts what is ALREADY reserved, not only what is confirmed —
+  // a market sitting at 60 confirmed and 8 already reserved (68 of 70) has
+  // room for exactly 2 more, not 10.
+  eq(JSON.stringify(capacityDecision(ev, 60, 2, 68)), JSON.stringify({ waitlisted: true, refused: false }),
+    '68 of 70 total plus 2 more lands exactly on 70 — a reserve, not a refusal');
+  eq(JSON.stringify(capacityDecision(ev, 60, 3, 68)), JSON.stringify({ waitlisted: false, refused: true }),
+    '68 of 70 total plus 3 more would be 71 — past the hard cap — refused, even though confirmed alone (60) has not moved');
+
+  // No waitlist enabled at all: refused the moment the pause is reached,
+  // whatever the hard cap says — the market’s own settings panel makes this
+  // exact choice (“Soft reserve” off).
+  const noWaitlist = { registration_cap: 60, waitlist_enabled: 0, waitlist_cap: 70 };
+  eq(JSON.stringify(capacityDecision(noWaitlist, 60, 1, 60)), JSON.stringify({ waitlisted: false, refused: true }),
+    'with the soft reserve switched off, anything past the pause is refused outright');
+
+  // No hard cap set at all (blank “Absolute maximum”): the waitlist is
+  // unbounded, matching every OTHER event’s capacityDecision() before this
+  // work — nothing about this change may narrow that default.
+  const uncappedReserve = { registration_cap: 60, waitlist_enabled: 1, waitlist_cap: null };
+  eq(JSON.stringify(capacityDecision(uncappedReserve, 60, 500, 900)), JSON.stringify({ waitlisted: true, refused: false }),
+    'a blank hard cap never refuses — the waitlist absorbs whatever comes, as it always has');
+
+  // No cap set at all: every application is accepted outright, exactly the
+  // uncapped default this repo has documented since the generic events work.
+  eq(JSON.stringify(capacityDecision({}, 1000, 5)), JSON.stringify({ waitlisted: false, refused: false }),
+    'a market with no cap at all takes any application, as it always has');
+
+  // The default fourth argument reproduces the exact pre-existing behavior
+  // for every caller that never passes it — the generic /api/events/register
+  // route’s own existing call sites among them.
+  eq(JSON.stringify(capacityDecision(ev, 60, 3)), JSON.stringify(capacityDecision(ev, 60, 3, 60)),
+    'omitting currentTotalQty defaults it to currentQty, unchanged from before this work');
+}
+
+group('a soft-reserved application is inserted waitlisted, and takes no payment link');
+{
+  const price = priceBreakdown(2, CFG);
+  const value = { participant_names: 'Sue Lin', business_name: '', email: 'sue@example.com', phone: '3145550100',
+    tables: 2, signature_name: 'Sue Lin', payment_method: 'card',
+    website_or_social: '', returning_vendor: '', street: '', city: '', state: '', zip: '',
+    product_description: 'Ornaments', sells_food: 0, appliances_power: '', special_requests: '' };
+
+  const reserved = marketInsertArgs(value, price, [], { waitlisted: true });
+  eq(reserved.waitlisted, true, 'the insert args carry the reserve flag');
+  eq(reserved.amount_due_cents, price.totalCents, 'what would be owed is still recorded, for when it is confirmed');
+
+  const ordinary = marketInsertArgs(value, price, []);
+  eq(ordinary.waitlisted, false, 'omitting the option — every existing caller before this — reads as an ordinary application');
+
+  // marketRowFromRegistration() has to read the flag back out the same way.
+  const row = marketRowFromRegistration({
+    id: 1, contact_name: 'Sue Lin', contact_email: 'sue@example.com', contact_phone: '3145550100',
+    qty: 2, payment_status: 'unpaid', amount_due_cents: price.totalCents, amount_paid_cents: null,
+    waitlisted: 1, created_at: '2026-08-31 00:00:00',
+    fields_json: JSON.stringify({ product_description: 'Ornaments', signature_name: 'Sue Lin', payment_method: 'card' }),
+  });
+  eq(row.waitlisted, true, 'a stored 1 reads back as a real boolean, not the integer');
+  eq(vendorCellState(row).waitlisted, true, 'and the cell state the row saves/repaints from carries it too');
+
+  const notReserved = marketRowFromRegistration({ id: 2, waitlisted: 0, fields_json: '{}' });
+  eq(notReserved.waitlisted, false, 'a stored 0 — or nothing at all — reads back false');
+}
+
+group('the confirmation emails say “waiting list”, not “pay now”, for a soft reserve');
+{
+  const settings = { dateLabel: 'Saturday, Dec 12', hoursLabel: '10–5', coordinatorEmail: 'marla@example.com' };
+  const vendor = { participant_names: 'Sue Lin', tables: 2, payment_method: 'card' };
+
+  const vendorHtml = vendorEmailHtml(vendor, { totalCents: 6210, payUrl: '', settings, waitlisted: true });
+  ok(vendorHtml.includes('waiting list'), 'the vendor is told they are on the waiting list');
+  ok(!vendorHtml.includes('Your space is held'), 'and never told their space is held, which is only true once confirmed');
+  ok(!vendorHtml.includes('for your table'), 'and given no payment link of any kind — the only href left is the plain mailto for questions');
+
+  const ordinaryHtml = vendorEmailHtml(vendor, { totalCents: 6210, payUrl: 'https://square.link/u/x', settings, waitlisted: false });
+  ok(!ordinaryHtml.includes('waiting list'), 'an ordinary, non-reserved application says nothing about a waiting list');
+
+  const coordHtml = coordinatorEmailHtml({ ...vendor, product_description: 'Ornaments', signature_name: 'Sue Lin' },
+    { totalCents: 6210, waitlisted: true });
+  ok(coordHtml.includes('Soft reserve'), 'the coordinator is told this one is a soft reserve');
+  ok(coordHtml.includes('No payment link was sent'), 'and that nothing was sent to collect on it');
+
+  const coordOrdinary = coordinatorEmailHtml({ ...vendor, product_description: 'Ornaments', signature_name: 'Sue Lin' },
+    { totalCents: 6210 });
+  ok(!coordOrdinary.includes('Soft reserve'), 'an ordinary application carries no such notice — waitlisted defaults to false');
 }
 
 console.log(`\nmarket.test.mjs: ${pass} passed, ${fail} failed`);
