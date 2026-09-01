@@ -1770,15 +1770,32 @@ group('gym rentals ships both layouts');
   // Month navigation must not lose the view.
   has(cal, 'view=calendar&m=', 'month navigation keeps the calendar view');
 
+  // ⚠ "Open" vs "past" both depend on where TODAY sits inside whichever month
+  // is being viewed — never on a day-of-month typed as a literal. The default
+  // `/gym-rentals` view (no `?m=`) is whatever month `now` falls in, so a
+  // fixed day like the 21st is only "open" for the first three weeks of the
+  // month and only "past" once the month is a few days old. Both windows are
+  // real — this suite is run on both. `churchDatePlus` (already imported) is
+  // the same church-time arithmetic the calendar itself uses, so a month at
+  // least 45 days off `now` is guaranteed to fall entirely on one side of
+  // today, whatever day of the month `now` happens to be.
+  const futureMonth = churchDatePlus(45).slice(0, 7);
+  const pastMonth = churchDatePlus(-45).slice(0, 7);
+  db.prepare("INSERT INTO gym_blocked_dates (date,reason) VALUES (?,'Christmas Market')").run(`${futureMonth}-24`);
+
   // Clicking a day books it. The date is carried through, so the form opens
   // already filled in rather than asking again for what was just clicked.
-  has(cal, `/gym-rentals/bookings/new?dt=${month}-21`, 'a day links to the booking form with its own date');
-  has(cal, 'gymcal-day--open', 'and is styled as something you can click');
-  has(cal, 'Book this day', 'with a label for anybody not using a mouse');
-  // A blocked date and a date already gone are not bookable, so they do not
-  // pretend to be.
-  ok(!cal.includes(`/gym-rentals/bookings/new?dt=${month}-24`), 'a blocked date is not offered');
-  has(cal, 'gymcal-cell--past', 'and days already gone are marked as such');
+  const calFuture = await (await call(env, `/gym-rentals?m=${futureMonth}`, { cookie })).text();
+  has(calFuture, `/gym-rentals/bookings/new?dt=${futureMonth}-15`, 'a day links to the booking form with its own date');
+  has(calFuture, 'gymcal-day--open', 'and is styled as something you can click');
+  has(calFuture, 'Book this day', 'with a label for anybody not using a mouse');
+  // A blocked date is not bookable, so it does not pretend to be.
+  ok(!calFuture.includes(`/gym-rentals/bookings/new?dt=${futureMonth}-24`), 'a blocked date is not offered');
+
+  // A month entirely behind today has nothing but past cells.
+  const calPast = await (await call(env, `/gym-rentals?m=${pastMonth}`, { cookie })).text();
+  has(calPast, 'gymcal-cell--past', 'and days already gone are marked as such');
+
   // A booking on the calendar links to the group it belongs to.
   has(cal, '/gym-rentals/groups/1', 'a booking links to its group');
 }
@@ -2579,6 +2596,14 @@ group('the renter portal has its own origin');
   setOrigin('');
 
   // ── Tasks 17b and 18: the renter portal ──────────────────────────────
+  // ⚠ "Unavailable" (gray, no dot) only ever comes from a past day, a blocked
+  // day, or a day with no rentable hours — and this suite sets up none of the
+  // first or third. On the 1st of the month the 6-month window's own first
+  // month has no past day yet either, so with nothing blocked the whole grid
+  // would be bookable and this assertion would have nothing to find. A
+  // blocked date guarantees at least one unavailable cell regardless of what
+  // day of the month the suite happens to run on.
+  db.prepare("INSERT INTO gym_blocked_dates (date,reason) VALUES (?,'Deep clean')").run(churchDatePlus(10));
   const portal = await (await portalGet()).text();
 
   // 17b. The portal keeps its own :root — a renter must never get the admin
