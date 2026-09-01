@@ -5435,6 +5435,63 @@ group('the church calendar feed is PUBLIC, and answers with no session at all');
   } finally { globalThis.fetch = realFetch; }
 }
 
+group('the homepage search bar is PUBLIC, and only ever finds public content');
+{
+  const { db, env } = await boot();
+
+  // ⚠ THE CHECK THAT MATTERS — same shape as the calendar feed group above.
+  // A public route written below the session gate answers every visitor
+  // with a 302 to the login page, and no unit test can see that; only
+  // asking the real Worker with no cookie can.
+  const short = await call(env, '/api/site-search?q=w', { fresh: true });
+  eq(short.status, 200, 'no session needed, and no 302 to the login page');
+  eq((await short.json()).results.length, 0, 'under two letters is refused rather than returning the world');
+
+  const pages = await (await call(env, '/api/site-search?q=worship', { fresh: true })).json();
+  const page = pages.results.find((r) => r.section === 'Page' && r.label === 'Worship');
+  ok(page, 'a real, published page turns up');
+  eq(page.href, '/worship', 'with its actual address, not the page id');
+
+  // A page that has never been published (status is not 'published' at all,
+  // as opposed to merely having no published_blocks — see the note on
+  // /api/pages for that distinction) must not be offered as a destination.
+  db.prepare("UPDATE pages SET status = 'draft' WHERE id = 'worship'").run();
+  const hidden = await (await call(env, '/api/site-search?q=worship', { fresh: true })).json();
+  ok(!hidden.results.some((r) => r.label === 'Worship'), 'an unpublished page is not a search result');
+
+  // give-landing is a `pages` row purely to borrow the editor machinery — see
+  // the identical exclusion on /api/pages — and must never be offered here.
+  const give = await (await call(env, '/api/site-search?q=give', { fresh: true })).json();
+  ok(!give.results.some((r) => r.href && r.href.includes('give-landing')),
+    'give-landing is excluded, same as /api/pages');
+
+  // A live News & Events post, on the church's actual public rule
+  // (NEWS_WHERE_SQL) — published, not yet expired, on the web channel.
+  db.prepare(
+    "INSERT INTO news_items (title, summary, publish_date, expire_date, channels) VALUES (?, ?, ?, ?, 'web')"
+  ).run('Rummage sale fundraiser', 'Saturday in the fellowship hall.', churchDate(), churchDatePlus(30));
+  db.prepare(
+    "INSERT INTO news_items (title, summary, publish_date, expire_date, channels) VALUES (?, ?, ?, ?, 'web')"
+  ).run('Old rummage notice', 'From last year.', churchDate(), churchDatePlus(-5));
+  const news = await (await call(env, '/api/site-search?q=rummage', { fresh: true })).json();
+  const found = news.results.filter((r) => r.section === 'News & Events');
+  eq(found.length, 1, 'only the still-live post is found, not the expired one');
+  eq(found[0].href, '/news', 'a news result points at the feed — no post has an address of its own');
+
+  // A ministry page, unless it is marked hidden — same rule /api/ministry/:slug
+  // itself uses for whether there is anything behind the address at all.
+  // ⚠ Beekeepers is already a real seeded ministry, so this checks it is
+  // findable rather than seeding a duplicate row over it.
+  const min = await (await call(env, '/api/site-search?q=beekeep', { fresh: true })).json();
+  ok(min.results.some((r) => r.section === 'Ministry' && r.href === '/bees'), 'a live ministry is found, at its own address');
+
+  db.prepare(
+    "INSERT INTO youth_pages (slug, title, page_status) VALUES ('retired-ministry', 'Retired Ministry', 'hidden')"
+  ).run();
+  const hiddenMin = await (await call(env, '/api/site-search?q=retired', { fresh: true })).json();
+  ok(!hiddenMin.results.length, 'a hidden ministry is not');
+}
+
 group('with Google unreachable the feed still answers, and says which half is missing');
 {
   const { db, env } = await boot();

@@ -3722,6 +3722,69 @@ export default {
       });
     }
 
+    // ── PUBLIC: site search — the homepage's search bar ──
+    // The reverse of the admin's own ⌘K (/api/search) a few thousand lines
+    // above: that one is permission-scoped because it reaches into every
+    // section of the admin, staff included. Everything a visitor can search
+    // here is already public — a page they could find by clicking around,
+    // a news post already on /news, a ministry already in the menu — so there
+    // is nothing to scope. No session, and CORS is wide open like every other
+    // public read (/api/news, /api/staff, /api/pages) it draws from.
+    if (path === '/api/site-search' && method === 'GET') {
+      const q = String(url.searchParams.get('q') || '').trim().toLowerCase();
+      if (q.length < 2) {
+        return new Response(JSON.stringify({ results: [] }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }
+        });
+      }
+      const like = `%${q}%`;
+      const today = churchDate();
+      const grab = async (sql, ...binds) => {
+        try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
+      };
+      const [pages, news, ministries] = await Promise.all([
+        // Same filter /api/pages itself uses — a page reaches this list only
+        // once it is actually published, whatever its editor is doing to it.
+        grab(
+          "SELECT id, title, slug, external_url, seo_description FROM pages " +
+          "WHERE status = 'published' AND (LOWER(title) LIKE ? OR LOWER(COALESCE(seo_description,'')) LIKE ?) " +
+          "ORDER BY title ASC LIMIT 8", like, like
+        ),
+        // NEWS_WHERE_SQL is the one rule /api/news itself is built on — see the
+        // comment above it. A post that has expired, is not yet published, or
+        // was marked calendar-only must not turn up here either.
+        grab(
+          `SELECT id, title, summary FROM news_items ${NEWS_WHERE_SQL} ` +
+          'AND (LOWER(title) LIKE ? OR LOWER(COALESCE(summary,\'\')) LIKE ?) ORDER BY publish_date DESC LIMIT 6',
+          today, today, today, like, like
+        ),
+        // A ministry marked 'hidden' has no content — see the identical check
+        // on /api/ministry/:slug — so it is excluded here for the same reason:
+        // a search result that opens to nothing is worse than no result.
+        grab(
+          "SELECT slug, title FROM youth_pages WHERE COALESCE(page_status,'live') <> 'hidden' " +
+          "AND (LOWER(title) LIKE ? OR LOWER(slug) LIKE ?) ORDER BY title ASC LIMIT 6", like, like
+        ),
+      ]);
+      const results = [
+        // give-landing is a `pages` row only so it gets the editor/publish
+        // machinery for free — see the identical exclusion on /api/pages. It
+        // is not a page of this site and must never be offered as one.
+        ...pages.filter((p) => p.id !== GIVE_LANDING_PAGE_ID).map((p) => ({
+          section: 'Page', label: p.title, meta: p.seo_description || '',
+          href: outboundUrl(p) || p.slug,
+        })),
+        // News posts have no address of their own — every one is a card on
+        // /news — so every result points there rather than to a fragment
+        // nothing on the page answers to.
+        ...news.map((n) => ({ section: 'News & Events', label: n.title, meta: n.summary || '', href: '/news' })),
+        ...ministries.map((m) => ({ section: 'Ministry', label: m.title || m.slug, meta: '', href: '/' + m.slug })),
+      ];
+      return new Response(JSON.stringify({ results: results.slice(0, 20) }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
+      });
+    }
+
     // ── PUBLIC: the four values and their partner ministries ──
     // Returns all four values in the church's own order, each with whichever
     // partner is paired to it and how many ministries carry it. A value with

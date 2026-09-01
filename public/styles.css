@@ -114,6 +114,33 @@ p:last-child{margin-bottom:0;}
 .nav-mobile button,.nav-mobile a{font-family:var(--font-body);font-size:calc(15px * var(--tlc-text-scale, 1));font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
 .nav-mobile button:hover,.nav-mobile a:hover{opacity:1;}
 
+/* SEARCH — a plain SVG icon, not an emoji: this repo's own icons on the
+   public chrome (☰ for the menu, ⌂ elsewhere) are typographic glyphs rather
+   than colorful platform-dependent emoji, and a magnifying glass has no
+   equivalent in that character set. */
+.nav-search-btn{background:none;border:none;cursor:pointer;color:var(--nav-ink,white);opacity:.85;padding:8px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s;}
+.nav-search-btn:hover{background:rgba(255,255,255,.12);opacity:1;}
+.nav-search-btn svg{width:18px;height:18px;display:block;}
+/* The panel is a full-width bar under the header, not a modal over the page
+   — a search is a quick typeahead, not a task that needs its own screen. */
+.tlc-search-panel{position:absolute;top:100%;left:0;right:0;background:var(--white);border-bottom:1px solid var(--border);box-shadow:0 12px 28px rgba(0,0,0,.14);z-index:99;}
+.tlc-search-panel[hidden]{display:none;}
+.tlc-search-panel-inner{max-width:640px;margin:0 auto;padding:18px 28px 22px;position:relative;}
+.tlc-search-input{width:100%;box-sizing:border-box;font-family:var(--font-body);font-size:calc(16px * var(--tlc-text-scale, 1));padding:12px 42px 12px 16px;border:1.5px solid var(--border);border-radius:999px;color:var(--charcoal);}
+.tlc-search-input:focus{outline:2px solid var(--mid);outline-offset:1px;}
+.tlc-search-close{position:absolute;top:18px;right:28px;background:none;border:none;cursor:pointer;font-size:22px;line-height:1;color:var(--gray);padding:8px;}
+.tlc-search-results{margin-top:10px;max-height:60vh;overflow-y:auto;}
+.tlc-search-section{font-family:var(--sans);font-size:calc(11px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);padding:10px 4px 4px;}
+.tlc-search-result{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:10px 12px;border-radius:8px;}
+.tlc-search-result:hover,.tlc-search-result.is-active{background:var(--mist);}
+.tlc-search-result-label{display:block;font-family:var(--serif);font-size:calc(15px * var(--tlc-text-scale, 1));color:var(--steel);}
+.tlc-search-result-meta{display:block;font-family:var(--sans);font-size:calc(12px * var(--tlc-text-scale, 1));color:var(--gray);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tlc-search-empty,.tlc-search-hint{font-family:var(--sans);font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--gray);padding:14px 4px;}
+@media(max-width:700px){
+  .tlc-search-panel-inner{padding:14px 16px 18px;}
+  .tlc-search-close{right:16px;}
+}
+
 /* BUTTONS */
 /* Every button in this language is a pill — the one shape shared by the
    header's Give button, the blocks' own buttons and these. */
@@ -493,6 +520,8 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
      height only, so nothing reflows and no page gets longer than the extra
      tap area costs. */
   .nav-toggle{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0;}
+  .nav-search-btn{min-width:44px;min-height:44px;padding:0;}
+  .tlc-search-result{min-height:44px;}
   .nav-mobile button,.nav-mobile a{min-height:44px;display:flex;align-items:center;}
   .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   #newsletter-signup-form .form-input,#newsletter-signup-form .btn{min-height:44px;}
