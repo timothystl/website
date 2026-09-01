@@ -2123,7 +2123,7 @@ document.getElementById('navToggle').addEventListener('click',function(){
     panel.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
     input.value = '';
-    results.innerHTML = '<p class="tlc-search-hint">Type at least two letters to search pages, news and ministries.</p>';
+    results.innerHTML = '';
     activeIndex = -1;
     lastResults = [];
     // Deferred one tick — hidden→visible and focus in the same frame is
@@ -2200,7 +2200,7 @@ document.getElementById('navToggle').addEventListener('click',function(){
     var q = input.value.trim().toLowerCase();
     clearTimeout(debounceTimer);
     if (q.length < 2) {
-      results.innerHTML = '<p class="tlc-search-hint">Type at least two letters to search pages, news and ministries.</p>';
+      results.innerHTML = '';
       lastResults = [];
       activeIndex = -1;
       return;
