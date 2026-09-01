@@ -35,7 +35,7 @@ import { VERSION, html, sidebarShell, loginPage, setupPage, forgotPasswordPage, 
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
-import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
+import { dayKey, monthKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
@@ -11197,9 +11197,13 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
           env.DB.prepare('SELECT * FROM link_cards ORDER BY sort_order, id').all().catch(() => ({ results: [] })),
           env.DB.prepare('SELECT * FROM taps ORDER BY id').all().catch(() => ({ results: [] })),
           // Only this month's buckets — the card asks one question and this is
-          // the whole answer to it.
+          // the whole answer to it. ⚠ Church time, matching the buckets'
+          // own `day` (dayKey/churchDate) — `nowForTaps.toISOString()` is UTC,
+          // which is a day ahead of Central for several hours around the turn
+          // of most months, and would silently fetch none of the buckets a
+          // hit just wrote this evening.
           env.DB.prepare('SELECT tap_id, day, hits FROM tap_hits WHERE day >= ?')
-            .bind(nowForTaps.toISOString().slice(0, 7) + '-01').all().catch(() => ({ results: [] })),
+            .bind(monthKey(nowForTaps) + '-01').all().catch(() => ({ results: [] })),
         ]);
         const cards = cardRows.results || [];
         const taps = tapRows.results || [];
