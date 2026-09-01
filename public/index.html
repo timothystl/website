@@ -146,6 +146,9 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         <span class="nav-brand-sub">from our Neighborhood to the Nations</span>
       </div>
     </button>
+    <button class="nav-search-btn" id="navSearchBtn" aria-label="Search the site" aria-expanded="false" aria-controls="tlcSearchPanel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </button>
     <button class="nav-toggle" id="navToggle">☰</button>
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
@@ -158,6 +161,13 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       <li><button onclick="showPage('contact')">Contact</button></li>
       <li><button onclick="showPage('give')" class="nav-cta">Give</button></li>
     </ul>
+  </div>
+  <div class="tlc-search-panel" id="tlcSearchPanel" role="dialog" aria-modal="false" aria-label="Search the site" hidden>
+    <div class="tlc-search-panel-inner">
+      <input type="text" id="tlcSearchInput" class="tlc-search-input" placeholder="Search the site…" autocomplete="off" aria-label="Search the site">
+      <button type="button" class="tlc-search-close" id="tlcSearchClose" aria-label="Close search">&times;</button>
+      <div class="tlc-search-results" id="tlcSearchResults"></div>
+    </div>
   </div>
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
@@ -2092,6 +2102,138 @@ function escText(s) {
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
 });
+
+// ── Site search — a typeahead bar under the header, not a modal over the
+// page. Backed by /api/site-search on the admin origin, which is the public
+// reverse of the admin's own ⌘K: every source it searches (pages, News &
+// Events, ministries) is already public content, so there is nothing to
+// permission-scope the way the admin's version has to.
+(function () {
+  var btn = document.getElementById('navSearchBtn');
+  var panel = document.getElementById('tlcSearchPanel');
+  var input = document.getElementById('tlcSearchInput');
+  var closeBtn = document.getElementById('tlcSearchClose');
+  var results = document.getElementById('tlcSearchResults');
+  if (!btn || !panel || !input || !results) return;
+  var debounceTimer = null;
+  var activeIndex = -1;
+  var lastResults = [];
+
+  function open() {
+    panel.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    input.value = '';
+    results.innerHTML = '<p class="tlc-search-hint">Type at least two letters to search pages, news and ministries.</p>';
+    activeIndex = -1;
+    lastResults = [];
+    // Deferred one tick — hidden→visible and focus in the same frame is
+    // unreliable in some browsers, the same reason the rich-field caret
+    // restore in the admin editor defers past its own state change.
+    setTimeout(function () { input.focus(); }, 0);
+  }
+  function close() {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    btn.focus();
+  }
+  btn.addEventListener('click', function () { panel.hidden ? open() : close(); });
+  closeBtn.addEventListener('click', close);
+
+  function renderResults(list) {
+    lastResults = list;
+    activeIndex = -1;
+    if (!list.length) {
+      results.innerHTML = '<p class="tlc-search-empty">Nothing found. Try fewer words.</p>';
+      return;
+    }
+    var bySection = {};
+    var order = [];
+    list.forEach(function (r) {
+      if (!bySection[r.section]) { bySection[r.section] = []; order.push(r.section); }
+      bySection[r.section].push(r);
+    });
+    var html = '';
+    var i = 0;
+    order.forEach(function (section) {
+      html += '<div class="tlc-search-section">' + escText(section) + '</div>';
+      bySection[section].forEach(function (r) {
+        html += '<button type="button" class="tlc-search-result" data-i="' + i + '">' +
+          '<span class="tlc-search-result-label">' + escText(r.label) + '</span>' +
+          (r.meta ? '<span class="tlc-search-result-meta">' + escText(r.meta) + '</span>' : '') +
+          '</button>';
+        i++;
+      });
+    });
+    results.innerHTML = html;
+  }
+  function goTo(r) {
+    if (!r) return;
+    // A plain navigation, not showPage(): a result can be an outside address
+    // (a page that links out) as easily as one of ours, and every internal
+    // one already has its own hardcoded page div to land on, so a full load
+    // costs nothing a visitor would notice for something they typed on
+    // purpose.
+    location.href = r.href;
+  }
+  results.addEventListener('click', function (e) {
+    var b = e.target.closest('.tlc-search-result');
+    if (!b) return;
+    goTo(lastResults[parseInt(b.getAttribute('data-i'), 10)]);
+  });
+
+  function fetchResults(q) {
+    var thisQuery = q;
+    fetch('https://admin.timothystl.org/api/site-search?q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        // A slower earlier request must not overwrite a newer one's results.
+        if (input.value.trim().toLowerCase() !== thisQuery) return;
+        renderResults((data && data.results) || []);
+      })
+      .catch(function () {
+        if (input.value.trim().toLowerCase() !== thisQuery) return;
+        results.innerHTML = '<p class="tlc-search-empty">Search is unavailable right now.</p>';
+      });
+  }
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    clearTimeout(debounceTimer);
+    if (q.length < 2) {
+      results.innerHTML = '<p class="tlc-search-hint">Type at least two letters to search pages, news and ministries.</p>';
+      lastResults = [];
+      activeIndex = -1;
+      return;
+    }
+    debounceTimer = setTimeout(function () { fetchResults(q); }, 200);
+  });
+
+  function setActive(i) {
+    var items = results.querySelectorAll('.tlc-search-result');
+    items.forEach(function (el) { el.classList.remove('is-active'); });
+    if (i >= 0 && i < items.length) {
+      items[i].classList.add('is-active');
+      items[i].scrollIntoView({ block: 'nearest' });
+    }
+    activeIndex = i;
+  }
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { close(); return; }
+    var count = lastResults.length;
+    if (!count) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((activeIndex + 1) % count); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((activeIndex - 1 + count) % count); }
+    else if (e.key === 'Enter' && activeIndex >= 0) { e.preventDefault(); goTo(lastResults[activeIndex]); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.hidden) close();
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.hidden) return;
+    if (e.target.closest('.tlc-search-panel') || e.target.closest('#navSearchBtn')) return;
+    close();
+  });
+})();
 document.getElementById('footer-year').textContent = new Date().getFullYear();
 function closeMobileNav(){
   document.getElementById('navMobile').classList.remove('open');
