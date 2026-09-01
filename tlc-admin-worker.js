@@ -1191,6 +1191,31 @@ async function storeMarketPhotos(env, request, form) {
   return urls;
 }
 
+// Makes "a start time is required unless All day is checked" a real client-
+// side rule rather than only a hint sentence — native HTML5 validation blocks
+// submit rather than the server silently accepting a blank time as "all day"
+// by default. Only bites once an event date is actually entered; a plain
+// announcement with no date needs neither field.
+function newsEventTimeScript() {
+  return `<script>
+(function() {
+  var dateEl = document.getElementById('fld-event_date');
+  var allDayEl = document.getElementById('fld-event_all_day');
+  var timeEl = document.getElementById('fld-event_time');
+  if (!dateEl || !allDayEl || !timeEl) return;
+  function sync() {
+    var needsTime = !!dateEl.value && !allDayEl.checked;
+    timeEl.required = needsTime;
+    var lbl = timeEl.closest('.tlc-field').querySelector('.tlc-label');
+    if (lbl) lbl.textContent = 'Starts at' + (needsTime ? ' *' : '');
+  }
+  dateEl.addEventListener('input', sync);
+  allDayEl.addEventListener('change', sync);
+  sync();
+})();
+<\/script>`;
+}
+
 // Wires the news-item "Header image" file input to /api/upload-image and
 // fills the hidden image_url field with the resulting R2 URL. Replaces the
 // old plain text input, which let staff paste a browser-local blob: URL
@@ -1245,6 +1270,9 @@ function newsImageUploadScript(existingUrl = '') {
 // root-relative paths at the main site explicitly for any admin preview.
 function staffPhotoSrc(url) {
   if (!url) return '';
+  // A blob: URL is only ever valid in the browser tab that created it — a
+  // leftover from the old plain-text Photo URL field, dead everywhere else.
+  if (url.startsWith('blob:')) return '';
   return url.startsWith('/') ? `https://timothystl.org${url}` : url;
 }
 
@@ -1257,7 +1285,8 @@ function staffPhotoSrc(url) {
 // "Photo URL" input, which required staff to already have the file hosted
 // somewhere else.
 function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%', existingZoom = 1) {
-  const safeUrl = escapeHtml(existingUrl || '');
+  const resolvedUrl = staffPhotoSrc(existingUrl); // '' for a dead blob: URL, same as no photo at all
+  const safeUrl = escapeHtml(existingUrl && !existingUrl.startsWith('blob:') ? existingUrl : '');
   const pos = (existingPosition || '50% 50%').split(' ');
   const posX = parseInt(pos[0]) || 50;
   const posY = parseInt(pos[1]) || 50;
@@ -1268,12 +1297,12 @@ function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%', exi
         <input type="hidden" name="photo_url" id="photo_url_val" value="${safeUrl}">
         <input type="hidden" name="photo_position" id="photo_position_val" value="${escapeHtml(existingPosition || '50% 50%')}">
         <input type="hidden" name="photo_zoom" id="photo_zoom_val" value="${zoom}">
-        <div id="staff-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
-          ${existingUrl ? `<img src="${escapeHtml(staffPhotoSrc(existingUrl))}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;transform:scale(${zoom});">` : ''}
+        <div id="staff-photo-preview" style="${resolvedUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
+          ${resolvedUrl ? `<img src="${escapeHtml(resolvedUrl)}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;transform:scale(${zoom});">` : ''}
         </div>
         <input type="file" id="photo_url_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
         <div id="staff-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
-        <div id="staff-photo-reposition" style="${existingUrl ? '' : 'display:none;'}margin-top:10px;">
+        <div id="staff-photo-reposition" style="${resolvedUrl ? '' : 'display:none;'}margin-top:10px;">
           <label style="font-size:11px;font-weight:600;color:var(--gray);">Recenter &amp; zoom photo</label>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <span style="font-size:11px;color:var(--gray);width:14px;">↔</span>
@@ -2040,7 +2069,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-31-1'; // bumped: site_events.waitlist_cap, for the market's confirmed-then-soft-reserve table cap
+    const SCHEMA_VERSION = '2026-09-01-1'; // bumped: one-time cleanup of blob: URLs left in staff_members.photo_url
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2405,6 +2434,12 @@ export default {
     } catch (_) {}
     // Fix missing photo for Chau Vo (chauvo.jpg never existed)
     try { await env.DB.prepare("UPDATE staff_members SET photo_url = '' WHERE name = 'Chau Vo' AND photo_url LIKE '%chauvo%'").run(); } catch (_) {}
+    // Clear any staff photo left as a blob: URL — only ever valid in the
+    // browser tab that created it, from the old plain-text Photo URL field
+    // this admin no longer has. Dead for every other visitor and for the
+    // admin preview alike; nulling it out restores the initials fallback
+    // instead of a permanently broken image.
+    try { await env.DB.prepare("UPDATE staff_members SET photo_url = '' WHERE photo_url LIKE 'blob:%'").run(); } catch (_) {}
     // Migrate give_url from Breeze to Tithely
     try {
       await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url' AND value LIKE '%breezechms%'")
@@ -9105,8 +9140,20 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
           // there is no default and no placeholder time.
           { kind: 'date', name: 'event_end_date', label: 'Through', value: item ? (item.event_end_date || '') : '',
             hint: 'Optional. For something that runs several days \u2014 a break, a camp, a week of testing. One entry rather than five.' },
+          // \u26a0 FORCES A CHOICE RATHER THAN LETTING A BLANK TIME MEAN "ALL DAY"
+          // BY DEFAULT. A blank time used to be read as a real answer, and it
+          // still is once this is checked \u2014 but leaving it unchecked AND the
+          // time blank is what silently produced a calendar full of all-day
+          // chips for services and meetings that genuinely start at a clock
+          // time nobody got around to typing in. Unchecked by default on a
+          // brand-new post, so adding an event date and saving without either
+          // a time or this box is refused rather than quietly defaulting.
+          { kind: 'toggle', name: 'event_all_day', label: 'All day event',
+            value: item ? (!!item.event_date && !item.event_time) : false,
+            on: 'All day', off: 'Has a start time',
+            hint: 'Only checked events skip the start time. Leave this off and fill in a start time below for anything that happens at a specific hour.' },
           { kind: 'text', type: 'time', name: 'event_time', label: 'Starts at', value: item ? (item.event_time || '') : '',
-            hint: 'Leave blank for something that runs all day. Church time, always.' },
+            hint: 'Required unless this is an all-day event (above). Church time, always.' },
           { kind: 'text', type: 'time', name: 'event_end_time', label: 'Ends at', value: item ? (item.event_end_time || '') : '',
             hint: 'Optional. The calendar page shows only the start; this is what a subscribed phone uses to draw how long it runs.' },
           { kind: 'text', name: 'event_location', label: 'Where', value: item ? (item.event_location || '') : '',
@@ -9122,10 +9169,17 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
     };
 
     if (path === '/newsitems/new' && method === 'GET') {
+      const newsMsg = url.searchParams.get('msg');
+      const newsAlert = newsMsg === 'event-time-required'
+        ? `<div class="alert alert-error">This has an event date, so it needs either a start time or "All day event" checked.</div>` : '';
       return html(`
 ${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`, await pageBadges())}
-<div class="tlc-wrap">${newsFormHtml()}</div>
-${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
+<div class="tlc-wrap">
+  ${newsAlert ? `<div class="tlc-section" style="padding-bottom:0;">${newsAlert}</div>` : ''}
+  ${newsFormHtml()}
+</div>
+${newsImageUploadScript()}
+${newsEventTimeScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: CREATE (POST) ──
@@ -9147,6 +9201,16 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
       const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
+      const event_all_day = form.getAll('event_all_day').includes('1');
+      // ⚠ THE SERVER-SIDE BACKSTOP FOR newsEventTimeScript()'s CLIENT CHECK.
+      // A blank time used to be a real, silent answer — "all day" — and a
+      // crafted POST or a browser with JS disabled must not still be able to
+      // leave that ambiguous now that there is a real "All day event" box to
+      // check. Only bites when there is actually an event date to place on
+      // the calendar; a plain announcement needs neither field.
+      if (event_date && !event_all_day && !event_time) {
+        return new Response('', { status: 302, headers: { Location: '/newsitems/new?msg=event-time-required' } });
+      }
       const theme = form.get('theme') || '';
       const content_type = form.get('content_type') || '';
       const channels = [
@@ -9173,10 +9237,17 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const id = path.split('/').pop();
       const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
       if (!item) return new Response('Not found', { status: 404 });
+      const newsMsg = url.searchParams.get('msg');
+      const newsAlert = newsMsg === 'event-time-required'
+        ? `<div class="alert alert-error">This has an event date, so it needs either a start time or "All day event" checked.</div>` : '';
       return html(`
 ${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`, await pageBadges())}
-<div class="tlc-wrap">${newsFormHtml(item)}</div>
-${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
+<div class="tlc-wrap">
+  ${newsAlert ? `<div class="tlc-section" style="padding-bottom:0;">${newsAlert}</div>` : ''}
+  ${newsFormHtml(item)}
+</div>
+${newsImageUploadScript(item.image_url || '')}
+${newsEventTimeScript()}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: UPDATE (POST) ──
@@ -9199,6 +9270,12 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
       const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
+      const event_all_day = form.getAll('event_all_day').includes('1');
+      // ⚠ THE SERVER-SIDE BACKSTOP FOR newsEventTimeScript()'s CLIENT CHECK —
+      // see the identical guard on /newsitems/create for why this exists.
+      if (event_date && !event_all_day && !event_time) {
+        return new Response('', { status: 302, headers: { Location: `/newsitems/edit/${id}?msg=event-time-required` } });
+      }
       const theme = form.get('theme') || '';
       const content_type = form.get('content_type') || '';
       const channels = [

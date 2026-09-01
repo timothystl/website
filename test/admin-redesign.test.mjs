@@ -5782,7 +5782,7 @@ group('a news post says what it is on the calendar, rather than having it guesse
     const made = await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
       title: 'Council meeting', summary: 'In the fellowship hall.',
       publish_date: '2026-08-01', event_date: '2026-08-11', expire_date: '2026-12-31',
-      calendar_category: 'meetings', ch_web: '1',
+      calendar_category: 'meetings', event_all_day: '1', ch_web: '1',
     } });
     eq(made.status, 302, 'the post saves');
     let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
@@ -5794,7 +5794,7 @@ group('a news post says what it is on the calendar, rather than having it guesse
     // nothing written before this field existed moves.
     await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
       title: 'Rally Day', summary: 'Come along.', publish_date: '2026-08-01',
-      event_date: '2026-08-12', expire_date: '2026-12-31', value: 'worship', ch_web: '1',
+      event_date: '2026-08-12', expire_date: '2026-12-31', value: 'worship', event_all_day: '1', ch_web: '1',
     } });
     feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
     eq(feed.events.find((e) => e.title === 'Rally Day').category, 'worship',
@@ -5837,10 +5837,12 @@ group('a news post carries a time, so it is a whole event and nothing is retyped
     ok(!/[Zz]|[+-]\d{2}:\d{2}$/.test(ev.start), 'carrying no timezone, like every other time in the feed');
 
     // A post with no time is still an all-day event, so nothing already
-    // written moved when the column arrived.
+    // written moved when the column arrived — but reaching that state now
+    // needs the explicit "All day event" box, or the save is refused (see
+    // "the events editors force an explicit choice" below).
     await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
       title: 'Rummage sale', publish_date: '2026-08-01', event_date: '2026-08-12',
-      expire_date: '2026-12-31', ch_web: '1',
+      expire_date: '2026-12-31', event_all_day: '1', ch_web: '1',
     } });
     feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
     eq(feed.events.find((e) => e.title === 'Rummage sale').allDay, true,
@@ -5850,7 +5852,7 @@ group('a news post carries a time, so it is a whole event and nothing is retyped
     // edit form comes back showing a time the month does not show.
     await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
       title: 'Bad clock', publish_date: '2026-08-01', event_date: '2026-08-13',
-      expire_date: '2026-12-31', event_time: '25:00', ch_web: '1',
+      expire_date: '2026-12-31', event_time: '25:00', event_all_day: '1', ch_web: '1',
     } });
     eq(db.prepare("SELECT event_time FROM news_items WHERE title='Bad clock'").get().event_time, null,
       'an impossible time is stored as nothing at all');
@@ -5866,6 +5868,60 @@ group('a news post carries a time, so it is a whole event and nothing is retyped
     ok(ics.includes('DTSTART;TZID=America/Chicago:20260811T190000'), 'the .ics carries the clock');
     ok(ics.includes('LOCATION:Fellowship Hall'), 'and the location');
   } finally { globalThis.fetch = realFetch; }
+}
+
+// ── the events editors force an explicit choice ─────────────────────────────
+// Dinger: events should come onto the calendar at their real time, not as
+// all-day, because a blank time used to be a silent — and easy to miss —
+// answer. Both editors that can put an event date on the calendar (News &
+// Events, and Event Intake's "+ New event") now refuse to save a dated event
+// with neither a time nor "All day" checked, client-side via required/JS and
+// server-side as the backstop for a crafted POST or JS-off browser.
+group('the events editors force an explicit choice: a real time, or All day');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+
+  const ambiguous = await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+    title: 'Ambiguous event', publish_date: '2026-08-01', event_date: '2026-08-20',
+    expire_date: '2026-12-31', ch_web: '1',
+  } });
+  eq(ambiguous.status, 302, 'refused, not a 500');
+  ok(ambiguous.headers.get('location').includes('event-time-required'), 'and says why');
+  ok(!db.prepare("SELECT 1 FROM news_items WHERE title='Ambiguous event'").get(), 'nothing was written');
+
+  ok((await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+    title: 'A real all-day post', publish_date: '2026-08-01', event_date: '2026-08-20',
+    expire_date: '2026-12-31', event_all_day: '1', ch_web: '1',
+  } })).status === 302, 'checking All day lets it save');
+  ok(db.prepare("SELECT 1 FROM news_items WHERE title='A real all-day post'").get(), 'and it is written');
+
+  ok((await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+    title: 'A real timed post', publish_date: '2026-08-01', event_date: '2026-08-20',
+    event_time: '18:30', expire_date: '2026-12-31', ch_web: '1',
+  } })).status === 302, 'a real time lets it save too, with All day left unchecked');
+  ok(db.prepare("SELECT 1 FROM news_items WHERE title='A real timed post'").get(), 'and it is written');
+
+  // A plain announcement with no event date at all needs neither field.
+  ok((await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+    title: 'Just an announcement', publish_date: '2026-08-01', ch_web: '1',
+  } })).status === 302, 'no event date means nothing to require');
+  ok(db.prepare("SELECT 1 FROM news_items WHERE title='Just an announcement'").get(), 'and it is written');
+
+  // The identical rule on Event Intake's own "+ New event" door.
+  const eiAmbiguous = await call(env, '/event-intake/new', { cookie: admin.cookie, method: 'POST', form: {
+    local_title: 'Ambiguous local event', local_event_date: '2026-08-21',
+  } });
+  eq(eiAmbiguous.status, 302, 'refused, not a 500');
+  ok(eiAmbiguous.headers.get('location').includes('needsdate'), 'and says so the same way a missing title/date does');
+  ok(!db.prepare("SELECT 1 FROM event_intake WHERE local_title='Ambiguous local event'").get(),
+    'nothing was written');
+
+  ok((await call(env, '/event-intake/new', { cookie: admin.cookie, method: 'POST', form: {
+    local_title: 'A real local all-day event', local_event_date: '2026-08-21', local_all_day: '1',
+  } })).status === 302, 'checking All day lets the local event save');
+  ok(db.prepare("SELECT 1 FROM event_intake WHERE local_title='A real local all-day event'").get(),
+    'and it is written');
 }
 
 group('the newsletter picks its events from the posts, instead of retyping them');

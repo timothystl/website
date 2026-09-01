@@ -2700,8 +2700,12 @@ async function loadStaff() {
       var safePosition = /^\d{1,3}% \d{1,3}%$/.test(m.photo_position || '') ? m.photo_position : '50% 50%';
       var zoomNum = parseFloat(m.photo_zoom);
       var safeZoom = (isFinite(zoomNum) && zoomNum >= 1 && zoomNum <= 2.5) ? zoomNum : 1;
-      var photoHtml = m.photo_url
-        ? '<img src="' + m.photo_url.replace(/"/g,'&quot;') + '" alt="' + (m.name||'').replace(/"/g,'&quot;') + '" loading="lazy" style="object-position:' + safePosition + ';transform:scale(' + safeZoom + ');" onerror="this.remove()">'
+      // A blob: URL is only ever valid in the browser tab that created it —
+      // a leftover from the old plain-text Photo URL field. Treat it as no
+      // photo at all rather than an <img> nothing can ever load.
+      var photoUrl = (m.photo_url && m.photo_url.indexOf('blob:') !== 0) ? m.photo_url : '';
+      var photoHtml = photoUrl
+        ? '<img src="' + photoUrl.replace(/"/g,'&quot;') + '" alt="' + (m.name||'').replace(/"/g,'&quot;') + '" loading="lazy" style="object-position:' + safePosition + ';transform:scale(' + safeZoom + ');" onerror="this.remove()">'
         : '';
       return '<div class="staff-card">' +
         '<div class="staff-avatar">' + photoHtml + initials + '</div>' +
@@ -4144,7 +4148,7 @@ function tlcCalChip(st, ev, onDate) {
   return '<button class="tlc-cal-chip" style="background:' + tlcCalEsc(c.tint) + '" ' +
       'data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
     '<span class="tlc-cal-chipT">' +
-      '<span class="tlc-cal-time" style="color:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(time) + '</span>' +
+      '<span class="tlc-cal-time" style="background:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(time) + '</span>' +
       '<span class="tlc-cal-srcdot" style="background:' + (TLC_CAL_SRC_COLOR[ev.source] || '#8C8880') + '" ' +
         'title="' + tlcCalEsc(TLC_CAL_SRC_NAME[ev.source] || 'Calendar') + '"></span>' +
     '</span>' +
@@ -4179,7 +4183,7 @@ function tlcCalList(st, visible) {
         var c = tlcCalCat(st, ev.category);
         var continued = d !== String(ev.start).slice(0, 10);
         return '<button class="tlc-cal-listev" data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
-          '<span class="ltime" style="color:' + tlcCalEsc(c.color) + '">' +
+          '<span class="ltime" style="background:' + tlcCalEsc(c.color) + '">' +
             tlcCalEsc(continued ? 'Continues' : tlcCalSpan(ev)) + '</span>' +
           '<span><span class="lt">' + tlcCalEsc(ev.title) + '</span>' +
           (ev.location ? '<span class="lw">' + tlcCalEsc(ev.location) + '</span>'

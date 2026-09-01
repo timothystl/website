@@ -645,8 +645,17 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   border-radius:7px;text-align:left;border:none;font:inherit;cursor:pointer;width:100%;}
 .tlc-cal-chip:hover{filter:brightness(.97);}
 .tlc-cal-chipT{display:flex;align-items:center;gap:5px;min-width:0;}
+/* A filled pill, not just colored text on an already-pale chip background —
+   two categories whose tints are both close to cream (most events are still
+   "Other" until the office colors them in Google) were reading as the same
+   faint wash with nothing but a 6px source dot to tell them apart. The pill's
+   background IS the category color; CALENDAR_PALETTE's own contrast check
+   ("against its own tint and against white") is symmetric, so white text on
+   that same color already clears 4.5:1 for every category — no new check
+   needed. */
 .tlc-cal-time{font-family:var(--font-ui);font-size:calc(10px * var(--tlc-text-scale, 1));
-  font-weight:800;letter-spacing:.06em;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  font-weight:800;letter-spacing:.06em;white-space:nowrap;font-variant-numeric:tabular-nums;
+  padding:2px 6px;border-radius:5px;color:#fff;}
 .tlc-cal-srcdot{width:6px;height:6px;border-radius:2px;flex-shrink:0;}
 .tlc-cal-name{font-family:var(--font-body);font-size:calc(13px * var(--tlc-text-scale, 1));
   line-height:1.3;color:var(--charcoal);min-width:0;overflow-wrap:anywhere;}
@@ -678,7 +687,8 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-cal-listev:hover .lt{text-decoration:underline;}
 .tlc-cal-listev .ltime{font-family:var(--font-ui);
   font-size:calc(13px * var(--tlc-text-scale, 1));font-weight:800;
-  font-variant-numeric:tabular-nums;white-space:nowrap;}
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+  padding:3px 8px;border-radius:5px;color:#fff;width:max-content;}
 .tlc-cal-listev .lt{font-size:calc(17px * var(--tlc-text-scale, 1));line-height:1.4;
   color:var(--charcoal);display:block;overflow-wrap:anywhere;}
 .tlc-cal-listev .lw{font-size:calc(14px * var(--tlc-text-scale, 1));color:var(--text-muted);display:block;}

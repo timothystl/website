@@ -142,12 +142,47 @@ const SHORT_CACHE_RE = /\.(css|js|mjs|json|xml|txt|map|webmanifest)$/i;
 // (the ?v= busting on index.html's references stays the real control); HTML
 // gets no-cache so a publish is visible on the next load — no-cache still
 // allows storing, it just forces the etag revalidation env.ASSETS supports.
-function withAssetCaching(res, pathname) {
+export function withAssetCaching(res, pathname) {
   const h = new Headers(res.headers);
   if (LONG_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   else if (SHORT_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=3600');
-  else h.set('Cache-Control', 'no-cache');
+  else {
+    h.set('Cache-Control', 'no-cache');
+    // ⚠ THE ETAG BELOW STILL BELONGS TO THE STATIC index.html ASSET, NOT TO
+    // WHATEVER THIS RESPONSE WAS JUST REWRITTEN INTO. Publishing a page (a
+    // new hero photo, a calendar color, anything read from D1) never touches
+    // that static file, so its ETag/Last-Modified never change — but
+    // `no-cache` still means "ask again with a conditional request", and a
+    // browser whose cached copy still matches THAT etag gets back a bare 304
+    // with no body. Per HTTP semantics a 304 tells the browser to keep
+    // showing what it already has, so it goes right on displaying whatever
+    // was baked into the page the LAST time it genuinely fetched it — the
+    // photo from before the last publish, invisibly, forever, until the
+    // static asset itself changes on a real code deploy. Stripping the
+    // validators here (and the matching conditional headers on the request
+    // to env.ASSETS below) makes every document-shaped request a plain,
+    // uncached fetch instead — the actual behavior "no-cache" was meant to
+    // give a page whose real content lives in D1, not in this file.
+    h.delete('ETag');
+    h.delete('Last-Modified');
+  }
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
+// Companion to the ETag strip above: without this, env.ASSETS.fetch() still
+// receives the BROWSER'S OWN conditional headers (If-None-Match /
+// If-Modified-Since, carried straight through on `request`) and can answer
+// 304 with an empty body — at which point there is nothing left to rewrite
+// with this visit's published blocks, and the response sent on is whatever a
+// 304 happens to look like once Cache-Control is rewritten onto it. Only
+// applied to a document-shaped request (an unknown extension, which is what
+// every SPA route looks like) — an actual asset file (an image, a font, the
+// stylesheet) is meant to keep validating normally.
+export function stripConditionalHeaders(request) {
+  const h = new Headers(request.headers);
+  h.delete('If-None-Match');
+  h.delete('If-Modified-Since');
+  return new Request(request, { headers: h });
 }
 
 // Reject anything that isn't an http(s) URL — guards against javascript:,
@@ -615,7 +650,14 @@ export default {
 
     // Fall through to static assets (SPA), with caching the edge and the
     // browser can actually use — see withAssetCaching below.
-    const assetRes = await env.ASSETS.fetch(request);
+    // ⚠ A document-shaped path (no file extension — every SPA route looks
+    // like this) has its conditional headers stripped first, or a browser
+    // revalidating against the static index.html's unchanged ETag gets a 304
+    // with no body to inject this visit's published content into. See the
+    // note on withAssetCaching.
+    const assetRes = await env.ASSETS.fetch(
+      !ASSET_FILE_RE.test(path) ? stripConditionalHeaders(request) : request
+    );
 
     // ── [B7] THE SOCIAL PREVIEW IMAGE ────────────────────────────
     // og:image is read by crawlers out of the HTML as it is served. Facebook
