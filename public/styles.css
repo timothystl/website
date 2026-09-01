@@ -135,7 +135,7 @@ p:last-child{margin-bottom:0;}
 .tlc-search-result:hover,.tlc-search-result.is-active{background:var(--mist);}
 .tlc-search-result-label{display:block;font-family:var(--serif);font-size:calc(15px * var(--tlc-text-scale, 1));color:var(--steel);}
 .tlc-search-result-meta{display:block;font-family:var(--sans);font-size:calc(12px * var(--tlc-text-scale, 1));color:var(--gray);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.tlc-search-empty,.tlc-search-hint{font-family:var(--sans);font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--gray);padding:14px 4px;}
+.tlc-search-empty{font-family:var(--sans);font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--gray);padding:14px 4px;}
 @media(max-width:700px){
   .tlc-search-panel-inner{padding:14px 16px 18px;}
   .tlc-search-close{right:16px;}
