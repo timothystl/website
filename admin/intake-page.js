@@ -453,7 +453,21 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
             if (isYmdLoose(d)) { patch.local_event_date = d; patch.event_date = d; }
             const ed = String(form.get('local_end_date') || '').trim();
             patch.local_end_date = isYmdLoose(ed) ? ed : null;
-            patch.local_event_time = normalizeClock(form.get('local_event_time'));
+            const newTime = normalizeClock(form.get('local_event_time'));
+            const allDay = form.getAll('local_all_day').includes('1');
+            const effectiveDate = isYmdLoose(d) ? d : row.local_event_date;
+            // ⚠ NOT THE SAME RULE AS "NOTHING HERE IS REQUIRED" ABOVE — that
+            // one is about office paperwork (room, type, checklist) never
+            // gating Publish. This is a data-shape question intakeEventTimeScript()
+            // already enforces client-side: a date with no time used to be a
+            // silent, ambiguous "all day," and the checkbox is what makes
+            // that a real choice instead. Refused before anything is
+            // written, same as the client-side `required` this backs up —
+            // a browser with JS off is the only way to reach it.
+            if (effectiveDate && !allDay && !newTime) {
+              return redirectTo(queue, key);
+            }
+            patch.local_event_time = newTime;
             patch.local_end_time = normalizeClock(form.get('local_end_time'));
           }
 
@@ -473,7 +487,15 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
         const form = await request.formData();
         const title = String(form.get('local_title') || '').trim();
         const date = String(form.get('local_event_date') || '').trim();
-        if (!title || !isYmdLoose(date)) {
+        const eventTime = normalizeClock(form.get('local_event_time'));
+        const allDay = form.getAll('local_all_day').includes('1');
+        // ⚠ THE SERVER-SIDE BACKSTOP FOR intakeEventTimeScript()'s CLIENT
+        // CHECK. A date with no time and no "All day" box ticked used to be
+        // read as a real, silent answer — all day — which is exactly the
+        // shape that put services and meetings that start at a real clock
+        // time onto the calendar as all-day chips nobody could tell apart
+        // from a genuine all-day event.
+        if (!title || !isYmdLoose(date) || (!allDay && !eventTime)) {
           return new Response('', { status: 302, headers: { Location: '/event-intake?msg=needsdate' } });
         }
         const endDate = String(form.get('local_end_date') || '').trim();
@@ -484,7 +506,7 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
                                       local_event_time, local_end_time, event_date, updated_by)
            VALUES ('local', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(type, room, title, date, isYmdLoose(endDate) ? endDate : null,
-          normalizeClock(form.get('local_event_time')), normalizeClock(form.get('local_end_time')), date, currentUser.username).run();
+          eventTime, normalizeClock(form.get('local_end_time')), date, currentUser.username).run();
         return new Response('', { status: 302,
           headers: { Location: `/event-intake?queue=inbox&selected=${encodeURIComponent('l:' + ins.meta.last_row_id)}` } });
       }
@@ -569,6 +591,34 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
 // rebuilding from scratch under this pass's own time budget.
 
 function intakeEsc(s) { return escapeHtml(String(s == null ? '' : s)); }
+
+// Same rule as the News editor's newsEventTimeScript(): a start time is
+// required once a date is entered, unless "All day" is checked. A blank time
+// used to be a real, silent answer — "all day" — for a locally-entered event
+// exactly as it still is for an imported one; the difference is this is the
+// one kind of event a staff member is typing the date in fresh, which is
+// where "just skipped past the time field" actually happens. Reused by both
+// the standalone "+ New event" form and the local-row edit panel, so the two
+// cannot drift into enforcing this differently.
+function intakeEventTimeScript(dateId, allDayId, timeId, labelId) {
+  return `<script>
+(function() {
+  var d = document.getElementById(${JSON.stringify(dateId)});
+  var a = document.getElementById(${JSON.stringify(allDayId)});
+  var t = document.getElementById(${JSON.stringify(timeId)});
+  var l = document.getElementById(${JSON.stringify(labelId)});
+  if (!d || !a || !t) return;
+  function sync() {
+    var needsTime = !!d.value && !a.checked;
+    t.required = needsTime;
+    if (l) l.textContent = 'Starts at' + (needsTime ? ' *' : '');
+  }
+  d.addEventListener('input', sync);
+  a.addEventListener('change', sync);
+  sync();
+})();
+<\/script>`;
+}
 
 function intakeDayLabel(iso) {
   const d = String(iso || '').slice(0, 10);
@@ -812,14 +862,17 @@ function intakeDetail(item, gymExtra, queue) {
       <span class="ei-rail-label">Entered here</span>
       <label class="ei-field"><span class="ei-field-label">Title *</span><input type="text" name="local_title" value="${intakeEsc(item.title)}"></label>
       <div class="ei-field-row">
-        <label class="ei-field"><span class="ei-field-label">Date *</span><input type="date" name="local_event_date" value="${intakeEsc(String(item.start).slice(0, 10))}"></label>
+        <label class="ei-field"><span class="ei-field-label">Date *</span><input type="date" name="local_event_date" id="ei-edit-date" value="${intakeEsc(String(item.start).slice(0, 10))}"></label>
         <label class="ei-field"><span class="ei-field-label">Through</span><input type="date" name="local_end_date" value="${intakeEsc(String(item.end || '').slice(0, 10))}"></label>
       </div>
+      <label class="ei-field"><span class="ei-field-label">&nbsp;</span>
+        <input type="checkbox" name="local_all_day" id="ei-edit-allday" value="1"${item.allDay ? ' checked' : ''}> All day (no specific time)</label>
       <div class="ei-field-row">
-        <label class="ei-field"><span class="ei-field-label">Starts at</span><input type="time" name="local_event_time" value="${item.allDay ? '' : intakeEsc(String(item.start).slice(11, 16))}"></label>
+        <label class="ei-field"><span class="ei-field-label" id="ei-edit-starts-label">Starts at</span><input type="time" name="local_event_time" id="ei-edit-time" value="${item.allDay ? '' : intakeEsc(String(item.start).slice(11, 16))}"></label>
         <label class="ei-field"><span class="ei-field-label">Ends at</span><input type="time" name="local_end_time" value="${item.allDay ? '' : intakeEsc(String(item.end || '').slice(11, 16))}"></label>
       </div>
-    </div>` : '';
+    </div>
+    ${intakeEventTimeScript('ei-edit-date', 'ei-edit-allday', 'ei-edit-time', 'ei-edit-starts-label')}` : '';
 
   return `<div class="ei-detail">
     <form method="POST" action="/event-intake/save" class="ei-form">
@@ -932,11 +985,12 @@ async function intakeNewEventForm(currentUser, badges) {
   <div class="card" style="max-width:560px;">
     <div class="card-title">New event</div>
     <p style="font-size:13px;color:var(--gray);margin-top:-6px;">For a booking with no Google event and no News &amp; Events post behind it — a private wedding, a one-off outside group. It reaches the calendar directly.</p>
-    <form method="POST" action="/event-intake/new">
+    <form method="POST" action="/event-intake/new" id="ei-new-form">
       <div class="form-group"><label>Title *</label><input type="text" name="local_title" required></div>
-      <div class="form-group"><label>Date *</label><input type="date" name="local_event_date" required></div>
+      <div class="form-group"><label>Date *</label><input type="date" name="local_event_date" id="ei-new-date" required></div>
       <div class="form-group"><label>Through (optional, for a run of days)</label><input type="date" name="local_end_date"></div>
-      <div class="form-group"><label>Starts at</label><input type="time" name="local_event_time"></div>
+      <div class="form-group"><label><input type="checkbox" name="local_all_day" id="ei-new-allday" value="1"> All day (no specific time)</label></div>
+      <div class="form-group"><label id="ei-new-starts-label">Starts at *</label><input type="time" name="local_event_time" id="ei-new-time" required></div>
       <div class="form-group"><label>Ends at</label><input type="time" name="local_end_time"></div>
       <div class="form-group"><label>Room</label><select name="room"><option value="">—</option>${rooms}</select></div>
       <div class="form-group"><label>Type</label><select name="type"><option value="">Decide later</option>${types}</select></div>
@@ -944,5 +998,6 @@ async function intakeNewEventForm(currentUser, badges) {
       <a href="/event-intake" class="btn">Cancel</a>
     </form>
   </div>
+  ${intakeEventTimeScript('ei-new-date', 'ei-new-allday', 'ei-new-time', 'ei-new-starts-label')}
 </div>`;
 }

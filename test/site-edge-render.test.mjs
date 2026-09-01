@@ -12,7 +12,7 @@
 // blocks twice, an injection into the wrong page, or a page that stops working
 // because the admin was unreachable.
 import { readFileSync } from 'node:fs';
-import { pathForPageId, pageIdForPath, rewriteDocument } from '../site-worker.js';
+import { pathForPageId, pageIdForPath, rewriteDocument, withAssetCaching, stripConditionalHeaders } from '../site-worker.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -261,6 +261,43 @@ group('the social image still works, and shares the one pass');
   // picture the moment this ran.
   const neither = runRewrite({ socialImage: '', pageId: '', blocksHtml: '' });
   eq(neither.selectors.length, 0, 'and an unset image leaves the markup alone');
+}
+
+// ── a published page must not go invisible behind a stale ETag ──────────────
+// Dinger: "we can't change the image on the worship page hero panel." Reading
+// the code says why a genuine publish can look like it did nothing: the ETag
+// on a rewritten document was still the STATIC index.html asset's own, which
+// never changes when D1 content is edited — so a browser's conditional
+// request could match it and get back a bare 304, and per HTTP semantics a
+// 304 means "go on showing what you already cached", body from this response
+// or not.
+group('a rewritten document cannot be revalidated against the stale asset ETag');
+{
+  const withEtag = { headers: new Headers({ 'content-type': 'text/html', 'ETag': '"abc123"', 'Last-Modified': 'Mon, 01 Jan 2024 00:00:00 GMT' }), body: 'x', status: 200, statusText: 'OK' };
+  const html = withAssetCaching(withEtag, 'worship');
+  eq(html.headers.get('Cache-Control'), 'no-cache', 'still no-cache for a document');
+  eq(html.headers.get('ETag'), null, 'but the stale validator is gone');
+  eq(html.headers.get('Last-Modified'), null, 'both of them');
+
+  // ⚠ An actual asset (an image, a font) is untouched — those are correctly
+  // cached by filename/hash, and stripping their validators would just
+  // reintroduce needless re-downloads for something that is genuinely safe
+  // to cache.
+  const img = { headers: new Headers({ 'content-type': 'image/webp', 'ETag': '"def456"' }), body: 'x', status: 200, statusText: 'OK' };
+  const cachedImg = withAssetCaching(img, 'logo.webp');
+  eq(cachedImg.headers.get('ETag'), '"def456"', 'a real asset keeps its own validator');
+  ok(/max-age=86400/.test(cachedImg.headers.get('Cache-Control')), 'and its long cache');
+
+  // The other half: env.ASSETS.fetch() must never even see the browser's own
+  // conditional headers for a document-shaped request, or it can hand back a
+  // 304 with nothing in it to rewrite this visit's blocks into.
+  const req = new Request('https://timothystl.org/worship', {
+    headers: { 'If-None-Match': '"abc123"', 'If-Modified-Since': 'Mon, 01 Jan 2024 00:00:00 GMT' },
+  });
+  const stripped = stripConditionalHeaders(req);
+  ok(!stripped.headers.has('If-None-Match'), 'If-None-Match is gone');
+  ok(!stripped.headers.has('If-Modified-Since'), 'If-Modified-Since is gone');
+  eq(stripped.url, req.url, 'the request still goes to the same place');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
