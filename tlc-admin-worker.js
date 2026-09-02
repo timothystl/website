@@ -1196,8 +1196,18 @@ const ALLOWED_IMAGE_TYPES = new Map([
   ['image/webp', 'webp'],
   ['image/gif',  'gif'],
 ]);
+// ⚠ MIRRORED BY HAND in admin/ministry-editor.html's docField()/uploadDoc() —
+// the accept attribute and the client-side rejection check both list these
+// same seven types, the same way ALLOWED_IMAGE_TYPES above is mirrored by
+// the image picker's own accept list. Widen both together.
 const ALLOWED_DOC_TYPES = new Map([
   ['application/pdf', 'pdf'],
+  ['application/msword', 'doc'],
+  ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
+  ['application/vnd.ms-excel', 'xls'],
+  ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+  ['application/vnd.ms-powerpoint', 'ppt'],
+  ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'pptx'],
 ]);
 
 // ── SAMPLE PHOTOS ON A VENDOR APPLICATION ────────────────────
@@ -7223,7 +7233,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       return new Response(JSON.stringify({ url, location: url, bytes: clean.length, filename: file.name || key }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // ── UPLOAD VOTER DOCUMENT TO R2 ──
+    // ── UPLOAD DOCUMENT TO R2 (Documents/File download blocks, Voters files) ──
     if (path === '/api/upload-doc' && method === 'POST') {
       if (!canAny(UPLOAD_DOC_PERMS)) {
         return new Response(JSON.stringify({ error: 'Your account cannot upload documents.' }),
@@ -7235,7 +7245,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (file.size > 10485760) return new Response(JSON.stringify({ error: 'File too large (max 10MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       const docMime = (file.type || '').split(';')[0].trim().toLowerCase();
       if (!ALLOWED_DOC_TYPES.has(docMime)) {
-        return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF documents are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Invalid file type. PDF, Word, Excel and PowerPoint files are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       const safeName = (file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
       const key = `docs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;

@@ -3060,6 +3060,49 @@ group('an upload needs a reason to be uploading (FX-08)');
   lacks(outBody, '"url"', 'and never with an uploaded file');
 }
 
+group('the Documents block accepts more than PDF now');
+{
+  // Dinger: "Can we make the document uploaded accept other file types than
+  // pdf?" ALLOWED_DOC_TYPES widened to Word/Excel/PowerPoint alongside PDF —
+  // this drives /api/upload-doc directly with each real MIME type, rather
+  // than trusting the allowlist's own keys, so a typo in the Map (a real MIME
+  // string that doesn't match what these file formats actually send) would
+  // fail this the same way a genuinely unsupported type does.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['pages_edit'], 'editor');
+  const bytes = new Uint8Array([1, 2, 3, 4]);
+  const uploadDoc = async (type, name) => {
+    const fd = new FormData();
+    fd.append('file', new Blob([bytes], { type }), name);
+    return worker.fetch(new Request('https://admin.timothystl.org/api/upload-doc', {
+      method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' }, body: fd,
+    }), env, ctx);
+  };
+
+  const accepted = [
+    ['application/pdf', 'minutes.pdf'],
+    ['application/msword', 'agenda.doc'],
+    ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'agenda.docx'],
+    ['application/vnd.ms-excel', 'budget.xls'],
+    ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'budget.xlsx'],
+    ['application/vnd.ms-powerpoint', 'slides.ppt'],
+    ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'slides.pptx'],
+  ];
+  for (const [type, name] of accepted) {
+    const res = await uploadDoc(type, name);
+    eq(res.status, 200, `${name} (${type}) is accepted`);
+    const body = await res.json();
+    eq(body.name, name, 'served under its own real filename');
+  }
+
+  // ⚠ Still not just anything — an unrelated type is still refused, with the
+  // same message a real person sees.
+  const refused = await uploadDoc('text/plain', 'notes.txt');
+  eq(refused.status, 400, 'a genuinely unsupported type is still refused');
+  const refusedBody = await refused.json();
+  ok(/pdf|word|excel|powerpoint/i.test(refusedBody.error), 'and says what is allowed: ' + refusedBody.error);
+}
+
 group('the payroll proxy no longer fingerprints its own secret (FX-09)');
 {
   // A Worker secret is write-only from every tool that can reach this repo, so

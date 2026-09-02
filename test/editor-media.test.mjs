@@ -313,8 +313,8 @@ await page.click('.ed-paper .tlcb--documents');
 await page.waitForSelector('.ed-insp [data-rows="item"]');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"]').count(), 1, 'the file gets its own drop zone');
 eq(await page.locator('.ed-img[data-imgdrop="item:0:url"]').count(), 0, 'never the picture one — the two predicates do not collide');
-ok((await page.textContent('.ed-img[data-docdrop="item:0:url"]')).includes('Drop a PDF here'),
-  'and it says a PDF can be dropped on it');
+ok((await page.textContent('.ed-img[data-docdrop="item:0:url"]')).includes('Drop a file here'),
+  'and it says a file can be dropped on it — PDF, Word, Excel or PowerPoint');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[type="file"][data-docupload="item:0:url"]').count(), 1,
   'a real hidden file input opens the OS picker');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[data-in="item:0:url"]').count(), 1,

@@ -2378,6 +2378,16 @@ function imageField(spec, value, placeholder, label) {
 // choose from the way there is for photos, only ever a fresh upload or a
 // pasted address.
 //
+// ⚠ MIRRORS ALLOWED_DOC_TYPES in tlc-admin-worker.js — widen both together.
+// The accept attribute is only ever a hint (some OS pickers ignore it, and a
+// renamed file bypasses it entirely), so uploadDoc() below checks the same
+// list again before ever posting to /api/upload-doc, which is the real gate.
+var DOC_UPLOAD_TYPES = ['application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+var DOC_UPLOAD_ACCEPT = DOC_UPLOAD_TYPES.join(',');
+
 // ⚠ A <label> wrapping a hidden file input opens the OS picker on click with
 // no JavaScript click-forwarding at all — standard label-for-input behavior.
 function docField(spec, value, placeholder, label) {
@@ -2386,8 +2396,8 @@ function docField(spec, value, placeholder, label) {
     '<label class="ed-media">' +
       '<span class="ed-media-thumb">⤓</span>' +
       '<span class="ed-media-b"><span class="ed-media-n">' + esc(name || 'No file yet') + '</span>' +
-      '<span class="ed-media-c">Drop a PDF here, or click to choose one</span></span>' +
-      '<input type="file" accept="application/pdf" data-docupload="' + esc(spec) + '" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">' +
+      '<span class="ed-media-c">Drop a file here, or click to choose one — PDF, Word, Excel or PowerPoint</span></span>' +
+      '<input type="file" accept="' + DOC_UPLOAD_ACCEPT + '" data-docupload="' + esc(spec) + '" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">' +
     '</label>' +
     '<input class="ed-field" data-in="' + esc(spec) + '" data-k="' + esc(spec) + '"' +
       ' value="' + esc(value || '') + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(label) + '">' +
@@ -3801,12 +3811,12 @@ async function postDoc(file) {
   var res = await fetch('/api/upload-doc', { method: 'POST', body: fd, credentials: 'same-origin' });
   var j = await res.json().catch(function () { return {}; });
   if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
-  return { url: j.url, name: j.name || file.name || 'document.pdf' };
+  return { url: j.url, name: j.name || file.name || 'document' };
 }
 
 async function uploadDoc(zone, file) {
-  if (file.type !== 'application/pdf') {
-    toast('That is not a PDF — for another file type, paste its address in the box below');
+  if (DOC_UPLOAD_TYPES.indexOf(file.type) === -1) {
+    toast('That file type is not supported — PDF, Word, Excel or PowerPoint only, or paste its address in the box below');
     return;
   }
   var spec = zone.dataset.docdrop;
