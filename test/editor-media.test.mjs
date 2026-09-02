@@ -313,8 +313,8 @@ await page.click('.ed-paper .tlcb--documents');
 await page.waitForSelector('.ed-insp [data-rows="item"]');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"]').count(), 1, 'the file gets its own drop zone');
 eq(await page.locator('.ed-img[data-imgdrop="item:0:url"]').count(), 0, 'never the picture one — the two predicates do not collide');
-ok((await page.textContent('.ed-img[data-docdrop="item:0:url"]')).includes('Drop a PDF here'),
-  'and it says a PDF can be dropped on it');
+ok((await page.textContent('.ed-img[data-docdrop="item:0:url"]')).includes('Drop a PDF, Word, Excel or PowerPoint file here'),
+  'and it says what kinds of file can be dropped on it');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[type="file"][data-docupload="item:0:url"]').count(), 1,
   'a real hidden file input opens the OS picker');
 eq(await page.locator('.ed-img[data-docdrop="item:0:url"] input[data-in="item:0:url"]').count(), 1,
@@ -335,12 +335,23 @@ ok((await page.textContent('#edChanges')).includes('Changed file · council-minu
 await page.waitForTimeout(1900);
 eq(saved().find((b) => b.type === 'documents').items[0].url, '/docs/1-council-minutes.pdf', 'saved to the draft');
 
-group('a non-PDF is refused, and nothing is uploaded');
+// ⚠ Not just PDF — Word, Excel and PowerPoint were dropped by the client-side
+// gate (and the voters upload screen advertised them while the server 400'd
+// every one of them). Verified non-vacuous by reverting DOC_UPLOAD_TYPES to a
+// single-entry PDF list first, which fails this exact assertion.
+group('an Excel workbook is accepted too, not just PDF');
+const docsBefore3 = harness.docUploads.length;
+await dropFile('.ed-img[data-docdrop="item:0:url"]', 'budget.xlsx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'fake-xlsx-bytes');
+await page.waitForTimeout(500);
+eq(harness.docUploads.length, docsBefore3 + 1, 'the spreadsheet reaches /api/upload-doc too');
+
+group('an unsupported file type is refused, and nothing is uploaded');
 const docsBefore2 = harness.docUploads.length;
-await dropFile('.ed-img[data-docdrop="item:0:url"]', 'flyer.jpg', 'image/jpeg', 'not-a-pdf');
+await dropFile('.ed-img[data-docdrop="item:0:url"]', 'flyer.jpg', 'image/jpeg', 'not-a-document');
 await page.waitForTimeout(400);
 eq(harness.docUploads.length, docsBefore2, 'no request was made for the wrong file type');
-ok((await page.textContent('#edToast')).toLowerCase().includes('pdf'), 'and it says a PDF is wanted');
+ok((await page.textContent('#edToast')).toLowerCase().includes('not supported'), 'and it says the file type is not supported');
 
 group('typing a link still works, for a document hosted elsewhere');
 // Waits for the actual save request rather than guessing at the two

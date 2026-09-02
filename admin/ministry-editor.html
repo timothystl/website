@@ -2380,14 +2380,31 @@ function imageField(spec, value, placeholder, label) {
 //
 // ⚠ A <label> wrapping a hidden file input opens the OS picker on click with
 // no JavaScript click-forwarding at all — standard label-for-input behavior.
+//
+// The set of MIME types /api/upload-doc actually accepts (tlc-admin-worker.js,
+// ALLOWED_DOC_TYPES) — kept as one list here so the picker's `accept`
+// attribute, the drag-and-drop gate in uploadDoc(), and the server allowlist
+// cannot drift into disagreeing about what "a document" means. Widening one
+// without the other three is how a picker ends up offering a file type the
+// server then silently refuses.
+var DOC_UPLOAD_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/csv',
+];
 function docField(spec, value, placeholder, label) {
   var name = value ? String(value).split('/').pop() : '';
   return '<div class="ed-img" data-docdrop="' + esc(spec) + '">' +
     '<label class="ed-media">' +
       '<span class="ed-media-thumb">⤓</span>' +
       '<span class="ed-media-b"><span class="ed-media-n">' + esc(name || 'No file yet') + '</span>' +
-      '<span class="ed-media-c">Drop a PDF here, or click to choose one</span></span>' +
-      '<input type="file" accept="application/pdf" data-docupload="' + esc(spec) + '" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">' +
+      '<span class="ed-media-c">Drop a PDF, Word, Excel or PowerPoint file here, or click to choose one</span></span>' +
+      '<input type="file" accept="' + esc(DOC_UPLOAD_TYPES.join(',')) + '" data-docupload="' + esc(spec) + '" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">' +
     '</label>' +
     '<input class="ed-field" data-in="' + esc(spec) + '" data-k="' + esc(spec) + '"' +
       ' value="' + esc(value || '') + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(label) + '">' +
@@ -3801,12 +3818,12 @@ async function postDoc(file) {
   var res = await fetch('/api/upload-doc', { method: 'POST', body: fd, credentials: 'same-origin' });
   var j = await res.json().catch(function () { return {}; });
   if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
-  return { url: j.url, name: j.name || file.name || 'document.pdf' };
+  return { url: j.url, name: j.name || file.name || 'document' };
 }
 
 async function uploadDoc(zone, file) {
-  if (file.type !== 'application/pdf') {
-    toast('That is not a PDF — for another file type, paste its address in the box below');
+  if (DOC_UPLOAD_TYPES.indexOf(file.type) === -1) {
+    toast('That file type is not supported here — for anything else, paste its address in the box below');
     return;
   }
   var spec = zone.dataset.docdrop;
