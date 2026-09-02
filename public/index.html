@@ -4410,7 +4410,7 @@ function tlcCalPrintSheet(st, monthName) {
     '</div><div class="tlc-print-legend">' + legend + '</div></div>' +
     '<div class="tlc-print-grid">' + head + cells + '</div>' +
     '<div class="tlc-print-foot"><span>timothystl.org/calendar · (314) 781-8673</span>' +
-    '<span>Sunday worship 8:00 &amp; 10:45 am</span></div>' +
+    '<span>Printed ' + tlcCalEsc(new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})) + '</span></div>' +
   '</div>';
 }
 
@@ -4455,7 +4455,16 @@ window.addEventListener('resize', function () {
 var TLC_PRINT_UNDO = [];
 function tlcPreparePrint() {
   var sheet = document.querySelector('.tlc-print-sheet');
-  if (!sheet || TLC_PRINT_UNDO.length) return; // already prepared, or nothing to isolate
+  if (!sheet) return; // nothing to isolate
+  // ⚠ RESTORE BEFORE RE-PREPARING RATHER THAN BAILING. `afterprint` is what
+  // normally clears TLC_PRINT_UNDO, but a browser that cancels out of the
+  // print dialog, or a second `beforeprint` firing before the first
+  // `afterprint` lands (seen on some Windows print pipelines), can leave it
+  // non-empty. Bailing here used to mean every print after the first one on
+  // that machine ran with none of the isolation applied at all — the "prints
+  // the whole page" report on one computer and not another. Restoring first
+  // makes this idempotent instead of one-shot.
+  if (TLC_PRINT_UNDO.length) tlcRestorePrint();
   var node = sheet;
   while (node && node.parentNode && node !== document.body) {
     var parent = node.parentNode;
