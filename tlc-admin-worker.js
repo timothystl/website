@@ -138,26 +138,54 @@ const VALUES_PAGE_SEED = {
 };
 // /voters, like /news and /values above it, has no hardcoded markup for the
 // extractor to lift — its content (meeting info, Zoom link, council
-// documents) has always been fetched live by JS into empty containers, from
-// the same voters_page record the votersinfo block itself reads. So it needs
-// a hand-authored page row, and that record staying the one source is what
-// makes converting it safe: nothing here freezes at publish time, the same
-// reasoning that reversed `values` from "deliberately not a block page" —
-// see admin/BLOCK-EDITOR-ROLLOUT.md, and the note on the 'values' entry
-// above it. Not in the nav (`in_menu: 0`, matching how it has always been
-// reached — a direct link, not a header item) and `noindex` is unaffected:
-// that comes from public/index.html's own PAGE_META entry for 'voters',
-// which is independent of whether the page is block-rendered.
-const VOTERS_PAGE_SEED = {
+// documents) has always been fetched live by JS into empty containers from
+// the bespoke voters_page table. It is a hand-authored page row for that
+// reason, same as the 'values' entry above it — but UNLIKE values, this is
+// not self-filling: Dinger asked for it to be "fully editable in the pages
+// menu section," directly, the same as every other page — the meeting info,
+// Zoom link and files are ordinary Callout/Button bar/Documents blocks, not
+// a bespoke read-only block reading a second admin screen. So the bespoke
+// /voters admin screen (meeting_info/zoom_link/files_json) is retired below,
+// and this is a ONE-TIME BACKFILL of whatever was in it into real, editable
+// blocks — see votersSeedBlocks(). Not in the nav (`in_menu: 0`, matching how
+// it has always been reached — a direct link, not a header item) and
+// `noindex` is unaffected: that comes from public/index.html's own PAGE_META
+// entry for 'voters', independent of whether the page is block-rendered.
+const VOTERS_PAGE_SEED_BASE = {
   id: 'voters', title: 'Voters Assembly', menu_label: '', slug: '/voters',
   parent_id: null, sort: 900, template: 'standard', in_menu: 0,
   seo_description: 'Voters Assembly information for Timothy Lutheran Church members.',
-  blocks: [
+};
+// ⚠ Only the hero is always there. The meeting info, Zoom link and file list
+// each become a block only when the old bespoke record actually had one —
+// a page with an empty Callout box and an empty Button bar on it looks
+// broken, where a page that simply doesn't have those blocks yet does not.
+// The office adds them back from the block palette the moment there is
+// something to say, exactly as any other page starts.
+function votersSeedBlocks(row) {
+  const meetingInfo = ((row && row.meeting_info) || '').trim();
+  const zoomLink = ((row && row.zoom_link) || '').trim();
+  let files = [];
+  try { files = JSON.parse((row && row.files_json) || '[]'); } catch (_) { files = []; }
+  if (!Array.isArray(files)) files = [];
+  const blocks = [
     { type: 'hero', eyebrow: 'Members of the congregation', title: 'Voters Meeting',
       subtitle: 'Meeting information, Zoom access, and council documents.' },
-    { type: 'votersinfo' },
-  ],
-};
+  ];
+  // The old textarea was plain text with no markup of its own — a paragraph
+  // per line is the honest reading of it, not one run-on paragraph.
+  if (meetingInfo) {
+    const paras = meetingInfo.split(/\r?\n+/).map((line) => line.trim()).filter(Boolean)
+      .map((line) => `<p>${escapeHtml(line)}</p>`).join('');
+    blocks.push({ type: 'callout', title: 'Meeting details', body: paras || `<p>${escapeHtml(meetingInfo)}</p>` });
+  }
+  if (zoomLink) blocks.push({ type: 'buttons', items: [{ title: 'Join Zoom meeting', url: zoomLink }] });
+  if (files.length) {
+    blocks.push({ type: 'documents', title: 'Downloads',
+      items: files.map((f) => ({ title: (f && f.name) || 'Document', url: (f && f.url) || '' })) });
+  }
+  return blocks;
+}
 
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
@@ -702,8 +730,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows,
-           votersRow] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -784,11 +811,6 @@ async function pageData(env, reqKey) {
       // church runs that would make this worth capping.
       q('SELECT * FROM site_events ORDER BY sort_order, id'),
       q('SELECT * FROM site_event_fields ORDER BY event_id, sort_order, id'),
-      // The Voters Assembly page's own record, for the self-filling
-      // `votersinfo` block — same reasoning as `give` above: a block that
-      // stored the meeting info or a Zoom link would freeze it at publish
-      // time and go stale the moment the office changed it on /voters.
-      env.DB.prepare('SELECT meeting_info, zoom_link, files_json FROM voters_page WHERE id = 1').first().catch(() => null),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -876,14 +898,6 @@ async function pageData(env, reqKey) {
         }));
         return acc;
       }, {}),
-      // Same shape /api/voters already publishes — see the 'votersinfo'
-      // branch in renderBlock(). Edited on the bespoke /voters admin screen,
-      // not on the page itself.
-      voters: {
-        meeting_info: (votersRow && votersRow.meeting_info) || '',
-        zoom_link: (votersRow && votersRow.zoom_link) || '',
-        files: (() => { try { const f = JSON.parse((votersRow && votersRow.files_json) || '[]'); return Array.isArray(f) ? f : []; } catch (_) { return []; } })(),
-      },
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -2001,7 +2015,6 @@ export default {
       '/market',                                   // → Market facts, Market application
       '/events',                                   // → Registration block
       '/newsletter',                                // → the newsletterarchive block (/newsletter/hide, /unhide)
-      '/voters',                                     // → the votersinfo block
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(ctx);
@@ -2106,7 +2119,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-02-1'; // bumped: seed the /voters page draft (VOTERS_PAGE_SEED) so it can be edited in the block editor
+    const SCHEMA_VERSION = '2026-09-02-2'; // bumped: /voters is fully editable ordinary blocks now (Callout/Button bar/Documents), backfilled from the old voters_page record, not a bespoke self-filling block
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2639,6 +2652,12 @@ export default {
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pages_menu ON pages(parent_id, sort)').run();
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC)').run();
       const now = new Date().toISOString();
+      // Read once, here, because it needs the DB and every other seed above
+      // is a plain constant — see votersSeedBlocks() and the note on
+      // VOTERS_PAGE_SEED_BASE for why this one is a backfill rather than a
+      // hand-typed draft.
+      const votersRow = await env.DB.prepare('SELECT meeting_info, zoom_link, files_json FROM voters_page WHERE id = 1').first().catch(() => null);
+      const VOTERS_PAGE_SEED = { ...VOTERS_PAGE_SEED_BASE, blocks: votersSeedBlocks(votersRow) };
       // ⚠ status stays 'published' here, same as every extracted page —
       // NOT 'draft'. The menu_items seed already points a header AND footer
       // entry at page_id 'news' (it has for as long as the Menu editor has
@@ -7227,135 +7246,20 @@ ${PAYROLL_HTML}`, 'Payroll');
       return new Response(JSON.stringify({ url: docUrl, key, name: safeName, bytes: file.size }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // ── VOTERS PAGE ADMIN ──
-    if ((path === '/voters' || path === '/voters-add-file' || path === '/voters-delete-file') && !hasPermission(currentUser, 'notices_edit')) {
-      return new Response('Access denied.', { status: 403 });
-    }
-    if (path === '/voters' && method === 'GET') {
-      const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
-      const meeting_info = row ? (row.meeting_info || '') : '';
-      const zoom_link = row ? (row.zoom_link || '') : '';
-      let files = [];
-      try { files = JSON.parse(row ? (row.files_json || '[]') : '[]'); } catch(_) {}
-      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
-      const filesHtml = files.length === 0
-        ? `<div style="font-size:13px;color:var(--gray);padding:8px 0;">No files uploaded yet.</div>`
-        : files.map((f, i) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-            <div style="flex:1;font-size:14px;color:var(--charcoal);">📄 <a href="${f.url}" target="_blank" style="color:var(--steel);">${f.name}</a></div>
-            <form method="POST" action="/voters-delete-file" onsubmit="return confirm('Remove this file?')">
-              <input type="hidden" name="index" value="${i}">
-              <button type="submit" class="btn btn-sm btn-danger">Remove</button>
-            </form>
-          </div>`).join('');
-      return html(`
-${sidebarShell('voters', currentUser, '', await pageBadges())}
-<div class="tlc-wrap">
-  <div class="page-title">Voters page</div>
-  <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters. The words and layout around this
-    content — the banner, and anything else on the page — are edited in <a href="/pages/voters/edit">the page editor</a>.</div>
-  ${alertHtml}
-  <form method="POST" action="/voters">
-    <div class="card">
-      <div class="card-title">Meeting Info</div>
-      <div class="form-group">
-        <label>Date, time &amp; description</label>
-        <textarea name="meeting_info" style="min-height:120px;" placeholder="Example: Annual Voters Meeting — Sunday, June 15 at noon in the Fellowship Hall">${meeting_info}</textarea>
-        <div style="font-size:12px;color:var(--gray);margin-top:6px;">Plain text shown at the top of the voters page. Include date, time, location, agenda items, etc.</div>
-      </div>
-      <div class="form-group">
-        <label>Zoom link</label>
-        <input type="text" name="zoom_link" value="${zoom_link}" placeholder="https://us02web.zoom.us/j/...">
-        <div style="font-size:12px;color:var(--gray);margin-top:6px;">Leave blank if not meeting via Zoom.</div>
-      </div>
-      <button type="submit" class="btn btn-primary">Save changes</button>
-    </div>
-  </form>
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Downloadable Files</div>
-    ${filesHtml}
-    <div style="margin-top:16px;">
-      <div style="font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Upload a new file (PDF, Word, Excel — max 10MB)</div>
-      <form id="upload-form" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <input type="file" id="doc-file" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" style="font-size:14px;flex:1;min-width:200px;">
-        <button type="submit" class="btn btn-secondary" id="upload-btn">Upload file</button>
-      </form>
-      <div id="upload-status" style="font-size:13px;margin-top:8px;"></div>
-    </div>
-  </div>
-</div>
-<script>
-document.getElementById('upload-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const file = document.getElementById('doc-file').files[0];
-  if (!file) { document.getElementById('upload-status').textContent = 'Please choose a file.'; return; }
-  document.getElementById('upload-btn').textContent = 'Uploading…';
-  document.getElementById('upload-btn').disabled = true;
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const r = await fetch('/api/upload-doc', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok || d.error) { document.getElementById('upload-status').textContent = 'Error: ' + (d.error || r.status); }
-    else {
-      // Save the file reference to voters page
-      const saveForm = new FormData();
-      saveForm.append('add_file_name', d.name);
-      saveForm.append('add_file_url', d.url);
-      saveForm.append('add_file_key', d.key);
-      await fetch('/voters-add-file', { method: 'POST', body: saveForm });
-      window.location.reload();
-    }
-  } catch(err) { document.getElementById('upload-status').textContent = 'Upload failed.'; }
-  document.getElementById('upload-btn').textContent = 'Upload file';
-  document.getElementById('upload-btn').disabled = false;
-});
-</script>`, 'Voters Page Admin');
-    }
-
-    if (path === '/voters' && method === 'POST') {
-      const form = await request.formData();
-      const meeting_info = form.get('meeting_info') || '';
-      const zoom_link = form.get('zoom_link') || '';
-      const existing = await env.DB.prepare('SELECT files_json FROM voters_page WHERE id = 1').first();
-      const files_json = existing ? (existing.files_json || '[]') : '[]';
-      const now = new Date().toISOString();
-      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
-        .bind(meeting_info, zoom_link, files_json, now).run();
-      return new Response('', { status: 302, headers: { Location: '/voters?saved=1' } });
-    }
-
-    if (path === '/voters-add-file' && method === 'POST') {
-      const form = await request.formData();
-      const name = form.get('add_file_name') || 'document';
-      const fileUrl = form.get('add_file_url') || '';
-      const key = form.get('add_file_key') || '';
-      const existing = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
-      let files = [];
-      try { files = JSON.parse(existing ? (existing.files_json || '[]') : '[]'); } catch(_) {}
-      files.push({ name, url: fileUrl, key, uploaded_at: new Date().toISOString() });
-      const now = new Date().toISOString();
-      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
-        .bind(existing ? (existing.meeting_info || '') : '', existing ? (existing.zoom_link || '') : '', JSON.stringify(files), now).run();
-      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    if (path === '/voters-delete-file' && method === 'POST') {
-      const form = await request.formData();
-      const idx = parseInt(form.get('index') || '-1', 10);
-      const existing = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
-      let files = [];
-      try { files = JSON.parse(existing ? (existing.files_json || '[]') : '[]'); } catch(_) {}
-      if (idx >= 0 && idx < files.length) {
-        const removed = files.splice(idx, 1)[0];
-        if (removed && removed.key) {
-          try { await env.IMAGES.delete(removed.key); } catch(_) {}
-        }
-      }
-      const now = new Date().toISOString();
-      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
-        .bind(existing ? (existing.meeting_info || '') : '', existing ? (existing.zoom_link || '') : '', JSON.stringify(files), now).run();
-      return new Response('', { status: 302, headers: { Location: '/voters' } });
-    }
+    // ── VOTERS PAGE ADMIN — retired ──
+    // /voters, /voters-add-file and /voters-delete-file used to be the ONLY
+    // way to change the Voters Assembly page's meeting info, Zoom link and
+    // files, writing to the voters_page table. Dinger asked for it to be
+    // "fully editable in the pages menu section" instead — the meeting info,
+    // Zoom link and documents are now ordinary Callout/Button bar/Documents
+    // blocks on the 'voters' page (Admin → Pages → Voters Assembly), edited
+    // and published exactly like any other page. VOTERS_PAGE_SEED_BASE /
+    // votersSeedBlocks() above did a one-time backfill of whatever was in
+    // voters_page into those blocks when this shipped, so nothing already
+    // posted was lost. `voters_page` and /api/voters (the public read used
+    // by the pre-Publish hardcoded fallback in public/index.html) are left
+    // in place — deliberately not written to any more, a frozen snapshot of
+    // what the page carried before this change.
 
     // ── SERMONS ADMIN ──
     if (path.startsWith('/sermons') && !hasPermission(currentUser, 'sermons_edit')) {
@@ -10402,7 +10306,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
 
         const cfg = sectionCfg('ministries');
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await pageBadges())}
+${sidebarShell('ministries', currentUser, `<a href="/manual#ministry-editor">How the editor works</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({

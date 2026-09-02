@@ -59,24 +59,29 @@ It is the first, and it is the proof the mechanism works end to end.
   the hardcoded page reads the API — so nothing freezes. The record stays the
   one source and the page is a second view of it, not a copy. See
   `admin/redesign-seeds.js`.
-- ~~**`voters`**~~ — **reversed 2026-09-02, same reasoning as `values` above.**
-  The Zoom link, meeting info and uploaded reports are still edited on the
-  bespoke `/voters` admin screen — a Zoom link and a file upload are their
-  own small forms, not something this editor needs to grow pickers for — but
-  the page ITSELF is now a `pages` row with a `hero` and a self-filling
-  `votersinfo` block (`admin/blocks.js`), so the words around that content —
-  the banner, or anything else the office wants to add — are editable the
-  same way every other page is. `votersinfo` reads `ctx.data.voters` at
-  render time, the same record `/api/voters` already publishes, so nothing
-  freezes: change the meeting info on `/voters` and every page carrying the
-  block follows. Seeded via `VOTERS_PAGE_SEED` in `tlc-admin-worker.js`,
+- ~~**`voters`**~~ — **reversed 2026-09-02.** First reversed the same way
+  `values` was — a self-filling `votersinfo` block reading a bespoke
+  `/voters` admin screen — and Dinger's answer to that, on sight: *"i think
+  it should just be fully editable in the pages menu section."* So there is
+  no bespoke block and no second admin screen: the meeting info, Zoom link
+  and council documents are ordinary Callout, Button bar and Documents
+  blocks on the page itself (`votersSeedBlocks()` in `tlc-admin-worker.js`),
+  edited and published exactly like any other page. The old bespoke
+  `/voters`, `/voters-add-file` and `/voters-delete-file` admin routes are
+  deleted, along with the `voters_page` table's only writers — a one-time
+  backfill (the same function) carried whatever was already saved there into
+  those three blocks the moment this shipped, so nothing typed or uploaded
+  through the old screen was lost. `voters_page` and the public `/api/voters`
+  read are left in place, deliberately unwritten from now on — a frozen
+  snapshot that only matters as the pre-Publish hardcoded fallback
+  (`#page-voters` in `public/index.html`) until the office publishes the
+  real page. Seeded via `VOTERS_PAGE_SEED_BASE` + `votersSeedBlocks()`,
   landing in the DRAFT only — `published_blocks` stays NULL, so the live
-  page keeps rendering its hardcoded markup (`#page-voters` in
-  `public/index.html`) until somebody opens `/pages/voters/edit`, reads the
-  draft against the live page, and presses Publish. `in_menu: 0` and
-  `noindex` are both unaffected — the page was never in the nav and its
-  `noindex` meta comes from `public/index.html`'s own `PAGE_META` table,
-  independent of whether the page is block-rendered.
+  page keeps rendering that fallback until somebody opens
+  `/pages/voters/edit`, reads the draft against the live page, and presses
+  Publish. `in_menu: 0` and `noindex` are both unaffected — the page was
+  never in the nav and its `noindex` meta comes from `public/index.html`'s
+  own `PAGE_META` table, independent of whether the page is block-rendered.
 
 ### Other surfaces — and these are the real remaining work
 

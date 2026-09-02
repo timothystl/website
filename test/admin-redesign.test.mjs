@@ -6909,56 +6909,74 @@ group('Contact and Prayer publish through the block editor now, but never withou
   eq(prayerEntry.slug, '/prayer', 'same for prayer');
 }
 
-group('The Voters page is on the block editor now, reading the same record /voters already edits');
+group('/voters is fully editable, ordinary blocks now — backfilled once from the old voters_page record');
 {
-  // Reversed the same way `values` was — see the note on VOTERS_PAGE_SEED in
-  // tlc-admin-worker.js and admin/BLOCK-EDITOR-ROLLOUT.md. The bespoke
-  // /voters screen (meeting info, Zoom link, uploaded files) is unchanged;
-  // what is new is that the PAGE around that content is a real `pages` row,
-  // publishable through the page editor like any other.
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['pages_edit', 'notices_edit'], 'siteeditor');
+  // Dinger's call, after seeing the first version (a self-filling block
+  // reading a bespoke /voters admin screen): "i think it should just be
+  // fully editable in the pages menu section." So there is no bespoke
+  // screen or second record any more — the meeting info, Zoom link and
+  // files are ordinary Callout/Button bar/Documents blocks on the page
+  // itself, edited and published exactly like any other page.
+  //
+  // Simulates a database that already had real content in the OLD bespoke
+  // screen before this shipped — the actual case votersSeedBlocks() in
+  // tlc-admin-worker.js exists to carry forward, so nothing already typed
+  // or uploaded there is lost.
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE IF NOT EXISTS voters_page (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_info TEXT, zoom_link TEXT,
+    files_json TEXT DEFAULT '[]', updated_at TEXT)`);
+  db.prepare('INSERT INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
+    .run('Annual Voters Meeting — Sunday, June 15 at noon\nin the Fellowship Hall',
+      'https://us02web.zoom.us/j/123456789',
+      JSON.stringify([{ name: 'March Council Minutes.pdf', url: 'https://files.example.com/march.pdf' }]),
+      new Date().toISOString());
+  const env = { DB: d1(db), IMAGES: { get: async () => null, put: async () => ({}), delete: async () => {} }, BREVO_API_KEY: 'test' };
+  await call(env, '/login'); // runs the migration, including the one-time backfill
+  const { cookie } = signIn(db, ['pages_edit'], 'siteeditor');
 
   const before = await (await call(env, '/api/pages', { fresh: true })).json();
-  ok(!before.rendered.voters, 'unpublished by default, like every other seeded page');
   const votersEntry = before.pages.find((p) => p.id === 'voters');
-  ok(!!votersEntry, 'but it is already a real page row, in the Pages list');
+  ok(!!votersEntry, 'voters is a real page row, in the ordinary Pages list');
   eq(votersEntry.slug, '/voters', 'at its existing address');
+  ok(!votersEntry.in_menu, 'still out of the menu — matches how it has always been reached, a direct link');
+  ok(!before.rendered.voters, 'unpublished by default, like every other seeded page');
 
-  // Fill in the underlying record through the real bespoke screen first —
-  // the same route the office actually uses.
-  const saved = await call(env, '/voters', { cookie, method: 'POST', form: {
-    meeting_info: 'Annual Voters Meeting — Sunday, June 15 at noon in the Fellowship Hall',
-    zoom_link: 'https://us02web.zoom.us/j/123456789',
-  } });
-  eq(saved.status, 302, 'the meeting info and Zoom link save');
-  await call(env, '/voters-add-file', { cookie, method: 'POST', form: {
-    add_file_name: 'March Council Minutes.pdf', add_file_url: 'https://files.example.com/march.pdf', add_file_key: 'k1',
-  } });
+  const draftBlocks = JSON.parse(db.prepare("SELECT blocks FROM pages WHERE id = 'voters'").get().blocks);
+  const types = draftBlocks.map((b) => b.type);
+  eq(types.join(','), 'hero,callout,buttons,documents',
+    'the old record became four ordinary, directly-editable blocks — no bespoke block type');
+  const callout = draftBlocks.find((b) => b.type === 'callout');
+  ok(callout.body.includes('Annual Voters Meeting') && callout.body.includes('Fellowship Hall'),
+    'the meeting info carried over, one paragraph per line: ' + callout.body);
+  const buttons = draftBlocks.find((b) => b.type === 'buttons');
+  eq(buttons.items[0].url, 'https://us02web.zoom.us/j/123456789', 'the Zoom link carried over as a real, editable button');
+  const documents = draftBlocks.find((b) => b.type === 'documents');
+  eq(documents.items[0].title, 'March Council Minutes.pdf', 'and the file carried over as a real document row');
 
   const pub = await call(env, '/pages/api/page/voters/publish', { cookie, method: 'POST' });
-  eq(pub.status, 200, 'the seeded draft (hero + votersinfo) publishes cleanly');
-
+  eq(pub.status, 200, 'the backfilled draft publishes cleanly, like any other page');
   const api = await (await call(env, '/api/pages', { fresh: true })).json();
   ok(!!api.rendered.voters, 'now it renders');
-  ok(api.rendered.voters.includes('Voters Meeting'), 'the seeded hero title is there');
-  ok(api.rendered.voters.includes('Annual Voters Meeting') && api.rendered.voters.includes('Fellowship Hall'),
-    'and the votersinfo block reads the meeting info straight from the voters_page record');
-  ok(api.rendered.voters.includes('https://us02web.zoom.us/j/123456789'), 'the Zoom link too');
-  ok(api.rendered.voters.includes('March Council Minutes.pdf'), 'and the uploaded file');
+  ok(api.rendered.voters.includes('Voters Meeting'), 'the hero title is there');
+  ok(api.rendered.voters.includes('Annual Voters Meeting'), 'and the meeting info');
+  ok(api.rendered.voters.includes('https://us02web.zoom.us/j/123456789'), 'the Zoom link');
+  ok(api.rendered.voters.includes('March Council Minutes.pdf'), 'and the file');
 
-  // ⚠ THE POINT OF SELF-FILLING: editing the record on /voters — not the
-  // page — is what changes the published page, with no second Publish.
-  await call(env, '/voters', { cookie, method: 'POST', form: {
-    meeting_info: 'Rescheduled: July 20 at noon', zoom_link: 'https://us02web.zoom.us/j/123456789',
-  } });
-  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
-  ok(api2.rendered.voters.includes('Rescheduled: July 20'), 'a later edit on /voters reaches the already-published page');
-  ok(!api2.rendered.voters.includes('Annual Voters Meeting'), 'without a second visit to the page editor');
+  // ⚠ The bespoke screen is really gone, not just unlinked — a crafted POST
+  // to the old route falls through to the dashboard like any other unmatched
+  // admin path (this admin's own fallthrough — see AW-13 in CLAUDE.md), but
+  // it must not silently keep writing to a table nothing reads any more.
+  await call(env, '/voters', { cookie, method: 'POST', form: { meeting_info: 'x', zoom_link: 'y' } });
+  const unchanged = db.prepare('SELECT meeting_info FROM voters_page WHERE id = 1').get();
+  ok(unchanged.meeting_info.includes('Annual Voters Meeting'), 'and the old record is untouched, not silently overwritten');
 
-  // Not in the nav — matches how the page has always been reached (a direct
-  // link, never a header item).
-  ok(!votersEntry.in_menu, 'still out of the menu');
+  // A fresh install with nothing ever saved in the old screen gets a page
+  // with just its hero — no empty Callout/Button bar/Documents blocks
+  // pretending there is something to say yet.
+  const { db: freshDb, env: freshEnv } = await boot();
+  const freshBlocks = JSON.parse(freshDb.prepare("SELECT blocks FROM pages WHERE id = 'voters'").get().blocks);
+  eq(freshBlocks.map((b) => b.type).join(','), 'hero', 'nothing to backfill means just the hero, not three empty blocks');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

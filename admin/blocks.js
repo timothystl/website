@@ -588,22 +588,6 @@ export const BLOCK_DEFS = {
         note: 'Facebook, Instagram and YouTube, as named links. An account left blank under Church details is left off entirely — a link to nowhere is worse than no link.' },
     ],
   },
-  // The Voters Assembly page's meeting info, Zoom link and council documents —
-  // still edited on the bespoke /voters admin screen (the same reasoning as
-  // Church details for the Contact block above: uploading a PDF and typing a
-  // Zoom link are their own small forms, not something this editor needs to
-  // grow a picker for). This block is what puts that record on a page: change
-  // the meeting info once on /voters and every page carrying this block
-  // follows, the same as Church details does for Contact.
-  votersinfo: {
-    label: 'Voters Assembly', glyph: '☑',
-    align: true,
-    defaults: { title: 'Meeting details', body: '', spaceAbove: 24, spaceBelow: 24 },
-    richBody: true,
-    auto: 'votersinfo',
-    autoNote: 'The meeting info, Zoom link and council documents all come from the Voters page in the admin (Ministries → Voters Assembly page) — change them there and this follows.',
-    autoCount: false,
-  },
   hero: {
     label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0, veil: 'medium', imgPos: 'center', heroColor: 'navy' },
@@ -1460,7 +1444,7 @@ export const GROUPS = [
   // something happens. Contact sits beside Map & address, which is where
   // somebody looking for "how do people reach us" already goes — the two
   // answer the same question and one of them draws a map.
-  { name: 'Info',      types: ['tiles', 'map', 'contact', 'votersinfo', 'download', 'documents', 'embed'] },
+  { name: 'Info',      types: ['tiles', 'map', 'contact', 'download', 'documents', 'embed'] },
   // Forms and things somebody signs up for or reads. `registration`,
   // `marketapp` and `marketfacts` all live here too — a market application
   // is a form like any other, even though the word "market" suggests money.
@@ -5436,46 +5420,6 @@ function renderInner(b, opts) {
       ? `<div class="tlcb-ct">${rows.join('')}</div>`
       : `<p class="tlcb-note">Nothing to show yet — fill in the address, phone and email under Church details in the admin.</p>`;
     return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def, 'One line about when the office is open, if it helps.')}${body}</div>`;
-  }
-
-  if (t === 'votersinfo') {
-    const v = data.voters || {};
-    const info = (v.meeting_info || '').trim();
-    const zoom = safeUrl(v.zoom_link);
-    const files = Array.isArray(v.files) ? v.files : [];
-    // .tlcb-mapc is the Map & address block's own bordered card — reused
-    // rather than a new class, so the meeting-info box reads as the same
-    // visual language as every other card on the site instead of a third one.
-    const infoHtml = info
-      ? `<div class="tlcb-mapc"><p style="white-space:pre-wrap;margin:0">${esc(info)}</p></div>` : '';
-    // ⚠ Not a link when editing — the same rule the sermon library's own
-    // "Watch"/"Listen" affordance follows: a real anchor on the canvas is one
-    // a drag could open, so it renders as a plain span while somebody is
-    // arranging the page and only becomes a link on the live page.
-    const zoomHtml = zoom
-      ? `<div>${!opts.editing
-          ? `<a class="tlcb-btn" href="${esc(zoom)}" target="_blank" rel="noopener noreferrer">Join Zoom meeting</a>`
-          : `<span class="tlcb-btn">Join Zoom meeting</span>`}</div>` : '';
-    // Same .tlcb-dl row markup the Documents block already uses, so a file
-    // listed here and one listed in a Documents block don't read as two
-    // different ideas of what a file link is.
-    const filesHtml = files.length
-      ? `<div class="tlcb-rows">${files.map((f) => {
-          const href = safeUrl(f.url);
-          const dl = href && !opts.editing
-            ? `<a class="tlcb-btn tlcb-btn--ghost" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Download</a>`
-            : `<span class="tlcb-btn tlcb-btn--ghost">Download</span>`;
-          return `<div class="tlcb-dl">
-            <span class="tlcb-dl-i">${href && /\.pdf($|\?)/i.test(href) ? 'PDF' : 'FILE'}</span>
-            <span class="tlcb-dl-b"><span class="tlcb-dl-t">${esc(f.name || 'Document')}</span></span>
-            ${dl}
-          </div>`;
-        }).join('')}</div>` : '';
-    const body = [infoHtml, zoomHtml, filesHtml].filter(Boolean).join('');
-    return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def, 'A short note above the meeting details, if it helps.')}` +
-      (body ? `<div class="tlcb-stack" style="gap:16px">${body}</div>`
-        : `<p class="tlcb-note">Nothing posted yet — add the meeting info, Zoom link or a file on the Voters page in the admin.</p>`) +
-      `</div>`;
   }
 
   if (t === 'map') {
