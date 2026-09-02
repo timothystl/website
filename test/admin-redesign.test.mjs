@@ -6909,5 +6909,57 @@ group('Contact and Prayer publish through the block editor now, but never withou
   eq(prayerEntry.slug, '/prayer', 'same for prayer');
 }
 
+group('The Voters page is on the block editor now, reading the same record /voters already edits');
+{
+  // Reversed the same way `values` was — see the note on VOTERS_PAGE_SEED in
+  // tlc-admin-worker.js and admin/BLOCK-EDITOR-ROLLOUT.md. The bespoke
+  // /voters screen (meeting info, Zoom link, uploaded files) is unchanged;
+  // what is new is that the PAGE around that content is a real `pages` row,
+  // publishable through the page editor like any other.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['pages_edit', 'notices_edit'], 'siteeditor');
+
+  const before = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!before.rendered.voters, 'unpublished by default, like every other seeded page');
+  const votersEntry = before.pages.find((p) => p.id === 'voters');
+  ok(!!votersEntry, 'but it is already a real page row, in the Pages list');
+  eq(votersEntry.slug, '/voters', 'at its existing address');
+
+  // Fill in the underlying record through the real bespoke screen first —
+  // the same route the office actually uses.
+  const saved = await call(env, '/voters', { cookie, method: 'POST', form: {
+    meeting_info: 'Annual Voters Meeting — Sunday, June 15 at noon in the Fellowship Hall',
+    zoom_link: 'https://us02web.zoom.us/j/123456789',
+  } });
+  eq(saved.status, 302, 'the meeting info and Zoom link save');
+  await call(env, '/voters-add-file', { cookie, method: 'POST', form: {
+    add_file_name: 'March Council Minutes.pdf', add_file_url: 'https://files.example.com/march.pdf', add_file_key: 'k1',
+  } });
+
+  const pub = await call(env, '/pages/api/page/voters/publish', { cookie, method: 'POST' });
+  eq(pub.status, 200, 'the seeded draft (hero + votersinfo) publishes cleanly');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(!!api.rendered.voters, 'now it renders');
+  ok(api.rendered.voters.includes('Voters Meeting'), 'the seeded hero title is there');
+  ok(api.rendered.voters.includes('Annual Voters Meeting') && api.rendered.voters.includes('Fellowship Hall'),
+    'and the votersinfo block reads the meeting info straight from the voters_page record');
+  ok(api.rendered.voters.includes('https://us02web.zoom.us/j/123456789'), 'the Zoom link too');
+  ok(api.rendered.voters.includes('March Council Minutes.pdf'), 'and the uploaded file');
+
+  // ⚠ THE POINT OF SELF-FILLING: editing the record on /voters — not the
+  // page — is what changes the published page, with no second Publish.
+  await call(env, '/voters', { cookie, method: 'POST', form: {
+    meeting_info: 'Rescheduled: July 20 at noon', zoom_link: 'https://us02web.zoom.us/j/123456789',
+  } });
+  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(api2.rendered.voters.includes('Rescheduled: July 20'), 'a later edit on /voters reaches the already-published page');
+  ok(!api2.rendered.voters.includes('Annual Voters Meeting'), 'without a second visit to the page editor');
+
+  // Not in the nav — matches how the page has always been reached (a direct
+  // link, never a header item).
+  ok(!votersEntry.in_menu, 'still out of the menu');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
