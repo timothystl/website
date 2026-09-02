@@ -136,6 +136,28 @@ const VALUES_PAGE_SEED = {
   seo_description: 'Welcome, Receive, Grow, Go — the four core values of Timothy Lutheran Church, and the partner ministries paired to each.',
   blocks: REDESIGN_BLOCKS.values,
 };
+// /voters, like /news and /values above it, has no hardcoded markup for the
+// extractor to lift — its content (meeting info, Zoom link, council
+// documents) has always been fetched live by JS into empty containers, from
+// the same voters_page record the votersinfo block itself reads. So it needs
+// a hand-authored page row, and that record staying the one source is what
+// makes converting it safe: nothing here freezes at publish time, the same
+// reasoning that reversed `values` from "deliberately not a block page" —
+// see admin/BLOCK-EDITOR-ROLLOUT.md, and the note on the 'values' entry
+// above it. Not in the nav (`in_menu: 0`, matching how it has always been
+// reached — a direct link, not a header item) and `noindex` is unaffected:
+// that comes from public/index.html's own PAGE_META entry for 'voters',
+// which is independent of whether the page is block-rendered.
+const VOTERS_PAGE_SEED = {
+  id: 'voters', title: 'Voters Assembly', menu_label: '', slug: '/voters',
+  parent_id: null, sort: 900, template: 'standard', in_menu: 0,
+  seo_description: 'Voters Assembly information for Timothy Lutheran Church members.',
+  blocks: [
+    { type: 'hero', eyebrow: 'Members of the congregation', title: 'Voters Meeting',
+      subtitle: 'Meeting information, Zoom access, and council documents.' },
+    { type: 'votersinfo' },
+  ],
+};
 
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
@@ -680,7 +702,8 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows,
+           votersRow] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -761,6 +784,11 @@ async function pageData(env, reqKey) {
       // church runs that would make this worth capping.
       q('SELECT * FROM site_events ORDER BY sort_order, id'),
       q('SELECT * FROM site_event_fields ORDER BY event_id, sort_order, id'),
+      // The Voters Assembly page's own record, for the self-filling
+      // `votersinfo` block — same reasoning as `give` above: a block that
+      // stored the meeting info or a Zoom link would freeze it at publish
+      // time and go stale the moment the office changed it on /voters.
+      env.DB.prepare('SELECT meeting_info, zoom_link, files_json FROM voters_page WHERE id = 1').first().catch(() => null),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -848,6 +876,14 @@ async function pageData(env, reqKey) {
         }));
         return acc;
       }, {}),
+      // Same shape /api/voters already publishes — see the 'votersinfo'
+      // branch in renderBlock(). Edited on the bespoke /voters admin screen,
+      // not on the page itself.
+      voters: {
+        meeting_info: (votersRow && votersRow.meeting_info) || '',
+        zoom_link: (votersRow && votersRow.zoom_link) || '',
+        files: (() => { try { const f = JSON.parse((votersRow && votersRow.files_json) || '[]'); return Array.isArray(f) ? f : []; } catch (_) { return []; } })(),
+      },
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -1965,6 +2001,7 @@ export default {
       '/market',                                   // → Market facts, Market application
       '/events',                                   // → Registration block
       '/newsletter',                                // → the newsletterarchive block (/newsletter/hide, /unhide)
+      '/voters',                                     // → the votersinfo block
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(ctx);
@@ -2069,7 +2106,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-01-1'; // bumped: one-time cleanup of blob: URLs left in staff_members.photo_url
+    const SCHEMA_VERSION = '2026-09-02-1'; // bumped: seed the /voters page draft (VOTERS_PAGE_SEED) so it can be edited in the block editor
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2629,7 +2666,7 @@ export default {
       // presses Publish. On these four in particular that is not a formality —
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE, ...MARKET_SEEDED_PAGES]
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, VOTERS_PAGE_SEED, GIVE_LANDING_PAGE, ...MARKET_SEEDED_PAGES]
         .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p))
         // Same override shape as REDESIGN_BLOCKS above, for the two pages
         // whose extractor-produced blocks are actively unsafe rather than
@@ -7214,7 +7251,8 @@ ${PAYROLL_HTML}`, 'Payroll');
 ${sidebarShell('voters', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Voters page</div>
-  <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
+  <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters. The words and layout around this
+    content — the banner, and anything else on the page — are edited in <a href="/pages/voters/edit">the page editor</a>.</div>
   ${alertHtml}
   <form method="POST" action="/voters">
     <div class="card">

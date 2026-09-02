@@ -45,7 +45,7 @@ It is the first, and it is the proof the mechanism works end to end.
 | youth · sundayschool · confirmation · vbs · egghunt · family | six youth pages | standard | hero, text, buttons each |
 | **prayer** | `/prayer` | standard | hero, prayerform — **PUBLISHED**, see below |
 
-**The three with no draft, and why each is right:**
+**The one page still with no draft, and why it is right:**
 
 - **`404`** — the page shown when an address matches nothing. It is not
   content; making it editable would mean the office could produce a site with
@@ -59,8 +59,24 @@ It is the first, and it is the proof the mechanism works end to end.
   the hardcoded page reads the API — so nothing freezes. The record stays the
   one source and the page is a second view of it, not a copy. See
   `admin/redesign-seeds.js`.
-- **`voters`** — the members-only page: a Zoom link and uploaded reports, both
-  already admin-managed, and `noindex`. Same reasoning as values.
+- ~~**`voters`**~~ — **reversed 2026-09-02, same reasoning as `values` above.**
+  The Zoom link, meeting info and uploaded reports are still edited on the
+  bespoke `/voters` admin screen — a Zoom link and a file upload are their
+  own small forms, not something this editor needs to grow pickers for — but
+  the page ITSELF is now a `pages` row with a `hero` and a self-filling
+  `votersinfo` block (`admin/blocks.js`), so the words around that content —
+  the banner, or anything else the office wants to add — are editable the
+  same way every other page is. `votersinfo` reads `ctx.data.voters` at
+  render time, the same record `/api/voters` already publishes, so nothing
+  freezes: change the meeting info on `/voters` and every page carrying the
+  block follows. Seeded via `VOTERS_PAGE_SEED` in `tlc-admin-worker.js`,
+  landing in the DRAFT only — `published_blocks` stays NULL, so the live
+  page keeps rendering its hardcoded markup (`#page-voters` in
+  `public/index.html`) until somebody opens `/pages/voters/edit`, reads the
+  draft against the live page, and presses Publish. `in_menu: 0` and
+  `noindex` are both unaffected — the page was never in the nav and its
+  `noindex` meta comes from `public/index.html`'s own `PAGE_META` table,
+  independent of whether the page is block-rendered.
 
 ### Other surfaces — and these are the real remaining work
 
@@ -286,5 +302,6 @@ They are admin-managed as of v4.23.0, but through their own screens:
 | Delete dead markup as pages go live | small, per page | Follows publication by weeks |
 | `/music` video cards | small | Needs real YouTube URLs |
 | `give.timothystl.org` | **large** | **Built.** Draft seeded, unpublished — §3 |
-| `404`, `values`, `voters` | — | Deliberately not block pages |
+| `404` | — | Deliberately not a block page |
+| `voters` | small | **Done, 2026-09-02** — reversed, same as `values` — see below |
 | Header, footer, newsletter band | — | Done, and correctly not blocks |
