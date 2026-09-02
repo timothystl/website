@@ -818,7 +818,7 @@ export const BLOCK_DEFS = {
     defaults: { title: 'Downloads', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemFileFields: ['url'],
     itemLabel: 'File',
-    itemPlaceholders: { title: 'What the file is', url: 'PDF, or a link — Google Drive, etc.' },
+    itemPlaceholders: { title: 'What the file is', url: 'PDF, Word, Excel, PowerPoint, or a link — Google Drive, etc.' },
     defaultItems: [{ title: 'A document', url: '' }],
   },
   callout: {

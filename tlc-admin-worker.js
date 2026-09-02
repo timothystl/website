@@ -1198,6 +1198,13 @@ const ALLOWED_IMAGE_TYPES = new Map([
 ]);
 const ALLOWED_DOC_TYPES = new Map([
   ['application/pdf', 'pdf'],
+  ['application/msword', 'doc'],
+  ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
+  ['application/vnd.ms-excel', 'xls'],
+  ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+  ['application/vnd.ms-powerpoint', 'ppt'],
+  ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'pptx'],
+  ['text/csv', 'csv'],
 ]);
 
 // ── SAMPLE PHOTOS ON A VENDOR APPLICATION ────────────────────
@@ -7235,7 +7242,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (file.size > 10485760) return new Response(JSON.stringify({ error: 'File too large (max 10MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       const docMime = (file.type || '').split(';')[0].trim().toLowerCase();
       if (!ALLOWED_DOC_TYPES.has(docMime)) {
-        return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF documents are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF, Word, Excel, PowerPoint, or CSV files are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       const safeName = (file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
       const key = `docs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;
