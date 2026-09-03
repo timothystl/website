@@ -19,7 +19,7 @@ import {
   sanitizeApplication, screenableText, paymentState, PAYMENT_STATES, marketPayUrl, photosOf,
   marketRowFromRegistration, marketInsertArgs, paymentLabel,
   coordinatorEmailHtml, vendorEmailHtml,
-  VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState,
+  VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState, vendorDisplayName,
   parseClock, parseShiftLabel, fmtClock, fmtRange, fmtDay,
   normalizeRoster, jobsFor, slotsFor, peopleFor, volunteerCsvRows, volunteerCsv,
   setSignupsOpen,
@@ -393,6 +393,24 @@ group('what a row looks like after a cell saves');
 // time as a LABEL written for a human, and three of the four views are
 // arithmetic over it — so a label read wrong does not throw, it draws a
 // morning shift in the evening and looks entirely plausible doing it.
+group('vendorDisplayName is the one place a row becomes a name, for the row and its saved reply alike');
+{
+  eq(vendorDisplayName({ business_name: 'The Bread Lady', participant_names: 'Jane Doe', email: 'jane@x.com' }).name,
+    'The Bread Lady', 'a business name leads');
+  eq(vendorDisplayName({ business_name: '', participant_names: 'Jane Doe', email: 'jane@x.com' }).name,
+    'Jane Doe', 'and the contact person stands in when there is none');
+  eq(vendorDisplayName({ business_name: '', participant_names: '', email: '' }).name,
+    '(no name given)', 'never a blank line where the vendor should be');
+  eq(vendorDisplayName({ business_name: 'The Bread Lady', participant_names: 'Jane Doe', email: 'jane@x.com' }).sub,
+    'Jane Doe · jane@x.com', 'the byline names the person behind the business');
+  eq(vendorDisplayName({ business_name: '', participant_names: 'Jane Doe', email: 'jane@x.com' }).sub,
+    'jane@x.com', 'with no business name the byline does not repeat the headline');
+  const st = vendorCellState({ id: 9, payment_status: 'paid', amount_due_cents: 3120, amount_paid_cents: 3120,
+    tables: 1, table_number: '', check_no: '', check_date: '', category: '',
+    business_name: 'Corrected Name', participant_names: 'Jane Doe', email: 'jane@x.com' });
+  eq(st.name, 'Corrected Name', 'the JSON a cell save answers with carries the same corrected name the row now renders');
+}
+
 group('reading a shift time out of a label');
 {
   eq(parseClock('9:00 AM'), 540, 'a plain morning time');

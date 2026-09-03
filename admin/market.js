@@ -73,6 +73,7 @@ const REQUIRED = [
 
 const trim = (v) => String(v == null ? '' : v).trim();
 const cap = (v, n) => trim(v).slice(0, n);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function sanitizeApplication(form, cfg = {}) {
   const value = {
@@ -103,7 +104,7 @@ export function sanitizeApplication(form, cfg = {}) {
   for (const [field, message] of REQUIRED) {
     if (!value[field]) errors.push(message);
   }
-  if (value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email)) {
+  if (value.email && !EMAIL_RE.test(value.email)) {
     errors.push('That email address does not look right — please check it.');
   }
   return { ok: errors.length === 0, errors, value };
@@ -320,6 +321,17 @@ export function paymentLabel(row) {
 // hoped it had sent. Two descriptions of "what does a paid check-paying
 // vendor look like" is exactly how a row ends up saying Paid in one place and
 // Awaiting check in another after a single click.
+// The name and byline shown in the collapsed row and, once a name is
+// corrected in the expanded form, redrawn there from what was actually
+// saved — one function so the two can never disagree about what "the
+// vendor's name" means.
+export function vendorDisplayName(row) {
+  return {
+    name: row.business_name || row.participant_names || '(no name given)',
+    sub: [row.business_name ? row.participant_names : '', row.email].filter(Boolean).join(' · '),
+  };
+}
+
 export function vendorCellState(row) {
   const label = paymentLabel(row);
   const chk = checkState(row);
@@ -328,6 +340,7 @@ export function vendorCellState(row) {
     payment_status: row.payment_status,
     tone: label.tone,
     statusLabel: label.label,
+    ...vendorDisplayName(row),
     // "asked $46.65" and "$46.65 recorded" are different sentences on
     // purpose: one is what the church wants, the other is what somebody has
     // actually seen. NULL means nobody has looked yet, and reads as the first.
@@ -462,8 +475,7 @@ function vendorRow(r, settings, cats) {
   const cell = vendorCellState(r);
   const sells = String(r.product_description || '').replace(/\s+/g, ' ').trim();
   const sellsShort = sells.length > SELLS_CAP ? sells.slice(0, SELLS_CAP - 1) + '…' : sells;
-  const name = r.business_name || r.participant_names || '(no name given)';
-  const sub = [r.business_name ? r.participant_names : '', r.email].filter(Boolean).join(' · ');
+  const { name, sub } = vendorDisplayName(r);
   const t = TONES[cell.tone] || TONES.plain;
   const chk = checkState(r);
   const attr = (k, v) => `${k}="${escapeHtml(String(v))}"`;
@@ -556,12 +568,26 @@ function vendorRow(r, settings, cats) {
         </div>
         <div>
           <div class="tlc-mkt-lbl">Contact</div>
-          <p class="tlc-mkt-para">${escapeHtml(r.participant_names || '')}<br>
-            ${r.email ? `<a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a><br>` : ''}
-            ${escapeHtml(r.phone || '')}
-            ${r.website_or_social ? `<br>${escapeHtml(r.website_or_social)}` : ''}
+          <label class="tlc-mkt-lbl" for="mkt-biz-${r.id}">Business or table name</label>
+          <input type="text" id="mkt-biz-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="business_name"
+            ${d('business_name')} data-cell="1" maxlength="200" placeholder="Optional"
+            value="${escapeHtml(r.business_name || '')}" aria-label="Business or table name for ${escapeHtml(name)}">
+          <label class="tlc-mkt-lbl" for="mkt-person-${r.id}">Contact person</label>
+          <input type="text" id="mkt-person-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="participant_names"
+            ${d('participant_names')} data-cell="1" maxlength="300"
+            value="${escapeHtml(r.participant_names || '')}" aria-label="Contact person for ${escapeHtml(name)}">
+          <label class="tlc-mkt-lbl" for="mkt-email-${r.id}">Email</label>
+          <input type="email" id="mkt-email-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="email"
+            ${d('email')} data-cell="1" maxlength="200"
+            value="${escapeHtml(r.email || '')}" aria-label="Email for ${escapeHtml(name)}">
+          <label class="tlc-mkt-lbl" for="mkt-phone-${r.id}">Phone</label>
+          <input type="tel" id="mkt-phone-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="phone"
+            ${d('phone')} data-cell="1" maxlength="60"
+            value="${escapeHtml(r.phone || '')}" aria-label="Phone for ${escapeHtml(name)}">
+          <p class="tlc-mkt-para">
+            ${r.website_or_social ? `${escapeHtml(r.website_or_social)}<br>` : ''}
             ${[r.street, [r.city, r.state].filter(Boolean).join(', '), r.zip].filter(Boolean).length
-              ? `<br>${escapeHtml([r.street, [r.city, r.state].filter(Boolean).join(', '), r.zip].filter(Boolean).join(' · '))}` : ''}</p>
+              ? escapeHtml([r.street, [r.city, r.state].filter(Boolean).join(', '), r.zip].filter(Boolean).join(' · ')) : ''}</p>
           <p class="tlc-mkt-quiet">${escapeHtml(r.returning_vendor === 'yes' ? 'Returning vendor' : r.returning_vendor === 'no' ? 'First year' : 'Did not say')}
             · applied ${escapeHtml(String(r.created_at || '').slice(0, 10))}<br>
             Agreed to the vendor terms as ${escapeHtml(r.signature_name || '—')}</p>
@@ -1472,6 +1498,30 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       patch.amount_paid_cents = readPaid(form.get('amount_paid'));
       patch.staff_notes = cap(form.get('staff_notes'), 2000) || null;
       if (form.get('category') != null) fieldPatch.category = cleanCategory(form.get('category'));
+      if (form.get('participant_names') != null) patch.contact_name = cap(form.get('participant_names'), 300) || null;
+      if (form.get('business_name') != null) fieldPatch.business_name = cap(form.get('business_name'), 200);
+      if (form.get('email') != null) {
+        const emailVal = cap(form.get('email'), 200).toLowerCase();
+        if (emailVal && !EMAIL_RE.test(emailVal)) return fail(400, 'That email address does not look right.');
+        patch.contact_email = emailVal || null;
+      }
+      if (form.get('phone') != null) patch.contact_phone = cap(form.get('phone'), 60) || null;
+    } else if (field === 'participant_names') {
+      // ⚠ NOT REQUIRED HERE the way it is on the public application — a
+      // correction is not a resubmission, and a coordinator clearing the box
+      // by mistake should not be blocked from saving the OTHER field she
+      // actually meant to fix. `vendorRow()` already reads
+      // `business_name || participant_names || '(no name given)'`, so a
+      // blank name still renders something honest rather than nothing.
+      patch.contact_name = cap(form.get('value'), 300) || null;
+    } else if (field === 'business_name') {
+      fieldPatch.business_name = cap(form.get('value'), 200);
+    } else if (field === 'email') {
+      const emailVal = cap(form.get('value'), 200).toLowerCase();
+      if (emailVal && !EMAIL_RE.test(emailVal)) return fail(400, 'That email address does not look right.');
+      patch.contact_email = emailVal || null;
+    } else if (field === 'phone') {
+      patch.contact_phone = cap(form.get('value'), 60) || null;
     } else if (field === 'check_in') {
       // ⚠ ONE CLICK IS THE POINT OF THIS BUTTON. A check arriving in the
       // office mail is one event, and making the coordinator record a number,
@@ -1561,14 +1611,16 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     const beforeState = { table_number: before.table_number, payment_status: before.payment_status,
       amount_paid_cents: before.amount_paid_cents, qty: before.qty,
       category: row.category, check_no: row.check_no, check_date: row.check_date,
-      waitlisted: row.waitlisted };
+      waitlisted: row.waitlisted, participant_names: row.participant_names,
+      business_name: row.business_name, email: row.email, phone: row.phone };
     const afterRow = marketRowFromRegistration({ ...before, ...patch });
-    await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), before.contact_name,
+    await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), afterRow.business_name || afterRow.participant_names || before.contact_name,
       beforeState,
       { table_number: afterRow.table_number, payment_status: afterRow.payment_status,
         amount_paid_cents: afterRow.amount_paid_cents, qty: afterRow.tables,
         category: afterRow.category, check_no: afterRow.check_no, check_date: afterRow.check_date,
-        waitlisted: afterRow.waitlisted });
+        waitlisted: afterRow.waitlisted, participant_names: afterRow.participant_names,
+        business_name: afterRow.business_name, email: afterRow.email, phone: afterRow.phone });
 
     if (wantsJson) {
       // The cell that saved gets back the row as it now stands, so the
