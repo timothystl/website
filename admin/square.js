@@ -91,6 +91,29 @@ export async function createSquarePaymentLink(env, { idempotencyKey, amountCents
   };
 }
 
+// ── WHAT SQUARE ACTUALLY KEEPS, VS. WHAT THE GROSS-UP ASSUMED ────────────────
+// `priceBreakdown()` grosses a vendor's total up assuming a flat 2.9% + 30¢
+// — a reasonable estimate, not a promise. The card network and card brand
+// Square actually processed against (debit vs. credit, a rewards card, an
+// out-of-network one) can shift the real fee a few cents either way, and
+// that is exactly the gap between what a vendor paid and what shows up in
+// the church's bank account. A `Payment`'s own `processing_fee` array is
+// Square's answer to "what did we actually take" — summed here rather than
+// assumed, so the office can reconcile against its own payout report rather
+// than against the estimate the price ladder was built from.
+//
+// ⚠ RETURNS NULL, NOT ZERO, WHEN THE ARRAY IS ABSENT OR EMPTY. Square does
+// not always know the fee at the instant a payment completes — it can be
+// calculated and reported on a LATER `payment.updated` redelivery for the
+// same payment. Null is "not reported yet"; a real, reported $0 fee (a
+// payment type Square does not charge for) is a different fact and must
+// stay distinguishable from "we don't know."
+export function squareFeeCents(payment) {
+  const fees = Array.isArray(payment?.processing_fee) ? payment.processing_fee : [];
+  if (!fees.length) return null;
+  return fees.reduce((sum, f) => sum + (Number(f?.amount_money?.amount) || 0), 0);
+}
+
 // ── VERIFYING A WEBHOOK ACTUALLY CAME FROM SQUARE ────────────────────────────
 // HMAC-SHA256 over (the exact notification URL Square was configured to
 // call) + (the exact raw request body), base64-encoded, compared against

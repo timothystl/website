@@ -1,7 +1,7 @@
 // Node test harness for admin/square.js — run with: node admin/square.test.mjs
 import crypto from 'node:crypto';
 import assert from 'node:assert';
-import { createSquarePaymentLink, verifySquareSignature } from './square.js';
+import { createSquarePaymentLink, verifySquareSignature, squareFeeCents } from './square.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -90,6 +90,26 @@ group('a refused request from Square surfaces as an error, not a silently broken
     () => createSquarePaymentLink({ SQUARE_ACCESS_TOKEN: 't', SQUARE_LOCATION_ID: 'bad' }, { idempotencyKey: 'k', amountCents: 100 }),
     /Invalid location/
   );
+}
+
+group('squareFeeCents sums what Square actually reported, and knows the difference between zero and nothing yet');
+{
+  // Andrew's own example: a $36.50 table charge, $35.14 of it actually
+  // deposited — a $1.36 fee, close to but not exactly the 2.9% + 30¢ the
+  // gross-up assumes (2.9% of 3650 rounds to 106, +30 = 136 — this example
+  // happens to land exactly on it, which is the point: it usually will,
+  // and the whole reason to read the real figure is the times it does not).
+  eq(squareFeeCents({ processing_fee: [{ amount_money: { amount: 136, currency: 'USD' } }] }), 136,
+    'a single fee line is read straight');
+  eq(squareFeeCents({ processing_fee: [
+    { amount_money: { amount: 100, currency: 'USD' } },
+    { amount_money: { amount: 36, currency: 'USD' } },
+  ] }), 136, 'more than one fee line is summed — Square can split a fee across entries');
+  eq(squareFeeCents({}), null, 'no processing_fee at all reads as "not reported yet", not zero');
+  eq(squareFeeCents({ processing_fee: [] }), null, 'an empty array is the same fact — nothing to sum yet');
+  eq(squareFeeCents(null), null, 'no payment object at all is handled the same way');
+  eq(squareFeeCents({ processing_fee: [{ amount_money: { amount: 0, currency: 'USD' } }] }), 0,
+    'a real, reported fee of zero is kept as zero — a different fact from null, and this is the one case that proves the distinction is real');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

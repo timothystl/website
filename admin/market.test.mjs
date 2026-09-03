@@ -299,6 +299,11 @@ group('marketRowFromRegistration and marketInsertArgs agree on the field shape')
   const noField = marketRowFromRegistration({ ...reg, square_order_id: null, fields_json: JSON.stringify({ signature_name: 'x' }) });
   eq(noField.payment_method, 'card', 'a registration saved before this shipped has no payment_method key at all, and reads as card');
   eq(noField.square_order_id, '', 'and no stored order id reads as an empty string, never null or undefined reaching a template');
+
+  eq(marketRowFromRegistration({ ...reg, square_fee_cents: 136 }).square_fee_cents, 136,
+    'the fee Square’s webhook recorded is a real column, surfaced straight through');
+  eq(marketRowFromRegistration({ ...reg, square_fee_cents: null }).square_fee_cents, null,
+    'and a row with none recorded reads as null, never zero — a real reported fee of zero is a different fact');
 }
 
 group('the confirmation emails branch on how the vendor chose to pay');
@@ -409,6 +414,16 @@ group('vendorDisplayName is the one place a row becomes a name, for the row and 
     tables: 1, table_number: '', check_no: '', check_date: '', category: '',
     business_name: 'Corrected Name', participant_names: 'Jane Doe', email: 'jane@x.com' });
   eq(st.name, 'Corrected Name', 'the JSON a cell save answers with carries the same corrected name the row now renders');
+}
+
+group('vendorCellState carries the raw payment method too, not just what it derives from it');
+{
+  const cardRow = { id: 1, payment_status: 'unpaid', amount_due_cents: 3120, amount_paid_cents: null,
+    tables: 1, table_number: '', check_no: '', check_date: '', category: '', payment_method: 'card' };
+  eq(vendorCellState(cardRow).payment_method, 'card', 'a card-paying row reports it');
+  eq(vendorCellState({ ...cardRow, payment_method: 'check' }).payment_method, 'check', 'and a check-paying one reports that');
+  eq(vendorCellState({ ...cardRow, payment_method: '' }).payment_method, 'card',
+    'an absent method — every application before this shipped — reads as the one path that already existed');
 }
 
 group('reading a shift time out of a label');

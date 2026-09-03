@@ -1833,6 +1833,52 @@ export const MARKET_JS = `
   // pill, the money line, and the check column — from what the SERVER says
   // the row now is. A cell that has just saved must never be repainted from
   // what the browser hoped it sent.
+  // Rebuilds the check column from scratch when it must express a shape it
+  // did not already have — the fifth thing making payment method editable
+  // needed, since a vendor switched from card to check has to grow
+  // the check-number/date inputs (or lose them, switching back) without a
+  // page reload. Built with the DOM API and textContent/value rather than an
+  // HTML string, so nothing coming back from the server ever needs escaping
+  // on the way in.
+  function buildCheckCol(col, id, st){
+    col.innerHTML = '';
+    if (st.checkMode === 'card' || st.checkMode === 'quiet') {
+      var q = document.createElement('span');
+      q.className = 'tlc-mkt-quiet';
+      q.textContent = st.checkMode === 'card' ? 'Card, online' : 'Check or cash — nothing owed';
+      col.appendChild(q);
+    } else if (st.checkMode === 'received') {
+      var s = document.createElement('span');
+      s.className = 'tlc-mkt-checkin';
+      s.textContent = st.checkLabel;
+      col.appendChild(s);
+    } else {
+      var wrap = document.createElement('div');
+      wrap.className = 'tlc-mkt-check';
+      var checkRow = document.createElement('div');
+      checkRow.className = 'tlc-mkt-check-row';
+      var no = document.createElement('input');
+      no.type = 'text'; no.className = 'tlc-mkt-in tlc-mkt-in-check';
+      no.setAttribute('data-id', id); no.setAttribute('data-field', 'check_no'); no.setAttribute('data-cell', '1');
+      no.value = st.checkNo || ''; no.placeholder = 'Check #';
+      no.setAttribute('aria-label', 'Check number');
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'tlc-mkt-in-btn';
+      btn.setAttribute('data-checkin', '1'); btn.setAttribute('data-id', id);
+      btn.title = 'Mark the check received today';
+      btn.textContent = '✓ In';
+      checkRow.appendChild(no); checkRow.appendChild(btn);
+      var dt = document.createElement('input');
+      dt.type = 'date'; dt.className = 'tlc-mkt-in tlc-mkt-in-check';
+      dt.setAttribute('data-id', id); dt.setAttribute('data-field', 'check_date'); dt.setAttribute('data-cell', '1');
+      dt.value = st.checkDate || '';
+      dt.setAttribute('aria-label', 'Date the check arrived');
+      wrap.appendChild(checkRow); wrap.appendChild(dt);
+      col.appendChild(wrap);
+    }
+    col.setAttribute('data-checkmode', st.checkMode);
+  }
+
   function repaint(row, st){
     if (!row || !st) return;
     // The header name/byline are the one thing on this screen a coordinator
@@ -1867,19 +1913,42 @@ export const MARKET_JS = `
     if (paid && document.activeElement !== paid) {
       paid.value = st.moneyLine.indexOf('recorded') === -1 ? '' : paid.value;
     }
+    // ── Paying by ──
+    // Switching whether a vendor pays by card or by check/cash re-prices the
+    // table (see the ⚠ on the payment method case in /market/update), so
+    // "Asked for" and the select itself both have to follow what was
+    // actually stored — same "redraw from the database, not from what the
+    // browser hoped it sent" rule as everything else here.
+    var pm = row.querySelector('[data-field="payment_method"]');
+    if (pm && document.activeElement !== pm && pm.value !== st.payment_method) pm.value = st.payment_method;
+    var dueEl = row.querySelector('.tlc-mkt-due');
+    if (dueEl && st.due != null) dueEl.textContent = st.due;
+    var noteEl = row.querySelector('.tlc-mkt-paynote');
+    if (noteEl) {
+      noteEl.textContent = st.payment_method === 'check'
+        ? 'Flat fee, no card charge added — switching a vendor to this recalculates what they owe, and never touches what they have already been recorded as paying.'
+        : 'The grossed-up total, so the church nets the whole table fee after the card fee.';
+    }
     row.setAttribute('data-filter', st.payment_status);
     row.setAttribute('data-check-pending', st.checkMode === 'pending' ? '1' : '0');
     row.setAttribute('data-s-status', (st.statusLabel || '').toLowerCase());
     row.setAttribute('data-s-check', st.checkMode === 'received' ? '2' : st.checkMode === 'pending' ? '1' : '0');
     row.classList.toggle('is-out', st.payment_status === 'dropped');
+    // ── The check column ──
+    // ⚠ REBUILT ONLY WHEN ITS SHAPE ACTUALLY CHANGES, tracked on the
+    // check column's own data-checkmode attribute rather than guessed from
+    // the markup — the same box, class tlc-mkt-quiet, renders two different
+    // sentences ("Card, online" vs. "nothing owed"), so the DOM alone cannot
+    // say which mode is showing. A
+    // number somebody is mid-typing into the pending inputs must never be
+    // replaced out from under them, which is why a save that leaves the mode
+    // at 'pending' takes the narrower path below instead.
     var col = row.querySelector('.tlc-mkt-checkcol');
-    // ⚠ The check column is only REBUILT when it changes shape — a number
-    // being typed must not have the box it is being typed into replaced.
-    if (col && st.checkMode === 'received' && !col.querySelector('.tlc-mkt-checkin')) {
-      col.innerHTML = '<span class="tlc-mkt-checkin"></span>';
-      col.firstChild.textContent = st.checkLabel;
+    if (col && col.getAttribute('data-checkmode') !== st.checkMode) {
+      buildCheckCol(col, row.getAttribute('data-row'), st);
     } else if (col && st.checkMode === 'received') {
-      col.querySelector('.tlc-mkt-checkin').textContent = st.checkLabel;
+      var lbl = col.querySelector('.tlc-mkt-checkin');
+      if (lbl) lbl.textContent = st.checkLabel;
     }
     // Confirming off the waiting list is the one way this ever goes from 1
     // to 0 — never the other way from this screen — so the badge is simply

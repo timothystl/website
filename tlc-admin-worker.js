@@ -209,7 +209,7 @@ import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBr
 import { getEvent, listEvents, eventFeeConfig, insertRegistration, updateRegistration, eventCoordinatorPermissions,
          eventCoordinatorPermissionKey, slugifyEventId, handleEventsRoutes, eventFields,
          sanitizeRegistration, registrationScreenableText, splitRegistrationFields, capacityDecision } from './admin/events.js';
-import { createSquarePaymentLink, verifySquareSignature } from './admin/square.js';
+import { createSquarePaymentLink, verifySquareSignature, squareFeeCents } from './admin/square.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -1928,19 +1928,38 @@ export default {
       // would just be Square hammering an endpoint for no reason.
       if (payment && payment.status === 'COMPLETED' && orderId) {
         const reg = await env.DB.prepare(
-          'SELECT id, event_id, payment_status, amount_due_cents, contact_name FROM site_event_registrations WHERE square_order_id = ?'
+          'SELECT id, event_id, payment_status, amount_due_cents, square_fee_cents, contact_name FROM site_event_registrations WHERE square_order_id = ?'
         ).bind(orderId).first().catch(() => null);
-        // ⚠ IDEMPOTENT ON PURPOSE. Square can and does redeliver the same
-        // event; a registration already marked paid is left alone rather
-        // than re-logged to the audit trail on every redelivery.
-        if (reg && reg.payment_status !== 'paid') {
-          const amountPaidCents = Number(payment?.amount_money?.amount);
-          await updateRegistration(env, reg.id, {
-            payment_status: 'paid',
-            amount_paid_cents: Number.isFinite(amountPaidCents) ? amountPaidCents : reg.amount_due_cents,
-          });
-          await logAudit(env.DB, { username: 'square-webhook' }, 'update', 'market_vendor', String(reg.id), reg.contact_name,
-            { payment_status: reg.payment_status }, { payment_status: 'paid' });
+        if (reg) {
+          const patch = {};
+          // ⚠ IDEMPOTENT ON THE MARK-PAID HALF ONLY. A registration already
+          // marked paid does not get re-marked or re-logged on a redelivery
+          // of the same event.
+          if (reg.payment_status !== 'paid') {
+            const amountPaidCents = Number(payment?.amount_money?.amount);
+            patch.payment_status = 'paid';
+            patch.amount_paid_cents = Number.isFinite(amountPaidCents) ? amountPaidCents : reg.amount_due_cents;
+          }
+          // ⚠ THE FEE HALF IS NOT GATED ON payment_status, and that is
+          // deliberate — Square does not always know the processing fee at
+          // the instant a payment completes. It can arrive on a LATER
+          // `payment.updated` redelivery for the same payment, after the row
+          // is already marked paid, and that redelivery must still be able
+          // to fill it in. squareFeeCents() returns null when Square has not
+          // reported one yet, and a null is never written over a real,
+          // already-recorded figure — nor is an unchanged figure rewritten,
+          // which is what keeps a same-fee redelivery from logging twice.
+          const feeCents = squareFeeCents(payment);
+          if (feeCents != null && feeCents !== reg.square_fee_cents) {
+            patch.square_fee_cents = feeCents;
+          }
+          if (Object.keys(patch).length) {
+            await updateRegistration(env, reg.id, patch);
+            await logAudit(env.DB, { username: 'square-webhook' }, 'update', 'market_vendor', String(reg.id), reg.contact_name,
+              { payment_status: reg.payment_status, square_fee_cents: reg.square_fee_cents },
+              { payment_status: patch.payment_status || reg.payment_status,
+                square_fee_cents: patch.square_fee_cents ?? reg.square_fee_cents });
+          }
         }
       }
       // Square only cares about the status code — always 200 past the
@@ -2126,7 +2145,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-02-2'; // bumped: /voters is fully editable ordinary blocks now (Callout/Button bar/Documents), backfilled from the old voters_page record, not a bespoke self-filling block
+    const SCHEMA_VERSION = '2026-09-03-1'; // bumped: site_event_registrations.square_fee_cents — what Square's own webhook reports it actually kept
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2956,6 +2975,16 @@ export default {
     // this, for anything paid by check/cash, and for anything on Tithe.ly.
     try { await env.DB.prepare('ALTER TABLE site_event_registrations ADD COLUMN square_order_id TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_site_event_registrations_square_order ON site_event_registrations (square_order_id)').run(); } catch (_) {}
+
+    // What Square's own processing_fee actually reported for this payment —
+    // see squareFeeCents() in admin/square.js and the /api/square/webhook
+    // route below. NULL means "not paid through Square" for every row on
+    // Tithe.ly or paying by check/cash, and ALSO means "Square has not
+    // reported it yet" for a Square payment whose fee redelivery has not
+    // landed — the two are indistinguishable from this column alone, which
+    // is fine: neither has anything to show, and the webhook fills this in
+    // the moment it is known.
+    try { await env.DB.prepare('ALTER TABLE site_event_registrations ADD COLUMN square_fee_cents INTEGER').run(); } catch (_) {}
 
     // The hard ceiling past a full registration_cap — see capacityDecision()
     // in admin/events.js and DB_INIT_SITE_EVENTS's own comment. NULL (every
