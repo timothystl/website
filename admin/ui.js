@@ -1003,6 +1003,12 @@ export const ADMIN_UI_CSS = `
 .tlc-tail-when{display:block;font-size:11px;color:var(--tlc-muted);margin-top:2px;}
 .tlc-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
 @media (max-width:880px){.tlc-tiles{grid-template-columns:repeat(2,1fr);}}
+/* A screen that earns a fifth tile (the market's own "Net deposited", once
+   there is a card fee to show) needs its own column count — scoped to a
+   second class rather than widening the shared four-tile rule every other
+   screen already renders against. */
+.tlc-tiles.tlc-tiles--5{grid-template-columns:repeat(5,1fr);}
+@media (max-width:1100px){.tlc-tiles.tlc-tiles--5{grid-template-columns:repeat(2,1fr);}}
 .tlc-tile{border:1px solid var(--tlc-edge);border-radius:11px;background:var(--tlc-parchment);padding:15px 17px;display:flex;flex-direction:column;gap:5px;}
 .tlc-tile-label{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
 .tlc-tile-num{font:500 30px/1 var(--tlc-serif);color:var(--tlc-navy);}

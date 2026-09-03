@@ -2020,6 +2020,21 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         askedCents: active.reduce((a, r) => a + (r.amount_due_cents || 0), 0),
       };
 
+      // ── Card fees, and what actually lands in the bank ──────────────────
+      // A check or cash payment costs nothing to deposit; only a card row
+      // ever has a fee to net out. `feeFor()` prefers the figure Square's
+      // own webhook confirmed and falls back to the estimate (see
+      // estimatedCardFeeCents() above) for the rows Square never reported
+      // on — which, this early in the season, is most of them, and the
+      // tile's own note says so rather than implying every dollar here is
+      // confirmed.
+      const cardPaid = rows.filter((r) => r.payment_method !== 'check'
+        && r.payment_status === 'paid' && r.amount_paid_cents != null);
+      const feeFor = (r) => (r.square_fee_cents != null ? r.square_fee_cents : estimatedCardFeeCents(r, settings));
+      counts.cardPaidCount = cardPaid.length;
+      counts.confirmedFeeCount = cardPaid.filter((r) => r.square_fee_cents != null).length;
+      counts.cardFeeCents = cardPaid.reduce((a, r) => a + (feeFor(r) || 0), 0);
+
       const openPanel = panel('Applications', `
         <form method="POST" action="/market/applications" style="margin:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
           <input type="hidden" name="open" value="0">
@@ -2081,11 +2096,22 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
             counts.confirmedTables >= settings.registrationCap ? 'warn' : undefined)
         : tile('Tables asked for', counts.tables, `${rows.length} application${rows.length === 1 ? '' : 's'}, dropped-out excluded`);
 
-      const tiles = `<div class="tlc-tiles">
+      // ⚠ THE FIFTH TILE ONLY EXISTS ONCE THERE IS A CARD PAYMENT TO NET OUT.
+      // A market with nothing paid by card yet — everything still pending,
+      // or a season run entirely on checks — has no fee to show, and a tile
+      // that would only ever read $0 is the same dead-control failure the
+      // note above the first tile already warns about.
+      const feeTile = counts.cardPaidCount ? tile('Net deposited',
+        money(counts.collectedCents - counts.cardFeeCents),
+        `${money(counts.cardFeeCents)} in card fees — ${counts.confirmedFeeCount} of ${counts.cardPaidCount} confirmed by Square`
+          + (counts.confirmedFeeCount < counts.cardPaidCount ? ', the rest estimated' : '')) : '';
+
+      const tiles = `<div class="tlc-tiles${feeTile ? ' tlc-tiles--5' : ''}">
         ${tilesFirst}
         ${tile('Recorded as paid', money(counts.collectedCents), `of ${money(counts.askedCents)} asked for`)}
         ${tile('Waiting on a card', counts.unpaidCard, 'Applied online and never finished paying')}
         ${tile('Checks not in yet', counts.checkOut, 'Said they would mail or bring one', 'warn')}
+        ${feeTile}
       </div>`;
 
       // ⚠ THE UNPAID CASE STILL HAS TO SAY WHAT IT COSTS. The list this

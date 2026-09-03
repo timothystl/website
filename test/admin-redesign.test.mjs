@@ -4495,6 +4495,7 @@ group('a vendor row edits in place');
   has(body, 'data-cell="1"', 'the cells in the row are editable');
   has(body, 'data-sort="category"', 'every column header sorts');
   has(body, 'data-mktfilter="check"', 'and Awaiting check is one of the filters');
+  lacks(body, 'Net deposited', 'no card payment has landed yet, so there is nothing to net out — the fifth tile stays absent rather than reading $0');
   lacks(body, 'tlc-drawer', 'the drawer is gone — nothing opens a panel to change a number');
 
   // ── One field at a time ──
@@ -4580,11 +4581,18 @@ group('a vendor row edits in place');
   const pageWithEstimate = await (await call(env, '/market', { cookie })).text();
   has(pageWithEstimate, 'Card fee, estimated at the standard rate', 'a paid card row with no reported fee shows an estimate');
   lacks(pageWithEstimate, 'Square kept', 'and it never claims to be Square’s own figure');
+  // ── The fifth tile, once there is something for it to say ──
+  has(pageWithEstimate, 'tlc-tiles--5', 'a card payment landing grows the fifth tile');
+  has(pageWithEstimate, 'Net deposited', 'named for what it answers — what actually lands in the bank');
+  has(pageWithEstimate, '0 of 1 confirmed by Square, the rest estimated',
+    'and it says plainly that this is a guess, not a Square-confirmed figure');
 
   db.prepare('UPDATE site_event_registrations SET square_fee_cents = 136 WHERE id = ?').run(id);
   const pageWithRealFee = await (await call(env, '/market', { cookie })).text();
   has(pageWithRealFee, 'Square kept $1.36', 'once Square actually reports a fee, the real figure is shown');
   lacks(pageWithRealFee, 'Card fee, estimated', 'and the estimate steps aside for it — never both at once');
+  has(pageWithRealFee, '1 of 1 confirmed by Square', 'the tile counts the confirmed one');
+  lacks(pageWithRealFee, 'the rest estimated', 'and drops the caveat once nothing left is a guess');
   db.prepare('UPDATE site_event_registrations SET square_fee_cents = NULL WHERE id = ?').run(id);
   await cell('payment_status', 'unpaid');
 
