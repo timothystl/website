@@ -207,6 +207,11 @@ export function marketRowFromRegistration(reg) {
     payment_status: reg.payment_status || 'unpaid',
     amount_paid_cents: reg.amount_paid_cents,
     square_order_id: reg.square_order_id || '',
+    // What Square's own processing_fee reported for this payment — see
+    // squareFeeCents() in admin/square.js and the /api/square/webhook
+    // route. NULL for anything not paid through Square, and for a Square
+    // payment whose fee has not been reported yet.
+    square_fee_cents: reg.square_fee_cents == null ? null : Number(reg.square_fee_cents),
     staff_notes: reg.staff_notes || '',
     created_at: reg.created_at,
     // A soft reserve — see marketInsertArgs() and capacityDecision() in
@@ -366,6 +371,7 @@ export function vendorCellState(row) {
     tables: row.tables,
     table_number: row.table_number || '',
     due: money(row.amount_due_cents),
+    payment_method: row.payment_method === 'check' ? 'check' : 'card',
     waitlisted: !!row.waitlisted,
   };
 }
@@ -547,7 +553,7 @@ function vendorRow(r, settings, cats) {
         </select>
         <span class="tlc-mkt-money">${escapeHtml(cell.moneyLine)}</span>
       </div>
-      <div class="tlc-mkt-checkcol">${checkCol}</div>
+      <div class="tlc-mkt-checkcol" data-checkmode="${escapeHtml(cell.checkMode)}">${checkCol}</div>
       <button type="button" class="tlc-mkt-caret" data-expand="${r.id}" aria-expanded="false"
         aria-controls="mkt-more-${r.id}" aria-label="Show the rest of ${escapeHtml(name)}’s application">▾</button>
     </div>
@@ -596,16 +602,24 @@ function vendorRow(r, settings, cats) {
         </div>
         <div>
           <div class="tlc-mkt-lbl">Money</div>
-          <p class="tlc-mkt-para">Asked for ${escapeHtml(cell.due)}<br>${escapeHtml(
-            r.payment_method === 'check'
-              ? 'Paying by check or cash — flat fee, no card charge added'
-              : 'Paying by card, online')}</p>
+          <p class="tlc-mkt-para">Asked for <span class="tlc-mkt-due">${escapeHtml(cell.due)}</span></p>
+          <label class="tlc-mkt-lbl" for="mkt-paymethod-${r.id}">Paying by</label>
+          <select id="mkt-paymethod-${r.id}" class="tlc-mkt-sel" name="payment_method"
+            ${d('payment_method')} data-cell="1" aria-label="How ${escapeHtml(name)} is paying">
+            <option value="card"${cell.payment_method === 'check' ? '' : ' selected'}>Card, online</option>
+            <option value="check"${cell.payment_method === 'check' ? ' selected' : ''}>Check or cash</option>
+          </select>
+          <p class="tlc-mkt-quiet tlc-mkt-paynote">${cell.payment_method === 'check'
+            ? 'Flat fee, no card charge added — switching a vendor to this recalculates what they owe, and never touches what they have already been recorded as paying.'
+            : 'The grossed-up total, so the church nets the whole table fee after the card fee.'}</p>
           <label class="tlc-mkt-lbl" for="mkt-paid-${r.id}">Amount paid</label>
           <input type="text" id="mkt-paid-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="amount_paid"
             ${d('amount_paid')} data-cell="1"
             value="${escapeHtml(r.amount_paid_cents == null ? '' : (r.amount_paid_cents / 100).toFixed(2))}"
             placeholder="${escapeHtml((r.amount_due_cents / 100).toFixed(2))}">
           <p class="tlc-mkt-quiet">Blank is not the same as zero.${r.sells_food ? ' Selling food — the health department requirements are theirs.' : ''}</p>
+          ${r.square_fee_cents != null && r.amount_paid_cents != null ? `<p class="tlc-mkt-quiet tlc-mkt-squarefee">
+            Square kept ${escapeHtml(money(r.square_fee_cents))} — ${escapeHtml(money(r.amount_paid_cents - r.square_fee_cents))} actually deposited.</p>` : ''}
           <div class="tlc-mkt-more-actions">
             <button type="submit" class="tlc-btn-primary tlc-mkt-nojs">Save</button>
           </div>
@@ -1405,6 +1419,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     };
     const n = (v) => String(v == null ? '' : v);
     const head = ['Table #', 'Payment', 'Pay by', 'Participants', 'Business', 'Tables', 'Amount asked', 'Amount paid',
+      'Square fee', 'Net deposited',
       'Email', 'Phone', 'Street', 'City', 'State', 'ZIP', 'Website or social', 'Returning',
       'What they sell', 'Food', 'Appliances / power', 'Special requests', 'Agreed as', 'Applied', 'Staff notes'];
     const body = rows.map((r) => [
@@ -1412,6 +1427,11 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       t(r.participant_names), t(r.business_name),
       n(r.tables), n(((r.amount_due_cents || 0) / 100).toFixed(2)),
       r.amount_paid_cents == null ? '' : n((r.amount_paid_cents / 100).toFixed(2)),
+      // ⚠ BLANK, NOT ZERO, WHEN SQUARE HAS NOT REPORTED A FEE — same rule as
+      // Amount paid above it, and for the same reason: a blank cell here
+      // means "not through Square, or not reported yet," never "no fee."
+      r.square_fee_cents == null ? '' : n((r.square_fee_cents / 100).toFixed(2)),
+      r.square_fee_cents == null || r.amount_paid_cents == null ? '' : n(((r.amount_paid_cents - r.square_fee_cents) / 100).toFixed(2)),
       t(r.email), t(r.phone), t(r.street), t(r.city), t(r.state), t(r.zip),
       t(r.website_or_social), t(r.returning_vendor === 'yes' ? 'Returning' : r.returning_vendor === 'no' ? 'First year' : ''),
       t(r.product_description), t(r.sells_food ? 'Yes' : ''), t(r.appliances_power), t(r.special_requests),
@@ -1506,6 +1526,12 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         patch.contact_email = emailVal || null;
       }
       if (form.get('phone') != null) patch.contact_phone = cap(form.get('phone'), 60) || null;
+      if (form.get('payment_method') != null) {
+        const pm = trim(form.get('payment_method')) === 'check' ? 'check' : 'card';
+        fieldPatch.payment_method = pm;
+        const price = priceBreakdown(row.tables, settings);
+        patch.amount_due_cents = pm === 'check' ? price.subtotalCents : price.totalCents;
+      }
     } else if (field === 'participant_names') {
       // ⚠ NOT REQUIRED HERE the way it is on the public application — a
       // correction is not a resubmission, and a coordinator clearing the box
@@ -1578,6 +1604,19 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       patch.amount_due_cents = row.payment_method === 'check' ? price.subtotalCents : price.totalCents;
     } else if (field === 'category') {
       fieldPatch.category = cleanCategory(form.get('value'));
+    } else if (field === 'payment_method') {
+      // A vendor who applied meaning to pay online sometimes ends up paying
+      // by check or cash instead — dropped off an envelope, handed the
+      // coordinator cash at the door. Switching how they are paying
+      // re-prices the table the same way `tables` above does: check or cash
+      // is the flat table fee, card carries the grossed-up processing fee —
+      // and it never touches an amount already recorded as paid, which is a
+      // fact about what arrived, not a re-guess of what should have been
+      // asked.
+      const pm = trim(form.get('value')) === 'check' ? 'check' : 'card';
+      fieldPatch.payment_method = pm;
+      const price = priceBreakdown(row.tables, settings);
+      patch.amount_due_cents = pm === 'check' ? price.subtotalCents : price.totalCents;
     } else if (field === 'check_no' || field === 'check_date') {
       const value = cap(form.get('value'), 40);
       fieldPatch[field] = value;
@@ -1609,18 +1648,19 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
 
     await updateRegistration(env, id, patch);
     const beforeState = { table_number: before.table_number, payment_status: before.payment_status,
-      amount_paid_cents: before.amount_paid_cents, qty: before.qty,
+      amount_paid_cents: before.amount_paid_cents, amount_due_cents: before.amount_due_cents, qty: before.qty,
       category: row.category, check_no: row.check_no, check_date: row.check_date,
       waitlisted: row.waitlisted, participant_names: row.participant_names,
-      business_name: row.business_name, email: row.email, phone: row.phone };
+      business_name: row.business_name, email: row.email, phone: row.phone, payment_method: row.payment_method };
     const afterRow = marketRowFromRegistration({ ...before, ...patch });
     await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), afterRow.business_name || afterRow.participant_names || before.contact_name,
       beforeState,
       { table_number: afterRow.table_number, payment_status: afterRow.payment_status,
-        amount_paid_cents: afterRow.amount_paid_cents, qty: afterRow.tables,
+        amount_paid_cents: afterRow.amount_paid_cents, amount_due_cents: afterRow.amount_due_cents, qty: afterRow.tables,
         category: afterRow.category, check_no: afterRow.check_no, check_date: afterRow.check_date,
         waitlisted: afterRow.waitlisted, participant_names: afterRow.participant_names,
-        business_name: afterRow.business_name, email: afterRow.email, phone: afterRow.phone });
+        business_name: afterRow.business_name, email: afterRow.email, phone: afterRow.phone,
+        payment_method: afterRow.payment_method });
 
     if (wantsJson) {
       // The cell that saved gets back the row as it now stands, so the

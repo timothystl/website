@@ -4542,6 +4542,35 @@ group('a vendor row edits in place');
   eq(reg().qty, 3, 'a count past the market’s own limit is clamped to it, not stored');
   await cell('tables', '1');
 
+  // ── Paying by card, or by check or cash ──
+  // A vendor who applied online sometimes ends up paying offline instead —
+  // an envelope left with the office, cash handed over at the door. That
+  // should not mean deleting the application and starting over.
+  eq(fields().payment_method, 'card', 'this application applied through the card path');
+  const cardDue = reg().amount_due_cents;
+  const flatDue = priceBreakdown(1, MARKET_PRICE_DEFAULTS).subtotalCents;
+  const grossDue = priceBreakdown(1, MARKET_PRICE_DEFAULTS).totalCents;
+  eq(cardDue, grossDue, 'sanity: it was charged the grossed-up card total');
+
+  const toCheck = await cell('payment_method', 'check');
+  eq(toCheck.status, 200, 'switching a vendor to paying by check or cash saves');
+  eq(fields().payment_method, 'check', 'and is recorded as such');
+  eq(reg().amount_due_cents, flatDue, 'which re-prices the table to the flat fee — no card processing charge to explain');
+  eq(JSON.parse(await toCheck.clone().text()).row.payment_method, 'check',
+    'and the JSON reply carries it too, so the select and the "Asked for" line can redraw without a reload');
+
+  await cell('payment_method', 'card');
+  eq(fields().payment_method, 'card', 'switching back to card is just as available');
+  eq(reg().amount_due_cents, grossDue, 'and re-prices back to the grossed-up total');
+
+  // ⚠ Never touches an amount already recorded as paid — that is a fact
+  // about what arrived, not a re-guess of what should have been asked.
+  await cell('amount_paid', '20.00');
+  await cell('payment_method', 'check');
+  eq(reg().amount_paid_cents, 2000, 'a payment already on the books survives a method switch untouched');
+  await cell('amount_paid', '');
+  await cell('payment_method', 'card');
+
   // ── The check ──
   // ⚠ RECORDING A CHECK NUMBER IS WHAT TURNS "AWAITING CHECK" INTO PAID. That
   // is a decision, not an inference: before this there was nowhere to record
@@ -5401,6 +5430,64 @@ group('the Square webhook marks the matching application paid, by order id alone
   });
   const auditAfterRedelivery = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'market_vendor' AND entity_id = ?").get(String(before.id));
   eq(auditAfterRedelivery.n, 1, 'a redelivered event for an already-paid row is a silent no-op, not a second entry');
+}
+
+group('the Square webhook records the fee Square actually kept, even on a later redelivery of an already-paid row');
+{
+  const { db, env } = await boot();
+  db.prepare("UPDATE site_events SET payment_provider = 'square' WHERE id = 'christmasmarket'").run();
+  env.SQUARE_ACCESS_TOKEN = 'sq0atp-test';
+  env.SQUARE_LOCATION_ID = 'L1';
+  env.SQUARE_WEBHOOK_SIGNATURE_KEY = 'test-signing-key';
+
+  const restore = stubSquareFetch(async () => new Response(JSON.stringify({
+    payment_link: { id: 'link_3', url: 'https://square.link/u/fee', order_id: 'order_fee' },
+  }), { status: 200 }));
+  try { await applyAsVendor(env, { tables: '1' }); } finally { restore(); }
+  const row = db.prepare("SELECT id FROM site_event_registrations WHERE square_order_id = 'order_fee'").get();
+
+  // ⚠ Andrew's own example: $36.50 charged, $1.36 kept, $35.14 actually
+  // deposited. Square did not report the fee on the first COMPLETED event —
+  // it is genuinely common for the fee to be calculated after the payment
+  // itself completes.
+  await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_fee', status: 'COMPLETED', amount_money: { amount: 3650, currency: 'USD' } } } },
+  });
+  let after = db.prepare('SELECT payment_status, amount_paid_cents, square_fee_cents FROM site_event_registrations WHERE id = ?').get(row.id);
+  eq(after.payment_status, 'paid', 'marked paid on the first event, exactly as before this feature');
+  eq(after.square_fee_cents, null, 'but the fee is not known yet — null, not zero');
+
+  // The redelivery that reports the fee — the row is ALREADY paid, and the
+  // fee update has to land anyway.
+  await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_fee', status: 'COMPLETED', amount_money: { amount: 3650, currency: 'USD' },
+      processing_fee: [{ amount_money: { amount: 136, currency: 'USD' } }] } } },
+  });
+  after = db.prepare('SELECT payment_status, amount_paid_cents, square_fee_cents FROM site_event_registrations WHERE id = ?').get(row.id);
+  eq(after.square_fee_cents, 136, 'the fee redelivery updates the row even though payment_status was already paid');
+  eq(after.amount_paid_cents, 3650, 'the amount charged is unaffected');
+
+  const auditRows = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'market_vendor' AND entity_id = ?").get(String(row.id));
+  eq(auditRows.n, 2, 'both the mark-paid and the fee report are their own audit entries — the fee one is not silently skipped just because the row was already paid');
+
+  // ⚠ A THIRD redelivery reporting the SAME fee again must not log a third
+  // time, and a redelivery with NO fee data must never blank out a fee
+  // already recorded.
+  await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_fee', status: 'COMPLETED', amount_money: { amount: 3650, currency: 'USD' },
+      processing_fee: [{ amount_money: { amount: 136, currency: 'USD' } }] } } },
+  });
+  await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_fee', status: 'COMPLETED', amount_money: { amount: 3650, currency: 'USD' } } } },
+  });
+  const finalRow = db.prepare('SELECT square_fee_cents FROM site_event_registrations WHERE id = ?').get(row.id);
+  eq(finalRow.square_fee_cents, 136, 'a fee already on record survives both a repeat of the same figure and a redelivery carrying none at all');
+  const finalAudit = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'market_vendor' AND entity_id = ?").get(String(row.id));
+  eq(finalAudit.n, 2, 'neither of those two redeliveries added a third audit entry — nothing about the row actually changed');
 }
 
 group('the Square webhook refuses a bad signature, and quietly ignores a payment that is not ours');
