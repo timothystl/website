@@ -245,6 +245,36 @@ export function cleanCategory(v) {
   return VENDOR_CATEGORIES.includes(s) ? s : 'Other';
 }
 
+// ── AN ESTIMATE, FOR EVERY CARD ROW SQUARE NEVER TOLD US ABOUT ──────────────
+// Every application before Square's webhook was actually reporting real
+// fees — and every one paid through Tithe.ly, which this webhook has no way
+// to reach at all — has no `square_fee_cents` and never will. Andrew's own
+// ask: with only a handful of table counts possible, back-fill a number
+// anyway rather than leaving every past row blank.
+//
+// ⚠ THIS IS A GUESS, NOT A FACT, AND MUST NEVER BE STORED IN square_fee_cents.
+// That column means "Square told us this" — null vs. a real figure is a
+// distinction this file argues for at length elsewhere (squareFeeCents() in
+// admin/square.js). Blurring an assumption into the same column a verified
+// webhook figure lives in would let the office reconcile a bank deposit
+// against a number nobody ever confirmed. This is computed fresh at render
+// time and shown with different words ("about", never "Square kept"), and a
+// REAL figure — the moment one exists — always wins over it.
+//
+// ⚠ Derived from what this row was actually ASKED FOR, not recomputed from
+// today's fee percentage — `amount_due_cents` already IS the grossed-up
+// total from whatever the settings were the day this vendor applied, so
+// subtracting today's flat table fee out of it survives the office having
+// tweaked the percentage or fixed charge since, and only assumes the
+// per-table fee itself hasn't moved this season.
+export function estimatedCardFeeCents(row, settings) {
+  if (row.payment_method === 'check') return null;
+  if (row.payment_status !== 'paid' || row.amount_paid_cents == null) return null;
+  const subtotalCents = Math.round((Number(row.tables) || 0) * num(settings?.tableFee, MARKET_DEFAULTS.tableFee) * 100);
+  const fee = (row.amount_due_cents || 0) - subtotalCents;
+  return fee > 0 ? fee : null;
+}
+
 // ── WHERE A CHECK HAS GOT TO ─────────────────────────────────────────────────
 // Three states, and only the middle one is new information. Before this, a
 // vendor who chose "pay by check" and a vendor who simply never paid looked
@@ -618,8 +648,20 @@ function vendorRow(r, settings, cats) {
             value="${escapeHtml(r.amount_paid_cents == null ? '' : (r.amount_paid_cents / 100).toFixed(2))}"
             placeholder="${escapeHtml((r.amount_due_cents / 100).toFixed(2))}">
           <p class="tlc-mkt-quiet">Blank is not the same as zero.${r.sells_food ? ' Selling food — the health department requirements are theirs.' : ''}</p>
-          ${r.square_fee_cents != null && r.amount_paid_cents != null ? `<p class="tlc-mkt-quiet tlc-mkt-squarefee">
-            Square kept ${escapeHtml(money(r.square_fee_cents))} — ${escapeHtml(money(r.amount_paid_cents - r.square_fee_cents))} actually deposited.</p>` : ''}
+          ${r.square_fee_cents != null && r.amount_paid_cents != null
+            ? `<p class="tlc-mkt-quiet tlc-mkt-squarefee">
+                 Square kept ${escapeHtml(money(r.square_fee_cents))} — ${escapeHtml(money(r.amount_paid_cents - r.square_fee_cents))} actually deposited.</p>`
+            // ⚠ AN ESTIMATE, NEVER WORDED LIKE THE REAL FIGURE ABOVE. Every
+            // row paid before Square's webhook was actually reporting fees —
+            // which is every row on the books right now — has no confirmed
+            // number and never will; "about" is what tells the coordinator
+            // this is a guess from the price ladder, not something Square
+            // told us.
+            : (() => {
+                const est = estimatedCardFeeCents(r, settings);
+                return est != null ? `<p class="tlc-mkt-quiet tlc-mkt-squarefee">
+                  Card fee, estimated at the standard rate: about ${escapeHtml(money(est))} — about ${escapeHtml(money(r.amount_paid_cents - est))} deposited. Square has not confirmed this one.</p>` : '';
+              })()}
           <div class="tlc-mkt-more-actions">
             <button type="submit" class="tlc-btn-primary tlc-mkt-nojs">Save</button>
           </div>
