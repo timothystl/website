@@ -19,7 +19,7 @@ import {
   sanitizeApplication, screenableText, paymentState, PAYMENT_STATES, marketPayUrl, photosOf,
   marketRowFromRegistration, marketInsertArgs, paymentLabel,
   coordinatorEmailHtml, vendorEmailHtml,
-  VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState, vendorDisplayName,
+  VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState, vendorDisplayName, estimatedCardFeeCents,
   parseClock, parseShiftLabel, fmtClock, fmtRange, fmtDay,
   normalizeRoster, jobsFor, slotsFor, peopleFor, volunteerCsvRows, volunteerCsv,
   setSignupsOpen,
@@ -424,6 +424,38 @@ group('vendorCellState carries the raw payment method too, not just what it deri
   eq(vendorCellState({ ...cardRow, payment_method: 'check' }).payment_method, 'check', 'and a check-paying one reports that');
   eq(vendorCellState({ ...cardRow, payment_method: '' }).payment_method, 'card',
     'an absent method — every application before this shipped — reads as the one path that already existed');
+}
+
+group('estimatedCardFeeCents is a guess for a row Square never reported on, never a fact');
+{
+  const settings = { tableFee: 30, feePercent: 2.9, feeFixed: 0.30, maxTables: 3 };
+  // A 1-table card row, paid the grossed-up total ($31.20) with a $30
+  // flat fee — the estimate should read $1.20, the gap between what was
+  // asked and the flat table fee, not a recomputation of today's percentage.
+  const paidCard = { payment_method: 'card', payment_status: 'paid', tables: 1,
+    amount_due_cents: 3120, amount_paid_cents: 3120 };
+  eq(estimatedCardFeeCents(paidCard, settings), 120, 'the estimate is what was asked minus the flat table fee');
+
+  // Andrew's own example, at whatever this market's real table fee turns
+  // out to be: $36.50 asked, and a $1.36 fee is exactly what an assumed
+  // 2.9% + 30¢ produces on a $35.14 table.
+  eq(estimatedCardFeeCents({ payment_method: 'card', payment_status: 'paid', tables: 1,
+    amount_due_cents: 3650, amount_paid_cents: 3650 }, { ...settings, tableFee: 35.14 }), 136,
+    'and the same math over a different table fee still lands on the real-world example');
+
+  eq(estimatedCardFeeCents({ ...paidCard, payment_method: 'check' }, settings), null,
+    'a check or cash vendor never had a card fee to estimate at all');
+  eq(estimatedCardFeeCents({ ...paidCard, payment_status: 'unpaid', amount_paid_cents: null }, settings), null,
+    'nothing to estimate for a row that has not actually paid anything');
+  eq(estimatedCardFeeCents({ ...paidCard, payment_status: 'waived' }, settings), null,
+    'a waived fee took no card payment, so there is no fee to guess at');
+
+  // ⚠ Settings drift is exactly why this reads off the row's own recorded
+  // amount_due_cents rather than recomputing priceBreakdown() with today's
+  // percentage — the fee percentage doubling since this vendor applied must
+  // not retroactively double their estimate.
+  eq(estimatedCardFeeCents(paidCard, { ...settings, feePercent: 5.8 }), 120,
+    'a fee percentage that changed since this vendor applied does not move the estimate');
 }
 
 group('reading a shift time out of a label');

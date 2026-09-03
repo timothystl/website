@@ -4571,6 +4571,23 @@ group('a vendor row edits in place');
   await cell('amount_paid', '');
   await cell('payment_method', 'card');
 
+  // ── An estimated fee, until Square actually reports one ──
+  // Every application on the books applied before this webhook was
+  // reporting real fees, and every one paid through Tithe.ly never will be
+  // — the coordinator still wants to see SOMETHING for those, worded so it
+  // is never mistaken for what Square confirmed.
+  await cell('payment_status', 'paid');
+  const pageWithEstimate = await (await call(env, '/market', { cookie })).text();
+  has(pageWithEstimate, 'Card fee, estimated at the standard rate', 'a paid card row with no reported fee shows an estimate');
+  lacks(pageWithEstimate, 'Square kept', 'and it never claims to be Square’s own figure');
+
+  db.prepare('UPDATE site_event_registrations SET square_fee_cents = 136 WHERE id = ?').run(id);
+  const pageWithRealFee = await (await call(env, '/market', { cookie })).text();
+  has(pageWithRealFee, 'Square kept $1.36', 'once Square actually reports a fee, the real figure is shown');
+  lacks(pageWithRealFee, 'Card fee, estimated', 'and the estimate steps aside for it — never both at once');
+  db.prepare('UPDATE site_event_registrations SET square_fee_cents = NULL WHERE id = ?').run(id);
+  await cell('payment_status', 'unpaid');
+
   // ── The check ──
   // ⚠ RECORDING A CHECK NUMBER IS WHAT TURNS "AWAITING CHECK" INTO PAID. That
   // is a decision, not an inference: before this there was nowhere to record
