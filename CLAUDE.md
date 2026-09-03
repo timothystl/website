@@ -173,6 +173,24 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### A fifth tile: what actually deposits, at a glance (v5.59.0, 2026-09-03)
+
+Dinger, once the "Square kept — actually deposited" line was confirmed working on a real payment: *"i see it fine print here. can we make it so that at the top this is more clear?"* — right after asking for the fee to be checkable at all. He was pointing at the four tiles above the vendor list (Tables asked for · Recorded as paid · Waiting on a card · Checks not in yet), which said nothing about fees at all.
+
+- **`Net deposited`** is the fifth tile — `collected − card fees`, with the note naming both the fee total and how much of it is Square-confirmed vs. estimated: *"$7.86 in card fees — 1 of 2 confirmed by Square, the rest estimated."* Reuses `feeFor(r)` (Square's own figure when the webhook has reported one, `estimatedCardFeeCents()` otherwise) — the same preference order the row's own line already follows, so the tile and the row can never disagree about which number wins.
+- **⚠ ABSENT UNTIL THE FIRST CARD PAYMENT LANDS**, not shown reading $0 — the same dead-control rule the first tile's own "confirmed vs. reserved" split already follows. A market that has taken nothing by card yet (or runs entirely on checks) has nothing to net out.
+- **`.tlc-tiles--5`** is a second, scoped grid-column rule rather than widening the shared four-tile `.tlc-tiles` class every other tile screen in this admin also renders against — Payroll, Gym Rentals and the rest keep their four columns untouched.
+
+Run: the extended `a vendor row edits in place` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1780) — the tile is absent before any card payment, appears worded as an
+estimate once one is recorded with no Square-reported fee, and switches to
+"confirmed by Square" with the caveat dropped once a real `square_fee_cents`
+lands. Verified visually too, in a real headless-Chromium render against
+three seeded vendors (one Square-confirmed, one estimated, one paid by
+check) — $103 collected, $7.86 in card fees, $95.14 net, all five tiles
+rendering side by side.
+
 ### A paid card row Square never reported a fee for gets an estimate instead (v5.58.0, 2026-09-03)
 
 Dinger, once he confirmed the secrets and the webhook subscription were both in place and no fee was showing anywhere: he wanted the fee "backfilled" on every prior transaction. There was nothing to back-fill *from* — every application on the books applied before this webhook was reporting real fees, and any paid through Tithe.ly (which has no webhook here at all) never will have one. What he actually wanted, once talked through it, was a number to look at rather than nothing.
