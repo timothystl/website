@@ -1835,6 +1835,24 @@ export const MARKET_JS = `
   // what the browser hoped it sent.
   function repaint(row, st){
     if (!row || !st) return;
+    // The header name/byline are the one thing on this screen a coordinator
+    // can now correct that used to be fixed at "whatever the vendor typed" —
+    // redrawn from what was actually STORED, same rule as everything else
+    // here, so a corrected name shows corrected without a page reload.
+    var biz = row.querySelector('.tlc-mkt-biz');
+    if (biz && st.name != null && biz.textContent !== st.name) biz.textContent = st.name;
+    var sub = row.querySelector('.tlc-mkt-sub');
+    if (st.sub) {
+      if (!sub) {
+        sub = document.createElement('span');
+        sub.className = 'tlc-mkt-sub';
+        var nameEl = row.querySelector('.tlc-mkt-name');
+        if (nameEl) nameEl.insertBefore(sub, nameEl.querySelector('.tlc-mkt-waitbadge') || null);
+      }
+      if (sub && sub.textContent !== st.sub) sub.textContent = st.sub;
+    } else if (sub) {
+      sub.remove();
+    }
     var pill = row.querySelector('[data-field="payment_status"]');
     if (pill && pill.value !== st.payment_status) pill.value = st.payment_status;
     if (pill) {

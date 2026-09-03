@@ -4577,6 +4577,50 @@ group('a vendor row edits in place');
   eq(f2.check_no, '—', 'a check with no number written down still says one arrived');
   ok(/^\d{4}-\d{2}-\d{2}$/.test(f2.check_date), 'dated today');
 
+  // ── A submitted answer can be corrected, in the row itself ──
+  // Marla's own ask: a typo in a name or a mistyped email should not mean
+  // deleting the application and asking the vendor to reapply.
+  const nameSave = await cell('participant_names', 'Jayne Doe');
+  eq(nameSave.status, 200, 'the contact person can be corrected');
+  eq(reg().contact_name, 'Jayne Doe', 'writing the real column, not a copy of it');
+  eq(JSON.parse(await nameSave.clone().text()).row.name, 'Jayne Doe',
+    'and the JSON reply carries the corrected name, so the row can redraw its own header without a reload');
+
+  await cell('business_name', 'Jayne’s Candles');
+  eq(fields().business_name, 'Jayne’s Candles', 'a business name lives in fields_json like every other coordinator field');
+  eq(fields().product_description, 'Beeswax candles', '⚠ merged in, not replacing what the vendor already wrote');
+
+  const okEmail = await cell('email', 'Jayne@Example.com');
+  eq(okEmail.status, 200, 'an email correction saves');
+  eq(reg().contact_email, 'jayne@example.com', 'lower-cased on the way in, same as the public application');
+
+  const badEmail = await cell('email', 'not-an-email');
+  eq(badEmail.status, 400, 'a value that does not look like an email is refused');
+  eq(JSON.parse(await badEmail.clone().text()).ok, false, 'and answered as refused');
+  eq(reg().contact_email, 'jayne@example.com', 'the earlier, valid address is left exactly as it was');
+
+  await cell('phone', '(314) 555-0102');
+  eq(reg().contact_phone, '(314) 555-0102', 'a phone number can be corrected too');
+
+  await cell('participant_names', '');
+  eq(reg().contact_name, null, '⚠ clearing the name is allowed — a correction is not a resubmission');
+
+  // ⚠ The whole-form (no-script) path carries the same four fields, since the
+  // expanded panel is a real <form> and the inputs now live in it.
+  const wholeContact = await call(env, '/market/update', {
+    cookie, method: 'POST',
+    form: { id: String(id), table_number: '7', payment_status: 'waived', amount_paid: '',
+      staff_notes: 'Comped', participant_names: 'Restored Name', business_name: 'Restored Biz',
+      email: 'restored@example.com', phone: '555-0000' },
+  });
+  eq(wholeContact.status, 302, 'the no-script path still posts');
+  eq(reg().contact_name, 'Restored Name', 'writing the contact person');
+  eq(fields().business_name, 'Restored Biz', 'and the business name');
+  eq(reg().contact_email, 'restored@example.com', 'and the email');
+  eq(reg().contact_phone, '555-0000', 'and the phone');
+  // Put the address back to what the rest of this group's assertions expect.
+  await cell('email', 'marla@example.com');
+
   // ── The field name is checked before it is used ──
   // ⚠ `updateRegistration()` builds its SQL from the KEYS of the object it is
   // handed, so a field name taken straight from the request would be a column
