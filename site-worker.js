@@ -285,6 +285,25 @@ function isSafeRedirectUrl(value) {
 // page then behaves exactly as it did before this existed: hardcoded markup,
 // then the client-side takeover. The fallback is not a second code path bolted
 // on; it is simply what happens when this does nothing.
+// ⚠ EVERY CALL FROM HERE TO THE ADMIN WORKER IS BOUNDED. All four had a
+// try/catch and a cache to fall back on, and not one of them could ever reach
+// it: a slow answer is not an error, so they hung instead. On 2026-09-04 D1 hit
+// its daily row-read ceiling, every admin query started taking ~16s, and three
+// of these run one after another on a page load — timothystl.org served
+// /worship in 47 seconds, HTTP 200, with the fallback markup sitting right
+// there unused.
+//
+// 4s matches the ceiling admin/market.js already puts on its own cross-app
+// call, for the same reason stated there: one application must not sit waiting
+// on another. In health these answer in well under a second (the payload is
+// edge-cached for 120s), so this fires only when something is already wrong —
+// and when it does, every caller below degrades to exactly what it was
+// designed to degrade to.
+const ADMIN_FETCH_TIMEOUT_MS = 4000;
+function fetchAdmin(path) {
+  return fetch('https://admin.timothystl.org' + path, { signal: AbortSignal.timeout(ADMIN_FETCH_TIMEOUT_MS) });
+}
+
 let pagesCache = null;
 let pagesCacheTime = 0;
 
@@ -292,7 +311,7 @@ async function getPublishedPages() {
   const now = Date.now();
   if (pagesCache && now - pagesCacheTime < CACHE_TTL) return pagesCache;
   try {
-    const res = await fetch('https://admin.timothystl.org/api/pages');
+    const res = await fetchAdmin('/api/pages');
     if (res.ok) {
       pagesCache = await res.json();
       pagesCacheTime = now;
@@ -477,7 +496,7 @@ async function getRedirects() {
   const now = Date.now();
   if (redirectCache && now - redirectCacheTime < CACHE_TTL) return redirectCache;
   try {
-    const res = await fetch('https://admin.timothystl.org/api/redirects');
+    const res = await fetchAdmin('/api/redirects');
     if (res.ok) {
       const data = await res.json();
       redirectCache = data.redirects || [];
@@ -545,7 +564,7 @@ async function getSettingUrl(key, fallback) {
     return settingsCache[key];
   }
   try {
-    const res = await fetch(`https://admin.timothystl.org/api/settings/${key}`);
+    const res = await fetchAdmin(`/api/settings/${key}`);
     if (res.ok) {
       const data = await res.json();
       settingsCache[key] = data.value || fallback;
@@ -580,7 +599,7 @@ async function getGivePage() {
   const now = Date.now();
   if (givePageCache && now - givePageCacheTime < CACHE_TTL) return givePageCache;
   try {
-    const res = await fetch('https://admin.timothystl.org/api/give-page');
+    const res = await fetchAdmin('/api/give-page');
     if (res.ok) {
       const data = await res.json();
       // Amounts are the test of a usable response rather than `html`, which is
@@ -743,6 +762,11 @@ export default {
     // congregation is what actually improves a shared link; this is the field
     // to put it in when there is one.
     if (isHtmlResponse(assetRes)) {
+      // ⚠ STARTED BEFORE the social lookup is awaited, not after it. These two
+      // ask the admin Worker different questions and neither needs the other's
+      // answer; awaiting them in sequence simply added one round trip to every
+      // page load, and doubled how long a degraded admin could hold the site.
+      const pagesPromise = getPublishedPages();
       const social = await getSettingUrl('social_image_url', '');
       const socialImage = /^https:\/\/\S+$/.test(social) ? social : '';
 
@@ -757,7 +781,7 @@ export default {
       let blockCss = '';
       let appearance = null;
       try {
-        const pageData = await getPublishedPages();
+        const pageData = await pagesPromise;
         if (pageData) {
           pageId = pageIdForPath(pageData, url.pathname);
           blocksHtml = (pageData.rendered && pageData.rendered[pageId]) || '';

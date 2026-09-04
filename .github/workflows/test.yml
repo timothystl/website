@@ -103,6 +103,13 @@ jobs:
       - name: Site 404 gate
         run: node test/site-404.test.mjs
 
+      # A degraded admin cannot hold the public site. Browserless again — it
+      # drives the real fetch handler against an admin that accepts the
+      # connection and then says nothing, which is the shape of the 2026-09-04
+      # outage and the one a try/catch alone is blind to.
+      - name: Site admin timeout
+        run: node test/site-admin-timeout.test.mjs
+
       # The links page, same shape: drives tlc-links-worker.js directly with
       # the admin API stubbed. Covers which cards each tap shows, and the
       # sign-up card that has no address to check.
