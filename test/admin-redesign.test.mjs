@@ -7210,5 +7210,55 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   ok(since(mark) > 10, 'and does so again on the next request, never from the editor cache');
 }
 
+// ── the public bundle is cached for an hour, and a publish still purges it ──
+// ⚠ THE LONG max-age AND THE CHOKEPOINT ARE ONE MECHANISM, so they are pinned
+// in one group. Every expiry of /api/pages is ~30 queries and ~500 D1 rows in
+// every colo serving the site, whether or not anything changed — at 120s that
+// was tens of pointless rebuilds an hour, and a large share of what put this
+// account through D1's free-tier row-read ceiling on 2026-09-04. It is only
+// safe to hold for an hour because a publish DELETES the entry rather than
+// waiting the clock out. Shorten one without the other and this fails.
+{
+  group('the public bundle is held for an hour, and a publish still purges it');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const res = await call(env, '/api/pages', { fresh: true });
+  const cc = res.headers.get('cache-control') || '';
+  const age = Number((cc.match(/max-age=(\d+)/) || [])[1] || 0);
+  ok(age >= 1800, `/api/pages is cached for a long time, not a couple of minutes — max-age=${age}`);
+
+  // ⚠ A RECORDING CACHE, not the harness's absent `caches`. Asserted against
+  // nothing at all this would pass whether or not the purge happens.
+  const deleted = [];
+  const realCaches = globalThis.caches;
+  globalThis.caches = { default: {
+    match: async () => null,
+    put: async () => {},
+    delete: async (req) => { deleted.push(typeof req === 'string' ? req : req.url); return true; },
+  } };
+  try {
+    // Publishing a page is the write the whole trade rests on: the office
+    // presses Publish and the edge copy is thrown away, so the hour never
+    // stands between them and the site.
+    await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+    ok(deleted.some((u) => u.includes('/api/pages')), 'a publish deletes the cached bundle rather than waiting the clock out');
+
+    // And a write that cannot change what the bundle says does not.
+    deleted.length = 0;
+    await call(env, '/login', { method: 'POST', form: { username: 'nobody', password: 'x' } });
+    eq(deleted.length, 0, 'an unrelated POST leaves it alone — this is a list, not "rebuild on every write"');
+  } finally {
+    if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+  }
+
+  // The one copy a publish CANNOT reach: the site Worker holds its own in each
+  // isolate's memory, so that number is the real staleness floor for the whole
+  // site. Read from the source, because there is nothing to call.
+  const siteSrc = readFileSync(new URL('../site-worker.js', import.meta.url), 'utf8');
+  const ttl = Number((siteSrc.match(/const CACHE_TTL = ([\d_]+);/) || [])[1].replace(/_/g, ''));
+  ok(ttl >= 900_000, `the site Worker holds its copy for a long while too — ${ttl}ms`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

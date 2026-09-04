@@ -396,6 +396,75 @@ against an admin that accepts the connection and then says nothing, and its
 stub rejects ONLY on abort, so a call made without a signal hangs the test
 rather than passing quietly). Both verified against the bug they guard.
 
+### The caches hold much longer now, on Dinger's call (2026-09-04)
+
+Dinger, after the D1 row-read incident above and the $5/month Workers Paid
+subscription: *"Live site on all pages can be behind. That's better than
+blowing through our usage allotment."* That is an explicit authorization to
+trade staleness for usage, and it is what these three numbers rest on.
+
+| | was | now |
+|---|---|---|
+| `/api/pages` response `max-age` | 120s | **3600s** |
+| `/api/give-page` response `max-age` | 120s | **600s** |
+| `site-worker.js`'s in-memory `CACHE_TTL` | 300s | **900s** |
+
+**⚠ THE TWO ADMIN NUMBERS AND THE SITE NUMBER ARE NOT THE SAME KIND OF
+THING, AND ONLY ONE OF THEM IS ACTUALLY A STALENESS TRADE.** That distinction
+is the whole reason the hour was safe to take and the fifteen minutes was
+not free:
+
+- **`/api/pages` is purge-protected**, so raising its `max-age` costs almost
+  nothing. Any POST under one of `PAGE_DATA_PREFIXES` calls `bustPagesCache()`,
+  which **deletes** the edge entry outright rather than waiting the clock out
+  — see "The chokepoint's comment was longer than its list" (FX-19) for the
+  eleven prefixes and why each one is on the list. So the clock governs
+  exactly one thing: how often the bundle is rebuilt for **no reason**. Every
+  expiry is ~30 queries and ~500 D1 rows read, in every colo serving the site,
+  whether or not anything changed. At 120s that was up to 30 pointless
+  rebuilds an hour per colo — a large share of what put this account through
+  D1's free-tier ceiling.
+- **`site-worker.js`'s `CACHE_TTL` is the one a publish cannot reach**, and it
+  is therefore the real staleness floor for the whole site. It lives in each
+  site isolate's own memory, where nothing can purge it, so an edit takes up
+  to fifteen minutes to appear **however promptly the admin cleared its own
+  copy**. That is the number Dinger's sentence is actually buying, and it is
+  the one to shorten if the office ever complains — not the admin's hour,
+  which shortening would cost usage and fix nothing.
+- **⚠ `/api/give-page` was kept modest at ten minutes, deliberately.** It is
+  the page that takes the money and it is **not** on the chokepoint's list, so
+  its clock genuinely is its only invalidation. This file's own standing rule
+  is that the giving page changes deliberately with somebody watching; an hour
+  of stale amount tiers is not a trade to make as a side effect of a usage
+  pass.
+
+**⚠ IF SOMEBODY LATER REPORTS "I PUBLISHED IT AND STILL SEE THE OLD ONE"** —
+which this file already records three times under three different causes —
+the answer is `CACHE_TTL`, and shortening it is a real cost rather than a free
+fix. If the symptom is instead an edit that takes up to an **hour**, that is
+the chokepoint missing a write path: add the prefix to `PAGE_DATA_PREFIXES`,
+never shorten the `max-age` back.
+
+**Deliberately untouched:** `EDITOR_PAGE_DATA_PREFIXES` / `editorPageData()`'s
+own five-minute per-isolate cache (the section directly above). It answers a
+different question on a narrower list and must never be folded into
+`PAGE_DATA_PREFIXES` — that section says why.
+
+Run: the `the public bundle is held for an hour, and a publish still purges
+it` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1796). ⚠ It pins the long `max-age` **and** the purge in one group on
+purpose, because they are one mechanism: the hour is only safe because a
+publish deletes the entry, so shortening one without the other has to fail.
+The purge assertion installs a **recording `caches.default` stub** — asserted
+against the Node harness's absent `caches` it would pass whether or not the
+purge happens, the same trap the calendar's own cache-key test records. All
+three were verified against the bug: reverting the `max-age` fails one
+assertion naming the real 120, reverting the `bustPagesCache` call fails 12
+across this group and its neighbors, and reverting `CACHE_TTL` fails one
+naming the real 300000ms.
+
+
 ### The block editor rebuilt the whole page-data bundle on every nudge (2026-09-04)
 
 Dinger, after the outage above: *"Is it the editor that makes it call so many

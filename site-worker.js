@@ -114,12 +114,21 @@ const settingsCache = {};
 const settingsCacheTime = {};
 let givePageCache = null;
 let givePageCacheTime = 0;
-// 5 minutes. Was 60s, which meant the admin subrequest sat IN FRONT of the
-// HTML once a minute per isolate — for a list of short links that changes a
-// few times a year. A re-pointed redirect taking up to five minutes to settle
-// is a fine trade for not making every fifth visitor wait on a cross-worker
-// round trip.
-const CACHE_TTL = 300_000;
+// 15 minutes. Was 60s, then 5 minutes — each raise for the same reason: the
+// admin subrequest sits IN FRONT of the HTML whenever this expires, for lists
+// that change a few times a year.
+//
+// ⚠ THIS IS THE ONE CACHE A PUBLISH CANNOT REACH, so it is the real staleness
+// floor for the whole site. The admin's /api/pages entry is DELETED by the
+// chokepoint the moment anything is published; this copy lives in each site
+// isolate's own memory, where nothing can purge it, so an edit takes up to
+// this long to appear however promptly the admin cleared its own copy.
+// Raised deliberately on 2026-09-04, on Dinger's call after the D1 free-tier
+// row-read ceiling took the admin down: "Live site on all pages can be behind.
+// That's better than blowing through our usage allotment." If somebody later
+// reports "I published it and still see the old one", this number is the
+// answer and shortening it is a real cost, not a free fix.
+const CACHE_TTL = 900_000;
 
 // Paths handled via admin settings keys (instant server-side 302, no SPA load)
 const SETTINGS_REDIRECTS = {
