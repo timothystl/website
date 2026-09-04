@@ -572,7 +572,7 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
       const slug = cleanSlug(body.slug);
       return jsonResponse({
         html: renderPage(blocks, Object.assign({
-          editing: true, slug, withCss: true, data: await pageData(env, ctx),
+          editing: true, slug, withCss: true, data: await editorPageData(env, ctx),
         }, await pageLayoutContext(env, P, slug))),
         blocks,
       });
@@ -593,6 +593,72 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
 // `env` is shared by every request in an isolate, so caching against it would
 // serve yesterday's sermon until Cloudflare happened to recycle the isolate.
 const PAGE_DATA_CACHE = new WeakMap();
+
+// ── THE EDITOR'S OWN COPY, HELD ACROSS AN EDITING SESSION ────────────────────
+// The block editor's stateless render (`POST …/api/render`) runs on EVERY
+// structural change — add a block, delete one, drag one, undo, redo, reset —
+// and each one rebuilt this whole bundle from scratch. Measured: about 25
+// queries and ~500 rows read per render. Nudging a block on a page was costing
+// the same database work as a cold public page load, dozens of times a minute,
+// while the office rearranged a page. That is a real share of the D1 row budget
+// this repo has already exhausted once (see CLAUDE.md, 2026-09-04).
+//
+// So the editor holds one bundle per isolate for a few minutes. It is a
+// SEPARATE cache from the per-request memo above, and only the editor routes
+// read it: `/api/pages` and `/api/ministry/:slug` are public and keep building
+// fresh, because a visitor must never be shown last week's sermon.
+//
+// ⚠ THE INVALIDATION LIST IS NOT `PAGE_DATA_PREFIXES`, AND MUST NOT BE MADE
+// ONE. That list busts a cache of the whole /api/pages payload, which is also
+// fed by the `pages` and `menu_items` tables — and pageData() reads neither
+// (checked against its queries, not assumed). The editor posts to /pages on
+// every render and every autosave, so including that prefix would bust this
+// cache on the one action it exists to make cheap, and the whole thing would
+// quietly do nothing.
+//
+// ⚠ The TTL is the backstop, not the mechanism. Every prefix below is one this
+// bundle genuinely reads, but a route added later that writes one of these
+// tables from somewhere else would be missed — and a canvas that disagrees
+// with the site indefinitely is the failure worth designing against. Five
+// minutes bounds it by construction, with nothing to keep in step.
+const EDITOR_PAGE_DATA = new WeakMap();
+const EDITOR_PAGE_DATA_TTL_MS = 5 * 60 * 1000;
+const EDITOR_PAGE_DATA_PREFIXES = [
+  '/pages/details',            // church_* settings → Contact details, Map, Service times
+  '/menu/appearance/publish',  // the LIVE chrome record → every block's fonts and colors
+  '/partners',                 // → Partner logos
+  '/values',                   // → Core values
+  '/staff',                    // → Staff grid
+  '/giving',                   // → Giving widget, Amount ladder
+  '/christian-education',      // → Bible classes
+  '/sermons',                  // → Sermon library, the homepage card
+  '/newsitems',                // → News feed, News highlights
+  '/market',                   // → Market facts, Market application
+  '/events',                   // → Registration
+  '/newsletter',               // → Newsletter archive
+];
+
+async function editorPageData(env, reqKey) {
+  const hit = EDITOR_PAGE_DATA.get(env.DB);
+  if (hit && (Date.now() - hit.at) < EDITOR_PAGE_DATA_TTL_MS) {
+    // Seed the per-request memo too, so the second read inside one render
+    // (layout context, then the render itself) still costs nothing.
+    if (reqKey && !PAGE_DATA_CACHE.has(reqKey)) PAGE_DATA_CACHE.set(reqKey, hit.p);
+    return hit.p;
+  }
+  const p = pageData(env, reqKey);
+  const entry = { at: Date.now(), p };
+  EDITOR_PAGE_DATA.set(env.DB, entry);
+  // ⚠ A build that fails is not held for five minutes. Every query inside
+  // pageData catches its own failure, so this is the assembly throwing — rare,
+  // and exactly the case where repeating the work is the right answer.
+  p.catch(() => { if (EDITOR_PAGE_DATA.get(env.DB) === entry) EDITOR_PAGE_DATA.delete(env.DB); });
+  return p;
+}
+
+function bustEditorPageData(env) {
+  try { EDITOR_PAGE_DATA.delete(env.DB); } catch (_) {}
+}
 
 // ── BADGE / WORKLIST COUNTS ──────────────────────────────────
 // The sidebar badges and the Dashboard's "Needs you" list are the same three
@@ -2044,6 +2110,13 @@ export default {
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(ctx);
+    }
+    // The editor's own bundle, on its own narrower list — see
+    // EDITOR_PAGE_DATA_PREFIXES for why it is not this one. Not inside the
+    // branch above: /pages/details is under a prefix that busts the edge copy,
+    // and /menu/appearance/publish is under one that does not.
+    if (method === 'POST' && EDITOR_PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
+      bustEditorPageData(env);
     }
 
     // ── PUBLIC: the shared admin shell CSS/JS, externalised ──
@@ -9803,7 +9876,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // Who a page can be handed to. Only the office assigns owners, so
             // only the office is sent the list.
             editors: fullAccess ? await pageEditors(env) : [],
-            config: blocksClientConfig(await pageData(env, ctx)),
+            config: blocksClientConfig(await editorPageData(env, ctx)),
             // Every address on the site that answers, for the link picker and
             // its dead-link check. Deliberately NOT the `pages` list above:
             // that one is scoped to what this person may open.
@@ -9829,7 +9902,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
-              data: await pageData(env, ctx), children, asideTop: row.aside_top || 0,
+              data: await editorPageData(env, ctx), children, asideTop: row.aside_top || 0,
             }),
           });
         }
@@ -9916,7 +9989,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             html: rerender ? renderPage(blocks, {
               editing: true, slug: after.id, template: after.template, withCss: true,
               asideTop: after.aside_top || 0,
-              data: await pageData(env, ctx),
+              data: await editorPageData(env, ctx),
               children: orderPages(siblings).filter((c) => c.parent_id === after.id),
             }) : '',
           });
@@ -10045,7 +10118,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           return jsonResponse({
             ok: true, blocks,
             html: renderPage(blocks, Object.assign({
-              editing: true, slug: row.id, withCss: true, data: await pageData(env, ctx),
+              editing: true, slug: row.id, withCss: true, data: await editorPageData(env, ctx),
             }, await pageLayoutContext(env, '/pages/api', row.id))),
           });
         }
@@ -10092,7 +10165,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           return jsonResponse({
             ok: true, blocks,
             html: renderPage(blocks, Object.assign({
-              editing: true, slug: row.id, withCss: true, data: await pageData(env, ctx),
+              editing: true, slug: row.id, withCss: true, data: await editorPageData(env, ctx),
             }, await pageLayoutContext(env, '/pages/api', row.id))),
           });
         }
@@ -10154,10 +10227,10 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             blocks, changes: parseBlocks(row.change_log),
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
           },
-          config: blocksClientConfig(await pageData(env, ctx)),
+          config: blocksClientConfig(await editorPageData(env, ctx)),
           linkTargets: await linkTargets(),
           media: media.results || [],
-          html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: await editorPageData(env, ctx) }),
         });
       }
 
@@ -10263,7 +10336,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
         await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft', updated_at = ? WHERE slug = ?")
           .bind(JSON.stringify(blocks), new Date().toISOString(), slug).run();
-        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }) });
+        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true, data: await editorPageData(env, ctx) }) });
       }
 
       const sharedMinistry = await sharedEditorApi(path, method, request, env, ctx, currentUser, '/ministries/api');

@@ -396,6 +396,69 @@ against an admin that accepts the connection and then says nothing, and its
 stub rejects ONLY on abort, so a call made without a signal hangs the test
 rather than passing quietly). Both verified against the bug they guard.
 
+### The block editor rebuilt the whole page-data bundle on every nudge (2026-09-04)
+
+Dinger, after the outage above: *"Is it the editor that makes it call so many
+rows"* — no, not on its own; it was request volume across the whole site. But
+the editor is a genuine share of it, and it was the one place paying a full
+public-page-load's worth of database work for a mouse drag.
+
+**`POST …/api/render` is the block editor's single source of block markup, and
+it fires on EVERY structural change** — add a block, delete one, drag one,
+undo, redo, reset. Each one called `pageData(env, ctx)`, which is one
+`Promise.all` over seventeen queries against thirteen tables. **Measured off
+the test harness's own statement log, not timed: 24 statements per render**,
+roughly 500 rows. An afternoon rearranging one page was thousands of them.
+
+`editorPageData()` holds one bundle per isolate for five minutes. The
+per-request memo (`PAGE_DATA_CACHE`, keyed on the `ExecutionContext`) is
+unchanged and still does its own job; this is a second, longer-lived cache
+that **only the editor routes read** — the nine call sites under
+`/pages/api/*`, `/ministries/api/*` and `sharedEditorApi`'s own `/render`.
+
+- **⚠ `/api/pages` AND `/api/ministry/:slug` DELIBERATELY STILL BUILD FRESH.**
+  Those are public. A visitor served an editing session's five-minute-old
+  sermon is the failure this had to be designed around, and it is the reason
+  this is a separate function rather than a change inside `pageData()` — which
+  would have been the smaller diff and the wrong one.
+- **⚠ THE INVALIDATION LIST IS NOT `PAGE_DATA_PREFIXES`, AND MUST NOT BE MADE
+  ONE.** That list busts a cache of the whole `/api/pages` payload, which is
+  also fed by `pages` and `menu_items` — and **`pageData()` reads neither**,
+  checked against its own queries rather than assumed. The editor posts to
+  `/pages` on every render and every autosave, so folding the two lists
+  together would bust this cache on the one action it exists to make cheap and
+  the whole thing would quietly do nothing. `EDITOR_PAGE_DATA_PREFIXES` is
+  derived from the thirteen tables the bundle actually reads, which is why it
+  carries `/pages/details` (church details write `church_%` settings) and
+  `/menu/appearance/publish` (only *publish* writes the live chrome record;
+  save and discard write the draft, which nothing here reads) rather than the
+  bare `/pages` and `/menu` prefixes.
+- **⚠ The five-minute TTL is the backstop, not the mechanism.** Every prefix on
+  the list is one the bundle genuinely reads, but a route added later that
+  writes one of those tables from somewhere else would be missed — and a canvas
+  that disagrees with the live site *indefinitely* is the failure worth
+  designing against, not a canvas that is a few minutes behind. The TTL bounds
+  it by construction, with nothing to keep in step.
+- **A build that fails is not held for five minutes.** Every query inside
+  `pageData` catches its own failure, so a rejected promise means the assembly
+  threw — rare, and exactly the case where repeating the work is right.
+- **⚠ `pageData` cannot simply be SKIPPED when a page has no self-filling
+  block**, which was the first thing tried. `data.appearance` supplies the
+  fonts and colors for every block on every page, so it is needed
+  unconditionally. Caching it is the only lever.
+
+Run: the `the editor caches page data across a session, and the public routes
+never read it` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1792). It counts statements off the D1 shim's own log rather than timing
+anything — a cache that "feels faster" is not evidence, a statement that was
+never prepared is — and gives each render its own `ExecutionContext`, or the
+per-request memo would answer and prove nothing about the new one. Verified
+against the bug in **both** halves: disabling the cache fails two assertions
+naming the real numbers (24 statements, then 21), and dropping the
+invalidation call fails two more with the office's new staff member never
+reaching the canvas.
+
 ### A fifth tile: what actually deposits, at a glance (v5.59.0, 2026-09-03)
 
 Dinger, once the "Square kept — actually deposited" line was confirmed working on a real payment: *"i see it fine print here. can we make it so that at the top this is more clear?"* — right after asking for the fee to be checkable at all. He was pointing at the four tiles above the vendor list (Tables asked for · Recorded as paid · Waiting on a card · Checks not in yet), which said nothing about fees at all.

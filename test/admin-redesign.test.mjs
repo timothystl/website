@@ -7142,5 +7142,73 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   eq(freshBlocks.map((b) => b.type).join(','), 'hero', 'nothing to backfill means just the hero, not three empty blocks');
 }
 
+// ── the editor holds one page-data bundle across an editing session ──────────
+// The block editor's stateless render fires on every structural change — add,
+// delete, drag, undo, redo, reset — and each one used to rebuild the whole
+// self-filling-block bundle: about 25 queries and ~500 rows read, per nudge.
+//
+// ⚠ THE COUNTS BELOW COME OFF THE SHIM'S OWN LOG, not from timing anything.
+// A cache that "feels faster" is not evidence; a statement that was never
+// prepared is.
+{
+  group('the editor caches page data across a session, and the public routes never read it');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // Something worth going stale: a staff member the Staff grid block renders.
+  db.prepare("INSERT INTO staff_members (name, title, email, display_order) VALUES ('Ada','Organist','ada@x',0)").run();
+
+  const editorRender = async (slug) => worker.fetch(new Request('https://admin.timothystl.org/pages/api/render', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify({ slug, blocks: [{ type: 'staff', title: 'Our staff' }] }),
+    // ⚠ Its own ExecutionContext, like a real second request. Sharing one
+    // would let the per-REQUEST memo answer and prove nothing about the new
+    // per-isolate one.
+  }), env, { waitUntil: () => {}, passThroughOnException: () => {} });
+
+  const since = (n) => env.DB.log.length - n;
+
+  let mark = env.DB.log.length;
+  const first = await editorRender('worship');
+  const firstCost = since(mark);
+  eq(first.status, 200, 'the first render answers');
+  ok(firstCost > 10, `the first render really does build the bundle — ${firstCost} statements`);
+
+  mark = env.DB.log.length;
+  const second = await editorRender('worship');
+  const secondCost = since(mark);
+  eq(second.status, 200, 'and so does the second');
+  ok(secondCost < firstCost / 2, `the second render costs far less — ${secondCost} against ${firstCost}`);
+  has(await second.clone().text(), 'Ada', 'and it still renders the staff grid, from the cached bundle');
+
+  // An autosave posts under /pages, which is on the EDGE cache's bust list and
+  // deliberately not on the editor's — pageData() reads no `pages` row, and
+  // busting here would undo the whole thing on the one action it exists for.
+  mark = env.DB.log.length;
+  await call(env, '/pages/api/page/worship/settings', { cookie, method: 'POST' });
+  const afterSave = await editorRender('worship');
+  ok(since(mark) - 1 < firstCost / 2, 'an editor save does not throw the bundle away');
+  eq(afterSave.status, 200, 'and the render after it still answers');
+
+  // Adding a staff member does, because that is a table the bundle reads —
+  // the office hiring somebody while a page sits open in the editor.
+  await call(env, '/staff/create', { cookie, method: 'POST', form: { name: 'Grace Hopper', title: 'Cantor' } });
+  mark = env.DB.log.length;
+  const afterStaff = await editorRender('worship');
+  ok(since(mark) > 10, `a staff edit rebuilds it — ${since(mark)} statements`);
+  has(await afterStaff.text(), 'Grace Hopper', 'and the canvas shows the new person, not the cached list');
+
+  // ⚠ The public payload is built fresh every time, whatever the editor holds.
+  // A visitor being served an editing session's five-minute-old sermon is the
+  // failure this whole cache had to be designed around.
+  mark = env.DB.log.length;
+  await call(env, '/api/pages', { fresh: true });
+  ok(since(mark) > 10, `/api/pages builds its own — ${since(mark)} statements`);
+  mark = env.DB.log.length;
+  await call(env, '/api/pages', { fresh: true });
+  ok(since(mark) > 10, 'and does so again on the next request, never from the editor cache');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
