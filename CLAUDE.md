@@ -284,6 +284,118 @@ the real submit flow and confirms the "no payment link" toast still says the
 coordinator's real address once decoded, not merely that the obfuscated form
 is present.
 
+### ⚠ D1 hit its free-tier row-read ceiling, and two things it exposed (2026-09-04)
+
+Dinger, with nobody working on the site: *"why would the church admin database
+hit its limit? cna you tell what has called it 500 times."* Then, later:
+*"maybe someone is spamming our site."*
+
+**It is not calls, it is ROWS. D1's free tier allows 5 million rows READ per
+day**, reset at midnight UTC, and it is **account-wide across all four
+databases**, not per database. Confirmed from Cloudflare's own API, which
+refused a query with that message verbatim. The billing page read **32.89M
+rows over Aug 21 – Sep 4** — about **2.2M a day, every day**, so today was the
+first crossing of a two-week trend rather than a spike out of nowhere.
+
+⚠ **Nothing in the code was scanning a big table, and that is the useful
+finding.** `tlc-newsletter-db` is **2.3 MB**. Every automated path was audited
+one by one and every one is bounded, indexed and cached: the 15-minute cron
+(`promoteScheduledPages`, two small queries), the schema gate (one
+`_schema_version` read per cold isolate, then `MARKERS_SEEN`), `/api/pages`
+(~30 queries, every one `LIMIT`ed, edge-cached 120s), `/api/redirects`
+(300s), `/api/calendar` (600s), the login throttle and the spam flood counter
+(both indexed). It is request **volume**.
+
+#### Why only the admin looked broken
+
+- **MDO is Supabase.** A different vendor's database entirely; it cannot be
+  affected by this. `connect`/`serve` share the D1 account and *were* affected
+  — `serve.timothystl.org` was returning 500.
+- **The public site fails open by design**, so it rendered its hardcoded
+  markup and looked fine.
+- **The admin fails closed, and has to.** Every page starts with a session
+  lookup in D1. No read, no session, no page — there is no degraded version of
+  an admin.
+- ⚠ **`/christmasmarket/vendors/apply` was the one public exception**, and it
+  is worth remembering why: v5.22.0 deleted its hardcoded markup, so it renders
+  entirely from published blocks with **no fallback**. During any D1 outage the
+  page that takes vendor money is blank. That is a real hole this incident
+  exposed and did not close.
+
+#### The 404 gate (#562)
+
+`not_found_handling = "single-page-application"` answers an unknown path with
+`index.html` and a **200**. Right for `/worship`; wrong for `/wp-login.php`,
+because the pipeline cannot tell them apart — it ran the redirect lookup, then
+`getPublishedPages()`, a subrequest to the admin Worker and a full `/api/pages`
+build. A scanner walking a few thousand paths booted the whole website a few
+thousand times.
+
+`isJunkPath()` refuses two shapes, **before any subrequest** — a 404 that still
+cost a D1 read would save nothing:
+
+1. **An extension we do not serve.** Every real route is a slug (`slugify()`
+   strips all but letters, digits and hyphens), so a real route never contains
+   a dot and a real file always ends in a known extension. ⚠ `html`/`htm` are
+   on the SERVED list: `public/` holds `manual.html` and `how-to-give.html`.
+2. **A short segment-anchored denylist** for the extensionless probes.
+   ⚠ **`vendor` is deliberately absent** — `/christmasmarket/vendors` is a real
+   page with no fallback behind it, and a prefix match would take the Christmas
+   Market off the site.
+
+#### Every cross-Worker call is bounded now (#563)
+
+⚠ **The bigger finding, and it was invisible until the caches flushed.**
+`site-worker.js` asks the admin four questions — redirects, the social image,
+the page payload, the giving page. **All four had a try/catch and a cache to
+fall back on and not one could ever reach it, because a slow answer is not an
+error.** They hung. Three run in sequence on a page load, so at ~16s per admin
+query production served **`/worship` in 47.1s, HTTP 200**, with the fallback
+markup sitting there unused.
+
+`fetchAdmin()` puts `AbortSignal.timeout(4000)` on all four — the same ceiling
+`admin/market.js` already applies to its own cross-app call, for the reason
+stated there. The social lookup and the page payload now **start together**;
+awaiting them in sequence added a round trip to every healthy page load too.
+Measured live, with D1 still refused: 47.1s → **8.5s**, `/` 32.3s → 4.7s,
+`/wp-login.php` → **404 in 0.2s**.
+
+⚠ **Node's `AbortSignal.timeout()` uses an unref'd timer**, so
+`test/site-admin-timeout.test.mjs` holds the event loop open while it waits. A
+Worker has no such problem — the in-flight request keeps the isolate alive.
+
+#### ⚠ main had been RED since 2026-09-01, and nobody knew
+
+#551 added `.tlc-search-close` with a literal `font-size:22px`, which
+`admin/appearance.test.mjs` refuses: every screen font-size in
+`public/styles.css` must go through `var(--tlc-text-scale, 1)` or the
+Appearance screen's text-size control reaches only the rules somebody
+remembered. Runs 500 and 502 on `main` both failed; every PR merged in between
+went in red and inherited it. Fixed in #562 — one line, exactly what the
+assertion names. **A suite with one known failure stops being read for the
+second one**, which is the whole cost.
+
+#### What is still open
+
+- **The Workers Paid plan, $5/month** — 5M rows/day becomes 25 billion/month.
+  These fixes cut waste; at 2.2M/day average they do not buy immunity.
+- **`/christmasmarket/vendors/apply` has no fallback** (above).
+- **What actually consumed the rows is still unattributed.** Cloudflare's D1
+  **Metrics** tab has the rows-read time series, which distinguishes a scanner
+  spike from a rising trend; there is no MCP tool for it and no API token in
+  these sessions. `audit_log` and `form_submissions` counts would show a
+  brute-force or form-spam actor — both were unqueryable while the limit was
+  exhausted.
+
+Run: `node test/site-404.test.mjs` (90 — it reads the real page list out of
+`admin/site-pages.js` and `public/index.html` rather than retyping it, because
+a hand-kept copy goes stale the first time somebody adds a page and the way you
+find out is the new page 404ing in front of the congregation) and
+`node test/site-admin-timeout.test.mjs` (14 — it drives the real fetch handler
+against an admin that accepts the connection and then says nothing, and its
+stub rejects ONLY on abort, so a call made without a signal hangs the test
+rather than passing quietly). Both verified against the bug they guard.
+
 ### A fifth tile: what actually deposits, at a glance (v5.59.0, 2026-09-03)
 
 Dinger, once the "Square kept — actually deposited" line was confirmed working on a real payment: *"i see it fine print here. can we make it so that at the top this is more clear?"* — right after asking for the fee to be checkable at all. He was pointing at the four tiles above the vendor list (Tables asked for · Recorded as paid · Waiting on a card · Checks not in yet), which said nothing about fees at all.
