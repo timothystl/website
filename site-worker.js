@@ -315,15 +315,90 @@ function fetchAdmin(path) {
 
 let pagesCache = null;
 let pagesCacheTime = 0;
+let pagesCacheStamp = null;
+
+// ── THE PAGE BUNDLE IS NOT ON A CLOCK ANY MORE ──────────────────────────────
+// It used to re-fetch every CACHE_TTL whether or not anything had changed, and
+// there was no alternative: this copy lives in one isolate's memory and nothing
+// outside can reach in and clear it. So the only two options were "ask again on
+// a timer" (wasteful — the admin rebuilds ~30 queries and ~500 D1 rows for a
+// bundle that is usually byte-identical) and "ask again never".
+//
+// The admin now keeps a content stamp, rewritten on every publish by the same
+// chokepoint that deletes its own edge copy. So the question this asks is the
+// small one — has anything been published since the copy I am holding? — and
+// the expensive one is asked only when the answer is yes. Dinger, 2026-09-04:
+// "We don't have that many changes either. Just always call by for new data is
+// wasteful. Can we set that function to a manual. So when I publish a real
+// change then I can force that call."
+//
+// ⚠ THE HARD CEILING BELOW IS THE BACKSTOP, NOT THE MECHANISM. Every prefix on
+// the admin's PAGE_DATA_PREFIXES bumps the stamp, but a route added later that
+// writes one of those tables from somewhere else would be missed — and a public
+// site that disagrees with the admin INDEFINITELY is the failure worth designing
+// against, not one that is a few hours behind. A day bounds it by construction,
+// with nothing to keep in step.
+const PAGES_MAX_AGE = 86_400_000;
+
+let stampCache = null;
+let stampCacheTime = 0;
+// A minute. This is the real staleness floor for a published edit now, and it
+// is fifteen times better than the CACHE_TTL it replaces — a probe is a few
+// bytes off the edge cache, where a bundle re-fetch was the whole payload.
+const STAMP_TTL = 60_000;
+
+// ⚠ RETURNS null WHENEVER IT DOES NOT KNOW, AND null NEVER MEANS "CHANGED".
+// An unreachable admin, a timeout, a malformed answer and a stamp that has
+// never been written all land here, and every one of them has to leave the
+// cached bundle alone: treating "I could not ask" as "re-fetch" would put a
+// failing admin back in front of every page load, which is the exact hang
+// AbortSignal.timeout was added to stop.
+async function contentStamp() {
+  const now = Date.now();
+  // `|| null` because a memoized blank has to keep meaning "nothing to
+  // report" rather than becoming a value the bundle's own recorded stamp can
+  // fail to equal — which would re-fetch every single minute, forever.
+  if (stampCache !== null && now - stampCacheTime < STAMP_TTL) return stampCache || null;
+  try {
+    const res = await fetchAdmin('/api/content-stamp');
+    if (res.ok) {
+      const data = await res.json();
+      const stamp = typeof data.stamp === 'string' ? data.stamp : '';
+      if (stamp) {
+        stampCache = stamp;
+        stampCacheTime = now;
+        return stamp;
+      }
+      // A blank stamp is a real answer — nothing has been published since the
+      // row was introduced — so it is memoized as "nothing to report" rather
+      // than re-asked on the next request.
+      stampCache = '';
+      stampCacheTime = now;
+      return null;
+    }
+  } catch (_) {}
+  return null;
+}
 
 async function getPublishedPages() {
   const now = Date.now();
-  if (pagesCache && now - pagesCacheTime < CACHE_TTL) return pagesCache;
+  if (pagesCache && now - pagesCacheTime < PAGES_MAX_AGE) {
+    const stamp = await contentStamp();
+    if (stamp === null || stamp === pagesCacheStamp) return pagesCache;
+  }
   try {
-    const res = await fetchAdmin('/api/pages');
+    // ⚠ STARTED TOGETHER, AND THE STAMP IS READ FROM BEFORE THE BUNDLE LANDS,
+    // NOT AFTER. Both halves matter. Together, because on a cold isolate this
+    // sits in front of the first paint and a fourth sequential admin call would
+    // be a real cost there. Before rather than after, because a publish landing
+    // mid-fetch has to err toward one wasted re-fetch a minute later — record a
+    // stamp NEWER than the bundle it labels and this copy never notices that
+    // publish at all, and serves it for a day.
+    const [res, stamp] = await Promise.all([fetchAdmin('/api/pages'), contentStamp()]);
     if (res.ok) {
       pagesCache = await res.json();
       pagesCacheTime = now;
+      pagesCacheStamp = stamp;
     }
   } catch (_) { /* the client-side takeover is the fallback */ }
   return pagesCache;

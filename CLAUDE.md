@@ -438,12 +438,19 @@ not free:
   of stale amount tiers is not a trade to make as a side effect of a usage
   pass.
 
+**⚠ SUPERSEDED FOR THE PAGE BUNDLE — see "A publish is what re-fetches the
+page bundle now" below.** `CACHE_TTL` no longer decides when a published edit
+reaches the site; a stamp does, and the floor is about a minute rather than
+fifteen. `CACHE_TTL` still governs the redirect, settings and giving-page
+caches, so the paragraph below is still the answer for those three and only
+those three.
+
 **⚠ IF SOMEBODY LATER REPORTS "I PUBLISHED IT AND STILL SEE THE OLD ONE"** —
 which this file already records three times under three different causes —
-the answer is `CACHE_TTL`, and shortening it is a real cost rather than a free
-fix. If the symptom is instead an edit that takes up to an **hour**, that is
-the chokepoint missing a write path: add the prefix to `PAGE_DATA_PREFIXES`,
-never shorten the `max-age` back.
+the answer for a redirect or a giving amount is `CACHE_TTL`, and shortening it
+is a real cost rather than a free fix. If the symptom is instead an edit that
+takes up to an **hour**, that is the chokepoint missing a write path: add the
+prefix to `PAGE_DATA_PREFIXES`, never shorten the `max-age` back.
 
 **Deliberately untouched:** `EDITOR_PAGE_DATA_PREFIXES` / `editorPageData()`'s
 own five-minute per-isolate cache (the section directly above). It answers a
@@ -453,7 +460,90 @@ different question on a narrower list and must never be folded into
 Run: the `the public bundle is held for an hour, and a publish still purges
 it` group in
 `node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
-(1796). ⚠ It pins the long `max-age` **and** the purge in one group on
+(1804).
+
+### A publish is what re-fetches the page bundle now, not a clock (v5.61.0, 2026-09-04)
+
+Dinger, on the fifteen-minute number the section above bought: *"We don't have
+that many changes either. Just always call by for new data is wasteful. Can we
+set that function to a manual. So when I publish a real change then I can force
+that call"*.
+
+**Half of that was already true, and naming which half is what made the other
+half buildable.** `/api/pages`'s **edge** entry has been effectively manual
+since FX-19: any POST under one of `PAGE_DATA_PREFIXES` calls
+`bustPagesCache()`, which **deletes** it. Its hour-long `max-age` therefore
+only ever governed how often the bundle was rebuilt for **no reason**.
+
+The layer that genuinely re-fetched on a clock is `site-worker.js`'s own
+`pagesCache`, and **nothing can purge that**: it lives in each site isolate's
+memory, and there is no way to address an isolate from outside. So the only
+three mechanisms available to it are a version stamp it checks, time, or a
+deploy. The stamp is strictly better than the clock on both axes at once — a
+quiet week costs one ~60-byte edge-cached probe a minute per isolate instead of
+a full ~30-query rebuild every fifteen minutes, **and** a published edit reaches
+the site in about a minute rather than fifteen.
+
+- **`site_settings['site_content_stamp']` is the record**, and it is bumped
+  **inside `bustPagesCache()`**, not beside it. That is the whole safety
+  property: one fact, one chokepoint. A second list of call sites would be a
+  second list somebody forgets a route from, and the failure would be silent —
+  the site would go on serving yesterday's page with nothing to see.
+  `bustPagesCache` therefore takes `(env, ctx)` now rather than `(ctx)`; all
+  three call sites were updated together.
+- **`GET /api/content-stamp` is public and needs no session**, because the
+  caller is the site Worker, which has none. It answers `{stamp}` and carries
+  `max-age=60`, so the probe is one small edge-cached request a minute per
+  isolate rather than one per page load.
+- **⚠ AN EMPTY STAMP IS THE NORMAL QUIET-WEEK STATE, NOT AN ERROR.** Nothing
+  has been published since the record was added, so the site must read it as
+  "no reason to re-fetch". `contentStamp()` returns `null` for *anything* it
+  does not know — blank, a non-200, an unreachable admin, a malformed body —
+  and **null never means "changed"**, so an admin outage cannot make every site
+  isolate hammer `/api/pages`.
+- **⚠ The memoized blank has to collapse to `null` too** (`stampCache || null`).
+  `pagesCacheStamp` starts at `null`, and `'' === null` is false — so returning
+  the raw `''` would have re-fetched the bundle every single minute, forever,
+  which is the opposite of what this exists to do. Found by reading, before the
+  test ran.
+- **⚠ The stamp is read from BEFORE the bundle lands, and the two start
+  together.** `Promise.all([fetchAdmin('/api/pages'), contentStamp()])` —
+  recording a stamp *newer* than the bundle it labels means a publish that
+  happened during the fetch is never noticed at all; recording an older one
+  costs one wasted re-fetch a minute later. Starting them together also keeps a
+  cold isolate from paying an extra serial round trip. The first attempt had
+  this backwards, in the code and in its own comment, and the test caught it
+  with the real symptom: 7 of 10 assertions failing because the very first load
+  recorded `null` and the second load then disagreed with it.
+- **`PAGES_MAX_AGE` is 24 hours** — a backstop, not the mechanism, for the case
+  where the stamp cannot be read at all for a long time.
+- **⚠ `CACHE_TTL` still exists and still means something.** Only the page
+  bundle moved off it; the redirect, settings and giving-page caches are
+  unchanged, and the giving page's own ten minutes stays deliberate for the
+  reason the section above gives.
+- **⚠ Deliberately untouched: `EDITOR_PAGE_DATA_PREFIXES` / `editorPageData()`.**
+  It answers a different question on a narrower list and must never be folded
+  into `PAGE_DATA_PREFIXES` — that section says why.
+
+Run: `node test/site-content-stamp.test.mjs` (10 — the first load pays for the
+bundle and the second pays for nothing, a quiet week costs nothing but the
+stamp, a publish is picked up, and an unreachable admin never counts as a
+change) and the `a publish bumps the content stamp, and /api/content-stamp
+reports it` group in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1804). ⚠ **Every time advance in the browser-side suite is twenty minutes,
+deliberately** — the clock it replaced was fifteen, so a shorter jump would
+pass against the old code and prove nothing. Both were verified non-vacuous:
+reverting `getPublishedPages()` to the clock fails 5 of 10 with the bundle
+re-fetched on every advance, and reverting the `bumpContentStamp` call fails
+the admin group with an empty stamp where a timestamp belongs.
+
+⚠ **The editor-cache group's own window had to move with this.** It counted a
+`/pages/.../settings` POST *and* the render that followed into one number, with
+a hardcoded `- 1` fudging the POST's own cost — so it drifted the moment that
+route learned to write one more row. The mark is set after the POST now, which
+is what the assertion always meant: the RENDER is still cheap.
+ ⚠ It pins the long `max-age` **and** the purge in one group on
 purpose, because they are one mechanism: the hour is only safe because a
 publish deletes the entry, so shortening one without the other has to fail.
 The purge assertion installs a **recording `caches.default` stub** — asserted

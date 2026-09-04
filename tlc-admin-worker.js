@@ -289,7 +289,51 @@ const PAGES_CACHE_URL = 'https://admin.timothystl.org/api/pages';
 // grow, so it is not asked again. Keyed the same way as MARKERS_SEEN below.
 const SETUP_DONE = new WeakMap();
 const edgeCache = () => (typeof caches !== 'undefined' && caches.default) ? caches.default : null;
-function bustPagesCache(ctx) {
+
+// ── THE CONTENT STAMP ───────────────────────────────────────────────────────
+// One site_settings row, rewritten every time anything that feeds /api/pages
+// is published. It exists for one reason: the public site Worker holds its own
+// copy of that bundle in each isolate's memory, and NOTHING can purge that —
+// there is no way to address an isolate from outside, so before this the only
+// invalidation it had was a clock (CACHE_TTL), which meant re-fetching the
+// whole bundle on a timer whether or not a single word had changed.
+//
+// With the stamp the site asks a much smaller question instead — "has anything
+// been published since the copy I am holding?" — one indexed read, edge-cached,
+// answered in a few bytes. So a quiet week costs almost nothing and a publish
+// still shows up in about a minute. Dinger, 2026-09-04: "We don't have that
+// many changes either. Just always call by for new data is wasteful. Can we set
+// that function to a manual. So when I publish a real change then I can force
+// that call."
+//
+// ⚠ IT IS BUMPED INSIDE bustPagesCache, NOT BESIDE IT. The two are one fact —
+// "what /api/pages says has changed" — and the whole reason this file already
+// has a single chokepoint (see PAGE_DATA_PREFIXES) is that a second list of
+// call sites is a second list to forget a route from. A publish that clears the
+// edge entry and does not move the stamp would leave every site isolate serving
+// the old bundle for a day.
+const CONTENT_STAMP_KEY = 'site_content_stamp';
+
+function bumpContentStamp(env, ctx) {
+  if (!env || !env.DB) return;
+  // The value is only ever compared for equality, never parsed — a timestamp is
+  // simply the cheapest thing that is different every time and legible to a
+  // human reading the settings table.
+  const stamp = new Date().toISOString();
+  const p = env.DB.prepare(
+    `INSERT INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).bind(CONTENT_STAMP_KEY, stamp, 'Content stamp',
+    'Rewritten on every publish. The public site reads it to know whether to re-fetch the page bundle.'
+  ).run().catch(() => {});
+  // Never awaited: a failed stamp write must not turn a successful publish into
+  // an error page. The worst case is that the site keeps its copy until the
+  // hard ceiling in site-worker.js expires it.
+  try { ctx.waitUntil(p); } catch (_) {}
+}
+
+function bustPagesCache(env, ctx) {
+  bumpContentStamp(env, ctx);
   const c = edgeCache();
   if (!c) return;
   try { ctx.waitUntil(c.delete(new Request(PAGES_CACHE_URL))); } catch (_) {}
@@ -2120,7 +2164,7 @@ export default {
       '/newsletter',                                // → the newsletterarchive block (/newsletter/hide, /unhide)
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
-      bustPagesCache(ctx);
+      bustPagesCache(env, ctx);
     }
     // The editor's own bundle, on its own narrower list — see
     // EDITOR_PAGE_DATA_PREFIXES for why it is not this one. Not inside the
@@ -4070,6 +4114,24 @@ export default {
     // Only a small allowlist of keys is exposed publicly. Internal config
     // (gym rates, calendar IDs, admin emails) and any future *_key/*_secret
     // values must NEVER be readable without auth.
+    // ── PUBLIC: the content stamp ──
+    // The public site's cheap "has anything been published?" question — see
+    // bumpContentStamp above for why it exists. One indexed read, a few bytes
+    // out, and edge-cached for a minute, so a busy colo asks D1 at most once a
+    // minute rather than rebuilding the whole /api/pages bundle on a timer.
+    //
+    // ⚠ AN EMPTY STAMP IS NOT AN ERROR. Nothing has been published since this
+    // row was introduced, which is the normal state of a quiet week. The site
+    // reads that as "no reason to re-fetch" and keeps what it has; treating it
+    // as a miss would put this right back on a clock.
+    if (path === '/api/content-stamp' && method === 'GET') {
+      const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?')
+        .bind(CONTENT_STAMP_KEY).first().catch(() => null);
+      return new Response(JSON.stringify({ stamp: (row && row.value) || '' }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
+      });
+    }
+
     if (path.startsWith('/api/settings/') && method === 'GET') {
       const key = path.slice('/api/settings/'.length);
       if (!PUBLIC_SETTINGS_KEYS.has(key)) return new Response('Not found', { status: 404 });
@@ -6840,7 +6902,7 @@ ${drawer}`, 'Calendar categories');
         ).bind(key, name, colorId || null, palette, cat.sort_order || 0, active, new Date().toISOString()).run();
         await logAudit(env.DB, currentUser, 'update', 'calendar-category', key, name,
           { name: cat.name, color: cat.google, active: cat.active }, { name, color: googleColorName(colorId), active: !!active });
-        bustPagesCache(ctx);
+        bustPagesCache(env, ctx);
         return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=saved' } });
       }
 
@@ -6865,7 +6927,7 @@ ${drawer}`, 'Calendar categories');
           'INSERT OR IGNORE INTO calendar_categories (key, name, color_id, palette, sort_order, active, updated_at) VALUES (?,?,?,?,?,1,?)'
         ).bind(key, name, colorId || null, palette, cats.length, new Date().toISOString()).run();
         await logAudit(env.DB, currentUser, 'create', 'calendar-category', key, name, null, { name, color: googleColorName(colorId) });
-        bustPagesCache(ctx);
+        bustPagesCache(env, ctx);
         return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=added' } });
       }
     }
