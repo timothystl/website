@@ -1526,6 +1526,56 @@ export function safeUrl(u) {
   return '';
 }
 
+// ── AN EMAIL ADDRESS THAT MUST NOT BE PLAIN-TEXT SCRAPEABLE ─────────────────
+// A coordinator's or an event's own address, rendered onto a PUBLIC page as a
+// plain `mailto:` link (and, for the market application, into a JSON config
+// attribute a script reads), is exactly what an email-harvesting bot greps
+// raw HTML for — no JavaScript required. `obfEmailCodes()` turns the address
+// into a comma-joined list of character codes; nothing that looks like an
+// `@` sign ever reaches the response. `MAIL_LINK_SCRIPT` (below) is what
+// turns it back into a real, clickable `mailto:` link in a visitor's
+// browser — the address exists in the clear only after real JavaScript has
+// run, which the overwhelming majority of harvesters never do.
+//
+// ⚠ EDITING-MODE RENDERING IS UNAFFECTED. This is a public-page concern only
+// — the block editor's canvas is behind a login and staff need to see the
+// real address there to know what they are publishing.
+export function obfEmailCodes(email) {
+  return email ? Array.from(String(email)).map((c) => c.charCodeAt(0)).join(',') : '';
+}
+
+// The public rendering of "email so-and-so" everywhere it appears: a bare,
+// empty anchor carrying only the obfuscated codes. MAIL_LINK_SCRIPT fills in
+// both the href and the visible text; a page that ships this markup without
+// also shipping that script (or on the rare visitor with JavaScript off)
+// simply shows no email — see the note on MAIL_LINK_SCRIPT for why that
+// trade is made deliberately rather than degrading to a plain mailto.
+export function obfMailLink(email) {
+  return email ? `<a class="tlcb-mailx" data-mail-c="${obfEmailCodes(email)}"></a>` : '';
+}
+
+// ⚠ No backticks anywhere in this string, for the identical reason
+// MARKET_APP_SCRIPT's own comment gives.
+//
+// Idempotent by design, not by a window flag: `tlcRunBlockScripts()` can
+// re-execute a copy of this script every time fresh block markup carrying a
+// `.tlcb-mailx` placeholder lands on the page (see "A block's own script ran
+// on one path out of two" in CLAUDE.md), so what has to be safe to run twice
+// is the SCAN, not the definition — `data-mail-done` is what a second pass
+// skips, which is simpler than a global registry of already-filled elements.
+export const MAIL_LINK_SCRIPT = `<script>(function () {
+  var els = document.querySelectorAll('.tlcb-mailx[data-mail-c]:not([data-mail-done])');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var codes = el.getAttribute('data-mail-c').split(',');
+    var addr = '';
+    for (var j = 0; j < codes.length; j++) addr += String.fromCharCode(Number(codes[j]));
+    el.setAttribute('href', 'mailto:' + addr);
+    el.textContent = addr;
+    el.setAttribute('data-mail-done', '1');
+  }
+})();` + '<\/script>';
+
 // ── EMBEDDING SOMEBODY ELSE'S PAGE ──────────────────────────────────────────
 // An iframe has no same-origin restriction of its own — accepting an
 // arbitrary address here would let a page editor put literally any site
@@ -4503,6 +4553,18 @@ const MARKET_APP_SCRIPT = '<script>' + MARKET_PRICING_JS + `
 
     function cfgOf(w) { try { return JSON.parse(w.getAttribute('data-market-cfg') || '{}'); } catch (e) { return {}; } }
 
+    // The config's coordinatorEmailC field is character codes, not a string
+    // — see obfEmailCodes() in admin/blocks.js — so the raw address never sits
+    // in this block's own server-rendered HTML for a scraper to lift out.
+    // Decoded here, once, only at the moment a toast actually has to say it.
+    function mailOfCfg(cfg) {
+      var codes = cfg.coordinatorEmailC;
+      if (!codes) return '';
+      var parts = codes.split(','), addr = '';
+      for (var i = 0; i < parts.length; i++) addr += String.fromCharCode(Number(parts[i]));
+      return addr;
+    }
+
     function paint(w) {
       var cfg = cfgOf(w);
       var chosen = w.querySelector('[data-tables][aria-pressed="true"]');
@@ -4668,13 +4730,13 @@ const MARKET_APP_SCRIPT = '<script>' + MARKET_PRICING_JS + `
             say(w, 'Your application is in. Bring or mail your payment as described in the confirmation email we just sent you.', 'ok');
           } else {
             say(w, 'Your application is in. We could not open the payment page from here — email '
-              + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take payment and hold your space.', 'ok');
+              + (mailOfCfg(cfg) || 'the coordinator') + ' and they will take payment and hold your space.', 'ok');
           }
           if (btn) { btn.disabled = true; btn.textContent = 'Application received'; }
         })
         .catch(function (err) {
           say(w, (err && err.message) || ('Something went wrong. Please try again, or email '
-            + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take your application by hand.'), 'err');
+            + (mailOfCfg(cfg) || 'the coordinator') + ' and they will take your application by hand.'), 'err');
           if (btn) { btn.disabled = false; btn.textContent = label; }
         });
     });
@@ -6184,7 +6246,7 @@ function renderInner(b, opts) {
       ['Hours', esc(raw.hoursLabel || ''), false],
       ['Table fee', `${esc(marketMoney(feeCents))} · ${esc(String(maxTables))} max`, false],
       ['Coordinator', email
-        ? (opts.editing ? esc(email) : `<a href="mailto:${esc(email)}">${esc(email)}</a>`)
+        ? (opts.editing ? esc(email) : obfMailLink(email))
         : '', true],
     ];
     const cells = pairs.filter(([, v]) => v).map(([label, value, mail]) =>
@@ -6197,7 +6259,9 @@ function renderInner(b, opts) {
         ? `<div class="tlcb-mktfacts"><span class="tlcb-note">The market day, hours, fee and coordinator all come from the Christmas Market screen. None is set yet, so this band will not appear on the page.</span></div>`
         : '';
     }
-    return `<div class="tlcb-mktfacts">${cells}</div>`;
+    // MAIL_LINK_SCRIPT is what turns the obfuscated coordinator link above
+    // into a real mailto: — see the note on obfMailLink().
+    return `<div class="tlcb-mktfacts">${cells}</div>${(!opts.editing && email) ? MAIL_LINK_SCRIPT : ''}`;
   }
 
   if (t === 'marketapp') {
@@ -6218,9 +6282,9 @@ function renderInner(b, opts) {
     if (!raw.open) {
       return `<div class="tlcb-mktapp">${head}
         <div class="tlcb-mktapp-closed">
-          <p><strong>Applications are closed right now.</strong> Email <a href="mailto:${esc(raw.coordinatorEmail || '')}">${esc(raw.coordinatorEmail || '')}</a> and the coordinator will tell you when they open for the next market.</p>
+          <p><strong>Applications are closed right now.</strong> Email ${editing ? esc(raw.coordinatorEmail || '') : obfMailLink(raw.coordinatorEmail || '')} and the coordinator will tell you when they open for the next market.</p>
         </div>
-      </div>`;
+      </div>${(!editing && raw.coordinatorEmail) ? MAIL_LINK_SCRIPT : ''}`;
     }
 
     // ⚠ FALLS BACK TO THE SAME DEFAULTS priceBreakdown() ALREADY APPLIES
@@ -6267,9 +6331,17 @@ function renderInner(b, opts) {
     // after paint the way the standalone fallback page does. ⚠ No payment
     // address in it: the giving link and the market's fund are resolved by
     // /api/market/apply at the moment of submission, never by the browser.
+    //
+    // ⚠ THE COORDINATOR'S ADDRESS IS CHARACTER CODES, NOT A STRING — see the
+    // note on obfEmailCodes() above. This attribute is server-rendered HTML a
+    // scraper reads with no JavaScript at all, so a plain `"coordinatorEmail":
+    // "tlc.christmasmarket@gmail.com"` here would be the single easiest place
+    // on the whole page to lift the address from. MARKET_APP_SCRIPT decodes
+    // it back with mailOfCfg() only at the moment it actually needs to say it
+    // in a toast message.
     const cfg = esc(JSON.stringify({
       tableFee: market.tableFee, feePercent: market.feePercent, feeFixed: market.feeFixed,
-      maxTables: market.maxTables, coordinatorEmail: market.coordinatorEmail || '',
+      maxTables: market.maxTables, coordinatorEmailC: obfEmailCodes(market.coordinatorEmail),
     }));
 
     const field3 = (id, name, label, type, ph, required, auto) =>
@@ -6367,11 +6439,11 @@ function renderInner(b, opts) {
             ${editing ? `<span class="tlcb-btn" data-submit-label>Submit and pay ${esc(marketMoney(price.totalCents))}</span>`
               : `<button type="submit" class="tlcb-btn" data-submit-label${dis}>Submit and pay ${esc(marketMoney(price.totalCents))}</button>`}
           </div>
-          <p class="tlcb-mktapp-fine">Need to pay by check or cash instead? Email <a href="mailto:${esc(market.coordinatorEmail || '')}">${esc(market.coordinatorEmail || '')}</a> and the coordinator will hold your space.</p>
+          <p class="tlcb-mktapp-fine">Need to pay by check or cash instead? Email ${editing ? esc(market.coordinatorEmail || '') : obfMailLink(market.coordinatorEmail || '')} and the coordinator will hold your space.</p>
         </div>
         </form>
       </div>
-    </div>${editing ? '' : MARKET_APP_SCRIPT}`;
+    </div>${editing ? '' : MAIL_LINK_SCRIPT + MARKET_APP_SCRIPT}`;
   }
 
   // ── A GENERIC EVENT'S REGISTRATION FORM ───────────────────────────────────
@@ -6400,9 +6472,9 @@ function renderInner(b, opts) {
     if (!ev.registrationOpen) {
       return `<div class="tlcb-reg">${head}
         <div class="tlcb-reg-closed">
-          <p><strong>Sign-ups are closed right now.</strong>${ev.coordinatorEmail ? ` Email <a href="mailto:${esc(ev.coordinatorEmail)}">${esc(ev.coordinatorEmail)}</a> with any questions.` : ''}</p>
+          <p><strong>Sign-ups are closed right now.</strong>${ev.coordinatorEmail ? ` Email ${editing ? esc(ev.coordinatorEmail) : obfMailLink(ev.coordinatorEmail)} with any questions.` : ''}</p>
         </div>
-      </div>`;
+      </div>${(!editing && ev.coordinatorEmail) ? MAIL_LINK_SCRIPT : ''}`;
     }
 
     const fields = (data.eventFieldsById && data.eventFieldsById[b.eventId]) || [];

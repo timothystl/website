@@ -1380,7 +1380,14 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
              paste any more: /christmasmarket/vendors is the application, and
              the dates and the fee on it come from settings. -->
         <a href="/christmasmarket/vendors" onclick="event.preventDefault();showPage('marketvendors')" class="btn btn-primary">Apply for a table</a>
-        <a href="mailto:tlc.christmasmarket@gmail.com" class="btn btn-outline">Email the coordinator</a>
+        <!-- ⚠ No plain mailto: here — a scraper reading raw page source
+             found this exact link and started sending the coordinator's inbox
+             spam. The address is character codes; the script right after
+             rebuilds the real link for a real browser. See obfMailLink() in
+             admin/blocks.js, which the block-rendered market pages share this
+             same fix with. -->
+        <a data-mail-c="116,108,99,46,99,104,114,105,115,116,109,97,115,109,97,114,107,101,116,64,103,109,97,105,108,46,99,111,109" class="btn btn-outline">Email the coordinator</a>
+        <script>(function(){var a=document.currentScript.previousElementSibling;if(!a||!a.getAttribute)return;var c=a.getAttribute('data-mail-c');if(!c)return;var codes=c.split(','),addr='';for(var i=0;i<codes.length;i++)addr+=String.fromCharCode(+codes[i]);a.href='mailto:'+addr;})();</script>
       </div>
       <p style="font-size:13px;color:var(--gray);margin-top:16px;">Marla is the market coordinator — she'd rather hear from you before you apply than after.</p>
     </div>
@@ -4598,10 +4605,20 @@ if (window.matchMedia) {
 // calls. What this does is stop somebody reaching the payment page with an
 // empty required field, because doing that takes their money for an
 // application the coordinator cannot act on.
+// ⚠ coordinatorEmail is blank on purpose, not the real address. This whole
+// object is read only by tlcMarketInit() below, which — per the comment
+// above — returns immediately on every real page because #mkt-form no
+// longer exists anywhere in this document. So this literal was never
+// actually rendered or clicked; it only ever sat here as plain text in the
+// HTML source of every single page on the site (this file is the one
+// document the whole SPA ships), which is exactly the shape an
+// email-harvesting scraper greps for. Leave it blank; if this fallback is
+// ever wired back up to real markup, read the address from the live
+// /api/market-config fetch below rather than typing it back in here.
 var tlcMarketCfg = {
   open: true, tableFee: 30, feePercent: 2.9, feeFixed: 0.30, maxTables: 3,
   dateLabel: 'Saturday, Dec 5', hoursLabel: '11:00 am – 6:00 pm',
-  coordinatorEmail: 'tlc.christmasmarket@gmail.com',
+  coordinatorEmail: '',
 };
 var tlcMarketReady = false;
 

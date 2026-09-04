@@ -173,6 +173,117 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### The coordinator's Gmail was being harvested straight off the market pages (v5.60.0, 2026-09-04)
+
+Dinger: *"we get this spam message to an email that was posted on our site
+tlc.christmasmarket@gmail.com. i think a spammer is crawling our site for
+email addresses. how do i prevent this"* — right.
+
+**Every render path that put the Christmas Market coordinator's address on a
+public page did it as a plain `mailto:` link, or as plain text inside a JSON
+attribute — exactly what an email-harvesting bot greps raw HTML/JSON for, no
+JavaScript required.** Four sites, all traced and closed:
+
+- `marketfacts` and `marketapp` (both the "applications closed" state and the
+  "pay by check instead" fine print) in `admin/blocks.js` — the block that
+  renders on `/christmasmarket/vendors` and `/christmasmarket/vendors/apply`.
+- The generic `registration` block's own closed-registration message — the
+  identical leak, for the coordinator email of **any** event on the site, not
+  only the market, once one is entered.
+- `marketapp`'s own `data-market-cfg` JSON attribute (read by the block's
+  client script to build a toast message when a payment page can't be
+  reached) carried `"coordinatorEmail":"tlc.christmasmarket@gmail.com"` in
+  the clear.
+- `GET /api/market-config` — public, unauthenticated, `Access-Control-Allow-Origin: '*'`
+  — returned the same field in plain JSON. ⚠ Nothing in the live site
+  actually calls this route today (see below), which made it easy to miss;
+  it is still the single easiest place on the whole domain to have lifted
+  the address from, had anyone gone looking.
+- The hardcoded `/christmasmarket` landing page in `public/index.html` had a
+  plain `<a href="mailto:tlc.christmasmarket@gmail.com">`. ⚠ **This one
+  reaches every page load of the entire site, not just the market pages** —
+  `public/index.html` is the one document the whole SPA ships, so the
+  address was in the raw response of literally any URL on timothystl.org, a
+  fact worth knowing before assuming this was scoped to the market.
+
+**The fix is obfuscation, not removal — the coordinator still needs a real,
+working `mailto:` for real visitors.** `obfEmailCodes()` (`admin/blocks.js`)
+turns an address into a comma-joined list of character codes; nothing that
+looks like an `@` sign ever reaches a response a scraper reads. `obfMailLink()`
+renders an empty `<a class="tlcb-mailx" data-mail-c="…">`, and
+`MAIL_LINK_SCRIPT` — a small script shipped alongside it — fills in the real
+`href` and visible text once a real browser runs it. This defeats the
+overwhelming majority of harvesters, which are simple HTTP scrapers with no
+JavaScript engine at all; it does not defeat a bot that runs a full headless
+browser, which nothing short of never publishing the address at all would.
+
+- **⚠ EDITING-MODE RENDERING IS UNCHANGED.** The block editor's canvas is
+  behind a login; staff still see the real address there to know what they
+  are publishing. Only the public, non-editing render is obfuscated.
+- **⚠ `MAIL_LINK_SCRIPT` is idempotent by a `data-mail-done` marker, not a
+  window flag** — `tlcRunBlockScripts()` can re-execute a copy of this
+  script every time fresh block markup carrying a `.tlcb-mailx` placeholder
+  lands on the page (see "A block's own script ran on one path out of two"
+  above), so what has to be safe to run twice is the scan, not the
+  definition.
+- **`data-market-cfg`'s field is `coordinatorEmailC` now, not
+  `coordinatorEmail`** — an array of codes, decoded by a new `mailOfCfg()`
+  helper inside `MARKET_APP_SCRIPT` only at the moment a toast actually has
+  to say the address out loud. Verified in a real browser: the "no payment
+  link" toast still reads "email tlc.christmasmarket@gmail.com and they will
+  take payment" — the decode genuinely works, not merely ships.
+- **`/api/market-config` returns `coordinatorEmailC` too**, for the same
+  reason as the JSON config above — even though nothing reachable calls it.
+  `tlcMarketInit()` in `public/index.html`, the one function that ever
+  fetched this route, has been dead since the hardcoded vendor-application
+  markup it depended on (`#mkt-form`) was deleted in the block-editor
+  conversion — it returns before ever reaching the fetch. Left in place per
+  that code's own standing rule ("kept deliberately... left in place rather
+  than deleted"), so its own fallback default (`tlcMarketCfg.coordinatorEmail`)
+  is simply blanked rather than obfuscated: it is never rendered or clicked,
+  so the only thing a real literal there was doing was sitting in the HTML
+  source of every page on the site for no functional reason at all.
+- **The landing page's button keeps its own tiny, self-contained script**
+  (`document.currentScript.previousElementSibling`) rather than sharing
+  `MAIL_LINK_SCRIPT` — that constant lives in `admin/blocks.js`, a separate
+  file from the static `public/index.html`, and the button's visible text
+  ("Email the coordinator") is a label, not the address itself, unlike every
+  other place this fix touches.
+- **⚠ Deliberately NOT touched: the "Contact details" block's church-office
+  email**, and the internal notification email the coordinator's own inbox
+  receives for each application. The office's general email is meant to be
+  maximally discoverable (it's already in bulletins, the Google listing,
+  etc.), and the notification email is delivered directly to Brevo, never
+  published or scraped — obfuscating either would be solving a problem
+  nobody reported.
+- **⚠ Still open, and outside what a code change can reach**: the plain
+  `/christmasmarket` landing page (id `christmasmarket`, distinct from
+  `/christmasmarket/vendors`) has its own generated page draft
+  (`admin/site-pages.js` / `admin/page-seeds.js`) whose "Email the
+  coordinator" **button block** stores a frozen, literal
+  `"url": "mailto:tlc.christmasmarket@gmail.com"` — extracted from the OLD
+  hardcoded markup this pass just changed. A block's URL is frozen the
+  moment it is published (this file's own standing rule), so if that page
+  has already been published from the Pages editor, this fix cannot reach
+  it — the stored block content in the database is what renders, not the
+  seed file. **If `/christmasmarket` has been published, open it in the
+  Pages editor and re-point or remove that button by hand**; if it has not,
+  the draft will read correctly once it eventually is, since publishing
+  copies whatever the draft holds and the seed itself was left as-is rather
+  than hand-edited against `tools/extract-pages.mjs`'s own convention.
+
+Run: the `An email address on a public block cannot be scraped, and the
+script that decodes it really works` group in `node admin/blocks.test.mjs`
+(3485) — verified non-vacuous by breaking `MAIL_LINK_SCRIPT`'s own decode
+loop and confirming the real symptom, a link left pointing nowhere — plus
+the updated market groups in the same file, `node admin/market.test.mjs`
+(374), the rewritten assertion in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1781), and `node test/market-vendor.test.mjs` (60, Chromium) — which drives
+the real submit flow and confirms the "no payment link" toast still says the
+coordinator's real address once decoded, not merely that the obfuscated form
+is present.
+
 ### A fifth tile: what actually deposits, at a glance (v5.59.0, 2026-09-03)
 
 Dinger, once the "Square kept — actually deposited" line was confirmed working on a real payment: *"i see it fine print here. can we make it so that at the top this is more clear?"* — right after asking for the fee to be checkable at all. He was pointing at the four tiles above the vendor list (Tables asked for · Recorded as paid · Waiting on a card · Checks not in yet), which said nothing about fees at all.
