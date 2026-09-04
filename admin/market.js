@@ -18,6 +18,7 @@ import { statusPill, panel, renderField, TONES } from './ui.js';
 import { section as sectionCfg } from './sections.js';
 import { churchDate } from './when.js';
 import { withAmountAndFund } from '../give-link.js';
+import { obfEmailCodes } from './blocks.js';
 // The pricing itself moved to a leaf module with no admin/ imports, so
 // admin/blocks.js — which admin/helpers.js already has a one-way dependency
 // on — can import the same arithmetic without completing a circular import.
@@ -434,6 +435,13 @@ export function marketPayUrl(settings, totalCents, tables) {
 }
 
 // What the public page fetches before it can quote a price or take a payment.
+//
+// ⚠ THE COORDINATOR'S ADDRESS IS CHARACTER CODES, NOT A STRING. This is a
+// public, unauthenticated, CORS-open GET with nothing in front of it — the
+// single easiest place on the whole site to lift the coordinator's inbox
+// address from, if it were ever returned in the clear. See obfEmailCodes()
+// in admin/blocks.js for why, and MAIL_LINK_SCRIPT there for the client-side
+// decode this shape is meant to be paired with.
 export async function marketConfig(env) {
   const s = await marketSettings(env);
   return {
@@ -444,7 +452,7 @@ export async function marketConfig(env) {
     maxTables: s.maxTables,
     dateLabel: s.dateLabel,
     hoursLabel: s.hoursLabel,
-    coordinatorEmail: s.coordinatorEmail,
+    coordinatorEmailC: obfEmailCodes(s.coordinatorEmail),
   };
 }
 

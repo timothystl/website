@@ -25,6 +25,7 @@ import { ALL_PERMISSIONS } from '../admin/auth.js';
 import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
 import { priceBreakdown, money as marketMoney, MARKET_DEFAULTS as MARKET_PRICE_DEFAULTS } from '../market-price.js';
+import { obfEmailCodes } from '../admin/blocks.js';
 import crypto from 'node:crypto';
 import { SCHOOL_EVENTS } from '../admin/school-calendar-seed.js';
 
@@ -5292,7 +5293,13 @@ group('once published, the application reads live settings — never a stored pr
   has(html, 'Bring your table to the Christmas Market', 'the hero is there');
   has(html, 'Saturday, Dec 12', 'the live market date, not whatever was on the page when it was drafted');
   has(html, '10:00 am – 5:00 pm', 'and the live hours');
-  has(html, 'mailto:newcoordinator@example.com', 'the coordinator email is read live, never typed into the page');
+  // ⚠ Not a plain mailto: — see obfMailLink()/MAIL_LINK_SCRIPT in
+  // admin/blocks.js. A scraper grepping this exact server-rendered HTML for
+  // the Christmas Market coordinator's address is the real incident this
+  // fix answers, so the raw address must never be in it — only its
+  // character codes, decoded into a real link by a client-side script.
+  lacks(html, 'newcoordinator@example.com', 'the coordinator address is never plain text in the served HTML, to keep it off a scraper');
+  has(html, obfEmailCodes('newcoordinator@example.com'), 'only its obfuscated form is — read live, never typed into the page');
   lacks(html, 'give.tithe.ly', 'no block on the page carries the Tithe.ly link itself — see the "no url field" rule');
   lacks(html, 'undefined', 'nothing on the page renders the literal word "undefined"');
 
