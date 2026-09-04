@@ -260,7 +260,18 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 // published page's HTML — rebuilt from five queries and a full render on
 // every request. It goes behind the edge cache; any POST that could change
 // what it says busts it (see the chokepoint in _fetch), and the response's
-// own max-age=120 is the safety net for anything the chokepoint misses.
+// own max-age is the safety net for anything the chokepoint misses.
+//
+// ⚠ THE max-age IS AN HOUR, AND THAT IS NOT A STALENESS TRADE — IT IS THE
+// CHOKEPOINT DOING ITS JOB. A publish deletes this entry outright, so the
+// only thing the clock governs is how often the bundle is rebuilt for NO
+// reason: every expiry is ~30 queries and ~500 D1 rows read, in every colo
+// serving the site, whether or not anything changed. At 120s that was up to
+// 30 pointless rebuilds an hour per colo, which is a large share of what put
+// this account through D1's free-tier row-read ceiling on 2026-09-04. If the
+// chokepoint ever misses a write path, the symptom is an edit that takes up
+// to an hour to show — the fix is to add the prefix to PAGE_DATA_PREFIXES,
+// never to shorten this back.
 // `caches` does not exist in the Node test harness, so every touch is gated.
 // Which palette swatch each shipped category is seeded with. Kept beside the
 // seed rather than on DEFAULT_CATEGORIES, because the seed list carries the
@@ -3685,7 +3696,7 @@ export default {
           return merged;
         })(),
       }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }
       });
       {
         const c = edgeCache();
@@ -4939,7 +4950,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         tiers: data.give.tiers,
         funds: data.give.funds,
       }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' },
       });
     }
 
