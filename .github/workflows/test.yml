@@ -95,6 +95,14 @@ jobs:
       - name: Site edge render
         run: node test/site-edge-render.test.mjs
 
+      # The 404 gate. Browserless for the same reason as the two above. The
+      # assertion worth having is not the status code — it is that no REAL
+      # address is ever refused, read from admin/site-pages.js and
+      # public/index.html rather than from a hand-kept list that would go stale
+      # the first time somebody adds a page.
+      - name: Site 404 gate
+        run: node test/site-404.test.mjs
+
       # The links page, same shape: drives tlc-links-worker.js directly with
       # the admin API stubbed. Covers which cards each tap shows, and the
       # sign-up card that has no address to check.
