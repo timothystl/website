@@ -460,7 +460,7 @@ different question on a narrower list and must never be folded into
 Run: the `the public bundle is held for an hour, and a publish still purges
 it` group in
 `node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
-(1796).
+(1804).
 
 ### A publish is what re-fetches the page bundle now, not a clock (v5.61.0, 2026-09-04)
 
