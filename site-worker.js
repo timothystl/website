@@ -132,6 +132,73 @@ const SETTINGS_REDIRECTS = {
 // than "contains a dot" so an unusual hand-made redirect with a dot in it
 // keeps working unless it collides with a real asset type.
 const ASSET_FILE_RE = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|css|js|mjs|json|xml|txt|map|pdf|webmanifest|mp3|mp4)$/i;
+
+// ── JUNK PATHS ARE A REAL 404, NOT THE WHOLE APP ────────────────────────────
+// `not_found_handling = "single-page-application"` means an unknown path is
+// answered with index.html and a 200. That is exactly right for /worship and
+// /christmasmarket/vendors — the SPA routes client-side and there is no file
+// on disk for either — and it is exactly wrong for /wp-login.php, because the
+// pipeline below does not know the difference: it runs the redirect lookup,
+// then getPublishedPages(), which on a cold isolate is a subrequest to the
+// admin Worker and a full /api/pages build. A vulnerability scanner walking a
+// few thousand paths therefore boots the entire site a few thousand times.
+//
+// ⚠ THIS RUNS BEFORE ANY SUBREQUEST, which is the whole point. A 404 that
+// still cost a D1 read would save nothing.
+//
+// Two rules, both chosen because they cannot touch a real address:
+//
+//   1. A path ending in an extension we do not serve. Every real route on this
+//      site is a slug — pageRename()/slugify() strip everything that is not a
+//      letter, digit or hyphen — so a real route never has a dot in it, and a
+//      real file always ends in one of the extensions below. `.php`, `.env`,
+//      `.asp`, `.jsp`, `.sql`, `.bak` and the rest are, by construction,
+//      nobody's page. html/htm are included as SERVED rather than refused:
+//      public/ really does hold manual.html and how-to-give.html.
+//
+//   2. A short denylist for the extensionless probes — /wp-admin, /.git/config.
+//      ⚠ Every entry is anchored to whole path segments. `vendor` is
+//      deliberately NOT in it: /christmasmarket/vendors is a real page, and a
+//      prefix match is one careless edit away from taking the Christmas Market
+//      off the site.
+//
+// Anything that matches neither is served exactly as it was before.
+const SERVED_EXT_RE = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|css|js|mjs|json|xml|txt|map|pdf|webmanifest|mp3|mp4|html?)$/i;
+const HAS_EXT_RE = /\.[a-z0-9]{1,8}$/i;
+const SCANNER_PATH_RE = /(^|\/)(wp-admin|wp-content|wp-includes|wp-json|wordpress|xmlrpc|phpmyadmin|phpinfo|myadmin|cgi-bin|node_modules|autodiscover|actuator|jenkins|solr|struts|\.git|\.svn|\.env|\.aws|\.ssh|\.vscode|\.idea)(\/|$)/i;
+
+// `path` is already lowercased with the leading and trailing slash stripped.
+export function isJunkPath(path) {
+  if (!path) return false;
+  if (SCANNER_PATH_RE.test(path)) return true;
+  return HAS_EXT_RE.test(path) && !SERVED_EXT_RE.test(path);
+}
+
+// Deliberately not the SPA's own #page-404: reaching that means serving the
+// whole application, which is the cost this exists to avoid. Cached for an
+// hour so a scanner's second pass is absorbed by the edge and never reaches
+// this Worker at all.
+const NOT_FOUND_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Page not found &middot; Timothy Lutheran Church</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+background:#F7F3EC;color:#1A1A2A;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center}
+main{padding:32px;max-width:32rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.5rem;color:#4A4860}
+a{display:inline-block;padding:12px 24px;border-radius:999px;background:#1E2D4A;color:#F5E4C0;text-decoration:none}</style>
+</head><body><main><h1>Page not found</h1>
+<p>That address does not exist on our site.</p>
+<a href="https://timothystl.org/">Go to the homepage</a></main></body></html>`;
+
+function notFoundResponse() {
+  return new Response(NOT_FOUND_HTML, {
+    status: 404,
+    headers: {
+      'Content-Type': 'text/html;charset=UTF-8',
+      'Cache-Control': 'public, max-age=3600',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  });
+}
 const LONG_CACHE_RE = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|mp3|mp4|pdf)$/i;
 const SHORT_CACHE_RE = /\.(css|js|mjs|json|xml|txt|map|webmanifest)$/i;
 
@@ -611,6 +678,12 @@ export default {
           headers: { 'Location': 'https://admin.timothystl.org/scheduler' },
         });
       }
+
+      // ⚠ BEFORE the redirect lookup and before ASSETS, because both cost a
+      // subrequest and neither can help a path like /wp-login.php. See
+      // isJunkPath above for why these two rules cannot catch a real address.
+      // scheduler.html is handled just above, so its .html still redirects.
+      if (isJunkPath(path)) return notFoundResponse();
 
       // Settings-based redirects (zoom, councilfiles) — handled before SPA loads
       if (SETTINGS_REDIRECTS[path]) {
