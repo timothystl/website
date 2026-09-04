@@ -7185,10 +7185,15 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   // An autosave posts under /pages, which is on the EDGE cache's bust list and
   // deliberately not on the editor's — pageData() reads no `pages` row, and
   // busting here would undo the whole thing on the one action it exists for.
-  mark = env.DB.log.length;
+  // ⚠ THE MARK IS SET AFTER THE SAVE, NOT BEFORE IT. The claim is that the
+  // RENDER is still cheap; counting the POST's own writes into the same window
+  // means the assertion drifts every time that route learns to write one more
+  // row — which is exactly what happened when publishing started stamping the
+  // content record.
   await call(env, '/pages/api/page/worship/settings', { cookie, method: 'POST' });
+  mark = env.DB.log.length;
   const afterSave = await editorRender('worship');
-  ok(since(mark) - 1 < firstCost / 2, 'an editor save does not throw the bundle away');
+  ok(since(mark) < firstCost / 2, 'an editor save does not throw the bundle away');
   eq(afterSave.status, 200, 'and the render after it still answers');
 
   // Adding a staff member does, because that is a table the bundle reads —
@@ -7252,12 +7257,59 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
     if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
   }
 
-  // The one copy a publish CANNOT reach: the site Worker holds its own in each
-  // isolate's memory, so that number is the real staleness floor for the whole
-  // site. Read from the source, because there is nothing to call.
+  // ⚠ THE SITE WORKER'S OWN COPY IS NO LONGER ON A CLOCK, and that is the
+  // half a publish could never reach before. `CACHE_TTL` still governs the
+  // redirect, settings and giving-page caches; the page bundle is held for a
+  // day and re-fetched only when the stamp below says something was
+  // published. Read from the source, because there is nothing to call.
   const siteSrc = readFileSync(new URL('../site-worker.js', import.meta.url), 'utf8');
   const ttl = Number((siteSrc.match(/const CACHE_TTL = ([\d_]+);/) || [])[1].replace(/_/g, ''));
-  ok(ttl >= 900_000, `the site Worker holds its copy for a long while too — ${ttl}ms`);
+  ok(ttl >= 900_000, `the site Worker holds its other copies for a long while — ${ttl}ms`);
+  has(siteSrc, 'contentStamp()', 'and the page bundle asks the stamp rather than a clock');
+}
+
+// ── a publish stamps the content record, and the site can read it ────────────
+// ⚠ THE STAMP IS BUMPED INSIDE `bustPagesCache`, NOT BESIDE IT. One fact, one
+// chokepoint: a second list of call sites is a second list somebody forgets a
+// route from, and the failure would be silent — the site would go on serving
+// yesterday's page with nothing to see. Dinger asked for exactly this: "Just
+// always call by for new data is wasteful. Can we set that function to a
+// manual. So when I publish a real change then I can force that call".
+{
+  group('a publish bumps the content stamp, and /api/content-stamp reports it');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const readStamp = () =>
+    (db.prepare("SELECT value FROM site_settings WHERE key='site_content_stamp'").get() || {}).value || '';
+
+  // ⚠ AN EMPTY STAMP IS THE NORMAL QUIET-WEEK STATE, NOT AN ERROR. Nothing
+  // has been published since the record was added, so the site must read it
+  // as "no reason to re-fetch" rather than as a change it has to chase.
+  const before = readStamp();
+  const r0 = await call(env, '/api/content-stamp');
+  eq(r0.status, 200, 'the stamp route answers without a session — the site Worker has none');
+  eq((await r0.clone().json()).stamp, before, 'and reports exactly what is stored, blank or not');
+  has(r0.headers.get('cache-control') || '', 'max-age=60',
+    'held briefly at the edge — a probe every minute per isolate, not per request');
+
+  await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+  const after = readStamp();
+  ok(after && after !== before, `publishing writes a new stamp — ${JSON.stringify(after)}`);
+  eq((await (await call(env, '/api/content-stamp')).json()).stamp, after,
+    'and the route hands the site the value it will compare against');
+
+  // A write that cannot change what a visitor sees leaves it alone, or the
+  // site re-fetches the whole bundle for nothing — which is the cost this
+  // whole mechanism exists to stop paying.
+  await call(env, '/login', { method: 'POST', form: { username: 'nobody', password: 'x' } });
+  eq(readStamp(), after, 'an unrelated POST does not move it');
+
+  // Every prefix the chokepoint covers has to move the stamp too, or a page
+  // whose content changed through one of them would sit behind the site's own
+  // copy for a full day rather than the old fifteen minutes.
+  await call(env, '/staff/create', { cookie, method: 'POST', form: { name: 'Ada Lovelace', title: 'Cantor' } });
+  ok(readStamp() !== after, 'a staff edit — a self-filling block — moves it as well');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
