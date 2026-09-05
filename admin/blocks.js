@@ -1571,10 +1571,62 @@ export const MAIL_LINK_SCRIPT = `<script>(function () {
     var addr = '';
     for (var j = 0; j < codes.length; j++) addr += String.fromCharCode(Number(codes[j]));
     el.setAttribute('href', 'mailto:' + addr);
-    el.textContent = addr;
+    if (!el.textContent) el.textContent = addr;
     el.setAttribute('data-mail-done', '1');
   }
 })();` + '<\/script>';
+
+// Which addresses stay in the clear on the public site — the two the office
+// wants maximally discoverable already (they're in bulletins, the Google
+// listing, on the building itself). Every other staff or ministry address
+// gets the same obfuscation the market coordinator's did, on Andrew's own
+// instruction once that fix shipped.
+const MAIL_PLAIN_ADDRS = new Set(['office@timothystl.org', 'dinger@timothystl.org']);
+function isPlainMailAddress(addr) {
+  return MAIL_PLAIN_ADDRS.has(String(addr || '').trim().toLowerCase());
+}
+
+// Appends MAIL_LINK_SCRIPT whenever a render actually produced the obfuscated
+// markup, so a call site never has to thread its own boolean through several
+// branches just to know whether to ship it. Idempotent like the script
+// itself, so it is safe to wrap more than one return on the same page.
+function maybeMailScript(html) {
+  return html.indexOf('tlcb-mailx') !== -1 ? html + MAIL_LINK_SCRIPT : html;
+}
+
+// A safeUrl()-cleaned href's mailto address, if it has one and it is not one
+// of the two plain addresses above — null otherwise, so a caller can fall
+// straight through to its ordinary href handling with a single check.
+function obfuscatableMailAddr(href) {
+  const m = /^mailto:([^?]*)/i.exec(href || '');
+  if (!m) return null;
+  let addr;
+  try { addr = decodeURIComponent(m[1]); } catch (_) { addr = m[1]; }
+  addr = addr.trim();
+  return addr && !isPlainMailAddress(addr) ? addr : null;
+}
+
+// The same treatment for a mailto anchor sitting inside a blob of already-
+// sanitized rich text (a Text block's body, a card's description, an FAQ
+// answer) rather than one known field — reached from arbitrary prose typed
+// into TinyMCE, so the address has to be read back out of the anchor the
+// sanitizer already produced. ⚠ Only the address itself is blanked: a
+// friendly label ("Email our DCE") stays exactly as typed, and only an
+// anchor whose visible text IS the address is emptied so MAIL_LINK_SCRIPT can
+// fill it back in from the codes.
+export function obfuscateMailtoLinks(html) {
+  const s = String(html || '');
+  if (s.indexOf('mailto:') === -1) return s;
+  return s.replace(/<a\b[^>]*\shref="mailto:([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (whole, rawAddr, inner) => {
+    let addr;
+    try { addr = decodeURIComponent(rawAddr); } catch (_) { addr = rawAddr; }
+    addr = addr.split('?')[0].trim();
+    if (!addr || isPlainMailAddress(addr)) return whole;
+    const plainInner = inner.replace(/<[^>]+>/g, '').trim().toLowerCase();
+    const label = plainInner === addr.toLowerCase() ? '' : inner;
+    return `<a class="tlcb-mailx" data-mail-c="${obfEmailCodes(addr)}">${label}</a>`;
+  });
+}
 
 // ── EMBEDDING SOMEBODY ELSE'S PAGE ──────────────────────────────────────────
 // An iframe has no same-origin restriction of its own — accepting an
@@ -3836,13 +3888,22 @@ const publicAttrs = (extra) => extra.replace(/ data-ph="[^"]*"/g, '');
 
 function field(opts, b, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
-  if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
+  if (!opts.editing) {
+    // A rich field is arbitrary TinyMCE prose — the one place staff can type
+    // a mailto link by hand rather than through a known field, so it is the
+    // one place this has to be caught by scanning the finished HTML.
+    const out = rich ? obfuscateMailtoLinks(content) : content;
+    return maybeMailScript(`<${tag} class="${cls}"${publicAttrs(extra)}>${out}</${tag}>`);
+  }
   return `<${tag} class="${cls}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
 }
 
 function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
-  if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
+  if (!opts.editing) {
+    const out = rich ? obfuscateMailtoLinks(content) : content;
+    return maybeMailScript(`<${tag} class="${cls}"${publicAttrs(extra)}>${out}</${tag}>`);
+  }
   return `<${tag} class="${cls}" data-item="${idx}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
 }
 
@@ -5137,15 +5198,17 @@ function renderInner(b, opts) {
     const btns = (b.links || []).map((l, i) => {
       const cls = 'tlcb-btn' + (i > 0 ? ' tlcb-btn--ghost-light' : '');
       const href = safeUrl(l.url);
+      const mailAddr = href && !opts.editing ? obfuscatableMailAddr(href) : null;
+      if (mailAddr) return `<a class="${cls} tlcb-mailx" data-mail-c="${obfEmailCodes(mailAddr)}">${esc(l.title || '')}</a>`;
       return href && !opts.editing
         ? `<a class="${cls}" href="${esc(href)}">${esc(l.title || '')}</a>`
         : `<span class="${cls}">${esc(l.title || '')}</span>`;
     }).join('');
-    return `<div class="tlcb-slide${cardClass(b)}"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
+    return maybeMailScript(`<div class="tlcb-slide${cardClass(b)}"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
       <div class="tlcb-band-text">
       ${field(opts, b, 'title', 'h1', 'tlcb-slide-title', esc(b.title || ''), ' data-ph="A line that says who you are"')}
       ${field(opts, b, 'subtitle', 'p', 'tlcb-slide-sub', b.subtitle || '', ' data-ph="A sentence underneath it" data-rich-line="1"', true)}
-      <div class="tlcb-btns">${btns}</div>${dots}</div>${renderInfoCard(b, opts)}</div>`;
+      <div class="tlcb-btns">${btns}</div>${dots}</div>${renderInfoCard(b, opts)}</div>`);
   }
 
   if (t === 'quicklinks') {
@@ -5153,11 +5216,13 @@ function renderInner(b, opts) {
       const inner = `<span class="tlcb-tile-i">${esc(it.meta || '◆')}</span>
         ${itemField(opts, i, 'title', 'span', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Label"')}`;
       const href = safeUrl(it.url);
+      const mailAddr = href && !opts.editing ? obfuscatableMailAddr(href) : null;
+      if (mailAddr) return `<a class="tlcb-tile tlcb-mailx" data-mail-c="${obfEmailCodes(mailAddr)}">${inner}</a>`;
       return href && !opts.editing
         ? `<a class="tlcb-tile" href="${esc(href)}">${inner}</a>`
         : `<span class="tlcb-tile">${inner}</span>`;
     }).join('');
-    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles">${tiles}</div></div>`;
+    return maybeMailScript(`<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles">${tiles}</div></div>`);
   }
 
   if (t === 'servicetimes') {
@@ -5474,7 +5539,15 @@ function renderInner(b, opts) {
     if (st.phone) line('Phone', st.phone, 'tel:' + String(st.phone).replace(/[^\d+]/g, ''));
     // The block's own address when somebody has set one, the church's when not.
     const email = b.contactEmail || st.email || '';
-    if (email) line('Email', email, 'mailto:' + email);
+    // ⚠ st.email is always the general office address — office@ stays plain
+    // through line() as before. A typed contactEmail override is, by
+    // definition, somebody OTHER than the office, so it goes through the
+    // same obfuscation the market coordinator's own address got.
+    if (email && !opts.editing && !isPlainMailAddress(email)) {
+      rows.push(`<div class="tlcb-ct-row"><span class="tlcb-ct-l">Email</span><a class="tlcb-ct-v tlcb-ct-a tlcb-mailx" data-mail-c="${obfEmailCodes(email)}"></a></div>`);
+    } else if (email) {
+      line('Email', email, 'mailto:' + email);
+    }
     if (b.showSocial !== false) {
       // Named links rather than icons: an icon needs a label for a screen
       // reader anyway, and three words are clearer than three glyphs to the
@@ -5489,7 +5562,7 @@ function renderInner(b, opts) {
     const body = rows.length
       ? `<div class="tlcb-ct">${rows.join('')}</div>`
       : `<p class="tlcb-note">Nothing to show yet — fill in the address, phone and email under Church details in the admin.</p>`;
-    return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def, 'One line about when the office is open, if it helps.')}${body}</div>`;
+    return maybeMailScript(`<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def, 'One line about when the office is open, if it helps.')}${body}</div>`);
   }
 
   if (t === 'map') {
@@ -5593,6 +5666,10 @@ function renderInner(b, opts) {
       // clicking into them inside an anchor navigates instead of typing.
       const href = safeUrl(it.url);
       const linked = !!href && !opts.editing;
+      // ⚠ A card whose href is a mailto address other than office/dinger is
+      // still `linked` (the whole card still lifts and still goes
+      // somewhere) — only the opening tag below swaps in the obfuscated form.
+      const mailAddr = linked ? obfuscatableMailAddr(href) : null;
       // ⚠ A card with nowhere to go LOSES THE HOVER. Lifting under the pointer
       // is a promise that clicking does something, and the whole complaint here
       // was a card that made that promise and broke it. The class follows the
@@ -5613,16 +5690,18 @@ function renderInner(b, opts) {
               // rule is about.
               : `<span class="tlcb-cg-link tlcb-cg-link--off">${esc(it.linkLabel)}</span>`)
         : '';
-      const open = linked ? `<a class="${cls}" href="${esc(href)}">` : `<div class="${cls}">`;
+      const open = mailAddr
+        ? `<a class="${cls} tlcb-mailx" data-mail-c="${obfEmailCodes(mailAddr)}">`
+        : linked ? `<a class="${cls}" href="${esc(href)}">` : `<div class="${cls}">`;
       return `${open}${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div>${linked ? '</a>' : '</div>'}`;
     }).join('');
     const intro = b.subtitle
       ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', esc(b.subtitle), ' data-ph="One short paragraph of introduction."')
       : (opts.editing ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', '', ' data-ph="One short paragraph of introduction."') : '');
-    return `<div class="tlcb-stack tlcb-cg${b.align === 'left' ? '' : ' tlcb-cg--' + b.align}${b.topRule ? ' tlcb-cg--rule' : ''}">
+    return maybeMailScript(`<div class="tlcb-stack tlcb-cg${b.align === 'left' ? '' : ' tlcb-cg--' + b.align}${b.topRule ? ' tlcb-cg--rule' : ''}">
       ${renderHead(opts, b, 'Section heading')}${intro}
       <div class="tlcb-cg-grid">${cards}</div>
-    </div>`;
+    </div>`);
   }
 
   if (t === 'video') {
@@ -5752,6 +5831,10 @@ function renderInner(b, opts) {
       const cls = 'tlcb-btn' + (i > 0 ? ' tlcb-btn--ghost' : '');
       if (opts.editing) return itemField(opts, i, 'title', 'span', cls, esc(it.title || ''), ' data-ph="Button label"');
       const href = safeUrl(it.url);
+      // ⚠ A mailto button keeps its own typed label ("Email our DCE") — only
+      // the destination is obfuscated, never the words on the button.
+      const mailAddr = href ? obfuscatableMailAddr(href) : null;
+      if (mailAddr) return `<a class="${cls} tlcb-mailx" data-mail-c="${obfEmailCodes(mailAddr)}">${esc(it.title || '')}</a>`;
       return href ? `<a class="${cls}" href="${esc(href)}"${/^https?:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(it.title || '')}</a>`
         : `<span class="${cls}">${esc(it.title || '')}</span>`;
     }).join('');
@@ -5760,8 +5843,8 @@ function renderInner(b, opts) {
     // editor has something to click into; on the live site an empty one would
     // be a stray blank line above the buttons on pages nobody has touched.
     const hasHead = !!(b.eyebrow || b.title || (b.body || '').replace(/<[^>]*>/g, '').trim());
-    if (!opts.editing && !hasHead) return `<div class="tlcb-btns">${btns}</div>`;
-    return `<div class="tlcb-stack">${renderHead(opts, b, 'Heading (optional)')}${renderBody(opts, b, def, 'A sentence about why (optional)')}<div class="tlcb-btns">${btns}</div></div>`;
+    if (!opts.editing && !hasHead) return maybeMailScript(`<div class="tlcb-btns">${btns}</div>`);
+    return maybeMailScript(`<div class="tlcb-stack">${renderHead(opts, b, 'Heading (optional)')}${renderBody(opts, b, def, 'A sentence about why (optional)')}<div class="tlcb-btns">${btns}</div></div>`);
   }
 
   if (t === 'spacer') {

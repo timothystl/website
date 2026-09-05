@@ -173,6 +173,113 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
+
+Dinger, once the market fix above was confirmed working, checking whether it
+reached anywhere else: *"you can obfuscate everyone but office and dinger."*
+
+**Checked against the live `/api/pages` response first, rather than guessed
+at.** The market coordinator's address was confirmed gone from every
+published page; two others were still there in plain HTML —
+`dce@timothystl.org` (the DCE) on Youth, Sunday School, Confirmation, VBS and
+Family, and `jinah@timothystl.org` (the Music Director) on Music — in three
+different shapes, which is why this needed three different fixes rather than
+one:
+
+- **A button's `href`** (Family's "Email our DCE", Music's "Email our Music
+  Director") — a structured `url` field on the Button bar block.
+- **A card's `href`** (the same shape on a Card grid card, not live today but
+  reachable the moment somebody points one at a personal address).
+- **A literal `<a href="mailto:…">` typed straight into rich text** (Youth,
+  Sunday School, Confirmation and VBS's own paragraph, where the visible link
+  text is the address itself) — TinyMCE prose, not a known field, which is
+  the one shape the market fix's field-level approach could never reach.
+
+**`office@timothystl.org` and `dinger@timothystl.org` are the two addresses
+every new check exempts**, by name, in one shared list
+(`MAIL_PLAIN_ADDRS`/`isPlainMailAddress()` in `admin/blocks.js`) — the same
+two the pre-existing "Contact details" block and the sidebar's "Visit us"
+card already treat as maximally discoverable on purpose (see the section
+above: *"already in bulletins, the Google listing"*). Every other address —
+any current or future staff member's, any ministry's — gets the identical
+`obfEmailCodes()`/`MAIL_LINK_SCRIPT` treatment the coordinator's already had.
+
+- **`obfuscatableMailAddr(href)`** is the one check a structured `url` field
+  runs: given a `safeUrl()`-cleaned href, it returns the address if it is a
+  mailto and not one of the two exempt ones, or `null` — so a caller falls
+  straight through to its ordinary href handling with a single `if`. Wired
+  into the **Button bar**, **Card grid** and **Link tiles** blocks, and the
+  **Welcome banner**'s own slide buttons (a separate `links` array, not
+  `items`, so it needed its own line).
+- **⚠ A BUTTON OR CARD KEEPS ITS OWN TYPED LABEL — only the destination is
+  obfuscated.** "Email our DCE" stays "Email our DCE"; nothing here empties a
+  label the office wrote on purpose, the way the market coordinator's own
+  `obfMailLink()` does for a field whose whole job is showing the address as
+  its own text. A card whose link is a mailto still gets the `--link` hover
+  class and closes as a real `<a>`, not a `<div>` — obfuscating the
+  destination must not silently downgrade the card to looking unclickable.
+- **`obfuscateMailtoLinks(html)`** is the harder case: a mailto anchor
+  sitting inside a blob of already-sanitized rich text, reached from
+  arbitrary prose rather than one known field. It walks every `<a
+  href="mailto:…">` the sanitizer already produced, reads the address back
+  out, and rewrites the ones that need it. ⚠ **Only an anchor whose VISIBLE
+  TEXT IS THE ADDRESS ITSELF gets emptied** — that is the shape the DCE
+  contact lines were actually written in (`dce@timothystl.org` as both the
+  href and the words), and emptying it is what lets `MAIL_LINK_SCRIPT` fill
+  it back in from the codes. A friendly label inside prose ("Email our DCE")
+  is left exactly as typed; only the `href` underneath it changes.
+- **`field()`/`itemField()` are the one choke point**, not each block type
+  individually — every `richBody`-declared field (Text, a card's own
+  description, an FAQ answer, a Column) already funnels through these two
+  functions on its way to the public page, so `obfuscateMailtoLinks()` runs
+  there once, on the finished HTML, rather than needing a copy inside every
+  block type that might ever carry a paragraph.
+- **`maybeMailScript(html)`** appends `MAIL_LINK_SCRIPT` only when the
+  markup it is given actually contains `tlcb-mailx` — a plain `indexOf`
+  check, so a block using only the two exempt addresses ships no script at
+  all, and a page mixing several obfuscated blocks does not ship the same
+  script five times over (`MAIL_LINK_SCRIPT`'s own idempotent
+  `data-mail-done` marker makes a second copy harmless regardless, but there
+  is no reason to pay for it when nothing needed obfuscating).
+- **`MAIL_LINK_SCRIPT` itself changed by one line**: `el.textContent = addr`
+  became `if (!el.textContent) el.textContent = addr`. Every existing caller
+  (marketfacts, marketapp, registration) renders an empty `<a
+  class="tlcb-mailx">` with nothing inside it, so this is byte-identical for
+  all three; it is what lets a Button or Card's own typed label survive the
+  decode pass untouched instead of being overwritten with the bare address.
+- **The "Contact details" block's own `contactEmail` override** — the field
+  this repo already built for "write to somebody other than the office" (see
+  above) — now runs the identical check. `st.email` (the general office
+  address, read when nothing is overridden) is untouched, since it will
+  always resolve to `office@timothystl.org`, which is already exempt.
+- **⚠ Editing-mode rendering is unaffected, same as the market fix.** The
+  block editor's canvas is behind a login; staff still see the real address
+  there to know what they are publishing. Only the public, non-editing
+  render is touched, on every one of the five surfaces above.
+- **Deliberately NOT touched**: the church-wide `office@timothystl.org` and
+  `dinger@timothystl.org`, wherever they appear (the sidebar's "Visit us"
+  card, the map block, the info-card slot, the prayer/contact pages' own
+  fallback text) — those two are the whole point of the exemption list, not
+  an oversight. Also not touched: `Download`/`Documents`/`Lessons`/`Portal`/
+  `Partners`, whose `url` fields are meant for a file, a sign-in page or a
+  partner's website — a personal mailto there would be a misconfiguration,
+  not the normal case those blocks exist for.
+
+Run: the `Every address is obfuscated except office and dinger` group in
+`node admin/blocks.test.mjs` (3509) — covers all five surfaces (Button bar,
+Card grid, Link tiles, Welcome banner slides, and rich text), confirms a
+block using only the two exempt addresses ships neither obfuscated markup
+nor the decode script, confirms a friendly label inside prose survives while
+the address underneath it does not, and confirms editing-mode rendering is
+untouched. Verified non-vacuous by reverting `obfuscatableMailAddr()` to
+always return `null` and watching nine assertions fail with the real
+symptom — the raw address back in the page. Also
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1781, unaffected) and the full `admin/*.test.mjs` suite, all green except
+the pre-existing, unrelated `admin/appearance.test.mjs` failure recorded
+under "Text size is a multiplier" — reproduced identically on the commit
+before this change, so not caused by it.
+
 ### The coordinator's Gmail was being harvested straight off the market pages (v5.60.0, 2026-09-04)
 
 Dinger: *"we get this spam message to an email that was posted on our site
