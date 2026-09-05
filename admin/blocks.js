@@ -5353,8 +5353,16 @@ function renderInner(b, opts) {
       const zoom = safeZoomFactor(m.photo_zoom);
       // Somebody with no photo keeps the plain tile the block always drew,
       // rather than an <img> pointing at nothing.
-      const photo = m.photo_url
-        ? `<img src="${esc(safeUrl(m.photo_url))}" alt="${esc(m.name || '')}" loading="lazy"
+      // ⚠ Checked against the RESOLVED url, not the raw stored value — a
+      // blob: URL (or anything else safeUrl() refuses) is truthy in the
+      // database but resolves to '', and the old check let that reach the
+      // page as `<img src="">`, permanently broken. And `onerror` covers the
+      // case safeUrl() can't: a well-formed address that fails to load once
+      // it's actually requested (a stale path, a hiccup) — same fallback the
+      // legacy staff loader already used, now on the block that replaced it.
+      const src = safeUrl(m.photo_url);
+      const photo = src
+        ? `<img src="${esc(src)}" alt="${esc(m.name || '')}" loading="lazy" onerror="this.remove()"
              style="object-position:${pos};transform:scale(${zoom})">`
         : '';
       return `<div class="tlcb-person">
