@@ -480,6 +480,199 @@ Every group before and after the crash point in both files was verified
 individually (or, where a browser could not reach it, read by hand) and found
 unaffected.
 
+### The takeover mechanism is simplified — the old ministry-page chain is deleted (Phase D, 2026-09-07)
+
+The last of Dinger's four phases. Phase C's own note said Phase D "waits until
+every remaining page is published, which is still office work, not code."
+Checked directly against the live `/api/pages` before starting anything: it
+already had. All 29 rows in the `pages` table — including
+confirmation/sundayschool/vbs/egghunt/family, the five this file's own
+Pending / Deferred Items list still described as waiting on the youth
+director — carry real, non-empty `published_blocks`. The blocker was already
+gone; nobody had gone back to check.
+
+**⚠ `showPage()`'s dispatch was carrying TWO separate legacy rendering chains,
+not one, and both were already dead before this pass touched anything —
+Phase C's own markup deletion had already pulled the floor out from under
+both, it just never removed the JavaScript standing on it.**
+
+- **The ministry-page chain**: `tlcMaybeTakeOver(slug)` /
+  `tlcApplyBlocks(slug, html)` / `tlcOwnsWholePage(html)` /
+  `loadMinistryPage(slug)` / `loadYouthPage()` / `loadMinistryCta(slug)`,
+  reached only when `tlcMaybeTakeOverSitePage(id)` returned `false` for one
+  of the eleven ministry slugs (`youth`, `sundayschool`, `confirmation`,
+  `vbs`, `egghunt`, `family`, `music`, `stephen`, `foodpantry`, `bees`,
+  `christmasmarket`). It read `youth_pages.blocks_html`/`.content` via
+  `GET /api/ministry/:slug` — a completely separate table and route from the
+  `pages`-table mechanism Phase A/B/C built around. Its target ids
+  (`#youth-content`, `#youth-upcoming-list`, `#music-vid-grid`,
+  `#<slug>-admin-cta`, `#<slug>-content-section`, …) were already deleted from
+  the hardcoded markup in Phase C, so on the rare occasion this chain still
+  ran, it was already a silent no-op — every `document.getElementById(...)`
+  call inside it returned `null`, and the guards already in place kept that
+  from throwing. It looked like a fallback. It had not actually been one for
+  weeks.
+- **`/news`'s own separate legacy loader**: `loadLegacyNewsPage()` /
+  `loadNewsItems()` / `loadNewsletters()`, gated the same way
+  (`tlcMaybeTakeOverSitePage('news')` returning `false`). Same shape, same
+  fate — `#news-archive`, `#newsletter-detail`, `#news-items-section`,
+  `#news-list`, `#news-loading`, `#news-empty`, `#tlc-cal-news` are all gone
+  from `#page-news`, which Phase C reduced to a bare `#notices-news` anchor.
+  `loadNewsItems()`/`loadNewsletters()` had exactly one caller each —
+  `loadLegacyNewsPage()` — and nowhere else in the file.
+
+**⚠ Verified BEFORE deleting anything, not assumed from the shape of the
+code.** A precise map of every remaining reference to this chain (public
+JavaScript, the admin write path, test coverage) was pulled first, because
+the obvious reading — "if `/api/pages` now always wins, everything behind it
+must be dead" — turned out to be only half true. It is fully true for the
+*public rendering* side. It is not true at all for the *admin authoring*
+side — see the ⚠ below.
+
+**What survived, and why, checked one call site at a time:**
+
+- **`tlcHydrateFeeds(slug, posts)`** — kept. It has three call sites in the
+  old code (`tlcMaybeTakeOver`, `loadMinistryPage`, both deleted) and one in
+  the new (`tlcHydrateFeedsIfPresent(id, root)`, called from
+  `tlcMaybeTakeOverSitePage`'s own edge and fallback branches). Deleting the
+  function along with its two dead callers would have broken feed hydration
+  on every currently-published page carrying a Posts feed / Upcoming events
+  block. Only the two dead call sites went; the function and its one live
+  caller are untouched.
+- **`loadNewsletterDetail()` / `tlcNewsletterOverlayBuild()` /
+  `tlcCloseNewsletterDetail()` / the router's `nlDetailMatch` handler for
+  `/news/:id`** — kept, and never actually part of the dead chain to begin
+  with. The single-newsletter permalink view was rebuilt as a self-contained
+  overlay appended straight to `<body>` specifically so `tlcTakeOverPage()`'s
+  "hide every child of `#page-news`" loop could never touch it — the comment
+  above `tlcNewsletterOverlayBuild()` says so in as many words, and predates
+  this pass. `loadLegacyNewsPage()`'s own comment described this correctly
+  ("the router's own nlDetailMatch handler has already called ... in the same
+  synchronous pass") — the newsletter permalink was never at risk here.
+- **`loadChristmasMarketPosts()` and the `/api/ministry/:slug/posts`
+  sub-route** — kept, unrelated to takeover. It is called directly from
+  `showPage()`'s `if (id === 'christmasmarket')` branch, reads the market's
+  own News-style posts feed, and has nothing to do with the ministry-page
+  block chain that shared its parent route.
+- **`tlcMaybeTakeOverSitePage`, `tlcTakeOverPage`, `loadPageBody`,
+  `loadSitePages`, `tlcHydrateFeedsIfPresent`** — the Phase A/B mechanism
+  itself. Entirely untouched; this is the one rendering path Phase D leaves
+  standing.
+
+**`showPage()`'s own dispatch is now three lines**, down from a
+twenty-eight-line branch juggling eleven ministry slugs, `/news`'s own
+special case, and a second nested `.then()`:
+
+```js
+tlcMaybeTakeOverSitePage(id).then(function () {
+  tlcScrollToHash(hash);
+});
+```
+
+**⚠ The practical behavior change is smaller than the diff.** Every page this
+touches was already rendering from `tlcMaybeTakeOverSitePage`'s own edge or
+client-fetch branch, because every page is published. What changes is what
+happens on a page that is genuinely unpublished (a fresh draft nobody has
+published yet) or requested during a real admin outage: it now renders
+blank, consistently, everywhere — the exact Phase C tradeoff, now applied to
+`/news` and the eleven ministry pages instead of leaving them to fall through
+to JavaScript that looked like a working fallback and had already stopped
+being one.
+
+**⚠ A second, live content-management system was found and deliberately NOT
+touched — this is a genuinely open item, not a fixed one.** The old
+ministry-page chain's read side (`/api/ministry/:slug`, reading
+`youth_pages.blocks_html`/`.content`) is what this pass retired from the
+*public* site. Its *write* side is still there, and still reachable by
+staff today:
+
+- **`/ministries/edit/:slug`** ("Details," in the overflow menu of the
+  Ministries list) renders a real TinyMCE box (`tinymceYouthSection()`) that
+  saves straight to `youth_pages.content` on `POST /ministries/update/:slug`.
+  The screen's own copy already tells staff not to use it ("The words and
+  layout of this page are edited in the page editor… The body text below is
+  only used on pages that have not been laid out in blocks yet") — but the
+  field is rendered unconditionally and Save writes it regardless of whether
+  that's true.
+- **`/ministries/editor/:slug`** is a *second, separate* block editor
+  (`admin/ministry-editor.html`, the same file the `pages`-table Site Editor
+  reuses at a different mount point) writing to `youth_pages.blocks` /
+  `published_blocks` through its own `/ministries/api/page/*` draft/publish/
+  revisions API — not the `pages` table this whole rollout is about. It's the
+  primary action on every Ministries list row, and it's what staff are
+  actually steered toward.
+
+Both are now writing into a column nothing on the public site reads. That's
+an inconsistency worth closing, but closing it means deciding what happens to
+a working staff-facing editing screen — port `youth_pages.content`'s current
+value into a `pages`-table block for slugs that still need it, retire the
+`/ministries/editor/:slug` mount entirely in favor of `/pages/:id/edit`, or
+something else — and that decision needs the kind of explicit sign-off Phase
+C's own markup deletion got ("Delete it all now"), not a default reached by
+a dead-code sweep. Recorded here and in `admin/BLOCK-EDITOR-ROLLOUT.md` as an
+open question rather than acted on.
+
+**⚠ Two more things found on the way past — one fixed, one recorded rather
+than fixed, because `admin/escaping.test.mjs`'s own FX-14 group had two
+assertions checking properties of the dead ministry-page chain and caught
+both the moment the chain came out.**
+
+- **A real, pre-existing gap: `loadNewsletterDetail()`'s own `<h2>` rendered
+  `n.subject` unescaped.** `loadNewsletters()` — the function this pass
+  deleted — HAD escaped it (`escText(n.subject)`), which is exactly why
+  `admin/escaping.test.mjs`'s positive assertion for it was passing before
+  this pass and only started failing once that copy was gone: the check was
+  written against the archive-list preview, and the single-newsletter
+  overlay's OWN copy of the same field — rebuilt as its own, separate
+  overlay well before this pass (see "A single-newsletter detail view" above)
+  — was never brought into line with it. `loadNewsletterDetail()` is the one
+  place `n.subject` reaches the public site now that it exists at all; fixed
+  in the same pass, `escText(n.subject)`, and the test's positive assertion
+  passes again on its own account rather than needing to be rewritten.
+- **`ministry_content`/`ministry_type` — the newsletter composer's "From Our
+  Ministries" field — has had no rendering path anywhere a visitor or a
+  recipient can see it since Phase C, and this pass did not create that,
+  only exposed it.** It is still a real, live, editable field: stored on
+  `newsletters`, round-tripped through create/update/duplicate, with its own
+  form control in the composer (`tlc-admin-worker.js:8572`). But
+  `admin/email.js` — the ACTUAL sent email — has no reference to it at all,
+  and the `newsletterarchive` block that replaced `/news`'s hardcoded body in
+  Phase C never carried it over either (checked both its server-rendered
+  card preview and `NEWSLETTER_ARCHIVE_SCRIPT`'s in-place expansion in
+  `admin/blocks.js` — neither mentions it). `loadNewsletters()`, deleted in
+  this pass, was the LAST and ONLY place it was ever rendered, and its target
+  markup was already gone from `/news`'s hardcoded body before this pass
+  touched anything — so the field has been write-only since Phase C, not
+  since Phase D. `admin/escaping.test.mjs`'s assertion that it went through
+  `escText(safeHref(...))` was checking exactly that dead code; removed, with
+  the finding recorded in its own comment rather than silently dropped.
+  Whether to wire it back in somewhere (the archive card? the expansion
+  panel?) or retire the field outright — it looks superseded by
+  `wol_content`/`lasm_content`/`tertiary_note`, which the composer gained
+  later and which DO reach both the email and the block — is an open product
+  question, not something to default on the strength of a dead-code sweep.
+
+Run: `node test/whole-page.test.mjs` (59, unaffected — it never exercised the
+old chain to begin with; the three groups that did were already removed in
+Phase C), `node test/site-pages.test.mjs` (58), `node test/site-404.test.mjs`
+(90, unaffected — reads the real page list, untouched by this pass),
+`node test/site-edge-render.test.mjs` (77, unaffected — confirms this pass
+did not touch the edge-rendering mechanism), `node test/public-page.test.mjs`
+(72, including the "a jump-to-name button actually jumps" and Give-button
+legibility groups this repo's own notes elsewhere record as having hit a
+pre-existing sandbox crash before — clean this run, all 72 green with no
+crash), `NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (115,
+unaffected — the calendar block's own mount is untouched by this pass),
+`NODE_PATH=$(npm root -g) node test/public-phone.test.mjs` (20, unaffected),
+and every `admin/*.test.mjs` suite — all unaffected except
+`node admin/escaping.test.mjs` (35, two assertions rewritten as above; every
+other admin suite is unaffected, and the admin-side `youth_pages.content`
+write path flagged above as still-live was deliberately left alone, not
+modified). Every deleted function was confirmed to have no live callers left
+by grepping the whole file for its name before removal, and
+`tlcHydrateFeeds`/`loadNewsletterDetail`'s continued liveness was confirmed
+the same way rather than assumed from reading the surrounding comments.
+
 ### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
 
 Dinger, once the market fix above was confirmed working, checking whether it
