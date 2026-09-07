@@ -132,6 +132,12 @@ async function visitEdged(slug, renderedHtml, { edged = true, path = null, pages
   const errors = [];
   const hits = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // Playwright runs matching routes in reverse registration order. Register
+  // the catch-all first so the admin-specific handler below actually sees
+  // /api/pages instead of having every HTTPS request swallowed as an empty
+  // response. Reversing these two registrations makes the takeover tests fail
+  // non-vacuously: `hits` stays empty and no managed body is injected.
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
     hits.push(u);
@@ -143,7 +149,6 @@ async function visitEdged(slug, renderedHtml, { edged = true, path = null, pages
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
-  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   if (edged && edgeBody != null) nextEdgeBody = edgeBody;
   await page.goto(base + (path || '/' + slug) + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
@@ -274,11 +279,13 @@ console.log('\nthe homepage is frugal with its fetches');
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const hits = [];
+  // Catch-all first; Playwright gives the later, more-specific admin route
+  // precedence when both patterns match.
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.route('https://admin.timothystl.org/**', (route) => {
     hits.push(route.request().url());
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
-  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
 
@@ -317,6 +324,40 @@ console.log('\nthe edge already rendered the page');
   ok((await plain.page.textContent('#page-news')).includes('PUBLISHED BODY'),
     'and the published blocks are on the page');
   await plain.ctx.close();
+}
+
+console.log('\na failed client body fetch is retried when the visitor comes back');
+{
+  // The first request models a brief admin/D1 failure after the edge did not
+  // supply this page. The old promise cache kept that null forever, and the
+  // false takeover result then short-circuited every later visit in the SPA.
+  // Reverting either cache fix makes this fail: bodyHits stays at 1 and the
+  // published body never appears.
+  const bodyHtml = renderPage(sanitizeBlocks([newBlock('text', { body: '<p>RECOVERED BODY</p>' })]),
+    { slug: 'news', withCss: false });
+  let bodyHits = 0;
+  const retry = await visitEdged('news', bodyHtml, {
+    edged: false,
+    pagesRoute: (route) => {
+      const u = new URL(route.request().url());
+      if (u.searchParams.get('id') === 'news') {
+        bodyHits += 1;
+        if (bodyHits === 1) return route.fulfill({ status: 503, body: 'temporarily unavailable' });
+        return route.fulfill({ status: 200, contentType: 'application/json',
+          body: JSON.stringify({ rendered: { news: bodyHtml } }) });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ pages: [], menu: null, details: null, redirects: {}, css: BLOCK_CSS }) });
+    },
+  });
+  eq(bodyHits, 1, 'the initial body request really failed once');
+  eq(await retry.page.locator('#news-blocks').count(), 0, 'the failed attempt did not inject a false body');
+  await retry.page.evaluate(() => { window.showPage('home'); window.showPage('news'); });
+  await retry.page.waitForTimeout(900);
+  eq(bodyHits, 2, 'returning to the page retries its body request');
+  eq(await retry.page.locator('#news-blocks').count(), 1, 'the recovered body is injected exactly once');
+  ok((await retry.page.textContent('#page-news')).includes('RECOVERED BODY'), 'the recovered body is visible');
+  await retry.ctx.close();
 }
 
 console.log('\nthe edge-rendered body is authoritative — it does not wait on /api/pages');
@@ -391,33 +432,34 @@ console.log('\nthe edge-rendered body is authoritative — it does not wait on /
   }
 }
 
-console.log('\nan edge-rendered page never shows the hardcoded body first');
+console.log('\nan edge-rendered page is authoritative at first paint');
 {
   // Requirement (5). This asks the question at the earliest possible moment —
   // right after DOMContentLoaded, before any of this file's own JavaScript has
   // had a chance to run tlcMaybeTakeOverSitePage() at all — because a flash
   // this brief would never survive to a check made after waitForTimeout(900).
-  // The hardcoded markup being hidden has to be baked into the HTML itself
-  // (site-worker.js's own inline `display:none`), not something the client
-  // applies a moment later.
+  // Any unconditional anchors beside the managed block host must be hidden in
+  // the edge response itself, not by client JavaScript a moment later. Phase C
+  // removed the old fallback bodies, so this deliberately no longer pretends
+  // one still exists merely to make the assertion non-vacuous.
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.route('https://admin.timothystl.org/**', (route) => new Promise(() => {})); // never answers
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.route('https://admin.timothystl.org/**', (route) => new Promise(() => {})); // never answers
   await page.goto(base + '/news?edge=news', { waitUntil: 'domcontentloaded' });
   const state = await page.evaluate(() => {
     const pageEl = document.getElementById('page-news');
     const hardcoded = pageEl ? Array.from(pageEl.children).filter((c) => c.id !== 'news-blocks') : [];
     return {
       edgeMarked: !!(pageEl && pageEl.getAttribute('data-tlcb-edge')),
-      hardcodedCount: hardcoded.length,
-      hardcodedAllHidden: hardcoded.every((c) => getComputedStyle(c).display === 'none'),
+      noticesAnchorPresent: hardcoded.some((c) => c.id === 'notices-news'),
+      nonBlockChildrenHidden: hardcoded.every((c) => getComputedStyle(c).display === 'none'),
       blockHostVisible: !!document.getElementById('news-blocks'),
     };
   });
   ok(state.edgeMarked, 'the edge marker is present at the very first paint');
-  ok(state.hardcodedCount > 0, 'sanity: the hardcoded fallback sections are really still in the document');
-  ok(state.hardcodedAllHidden, 'and every one of them is already display:none before any client script has run');
+  ok(state.noticesAnchorPresent, 'sanity: the unconditional notices anchor is still in the document');
+  ok(state.nonBlockChildrenHidden, 'and every non-block child is already display:none before any client script has run');
   ok(state.blockHostVisible, 'the real block host is already present at the very first paint');
   await ctx.close();
 }

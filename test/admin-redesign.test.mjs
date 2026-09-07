@@ -5641,12 +5641,16 @@ group('the homepage search bar is PUBLIC, and only ever finds public content');
   eq(found.length, 1, 'only the still-live post is found, not the expired one');
   eq(found[0].href, '/news', 'a news result points at the feed — no post has an address of its own');
 
-  // A ministry page, unless it is marked hidden — same rule /api/ministry/:slug
-  // itself uses for whether there is anything behind the address at all.
+  // A ministry page is labeled by its metadata relationship, but title,
+  // address and publication state all come from the canonical pages row.
   // ⚠ Beekeepers is already a real seeded ministry, so this checks it is
   // findable rather than seeding a duplicate row over it.
   const min = await (await call(env, '/api/site-search?q=beekeep', { fresh: true })).json();
   ok(min.results.some((r) => r.section === 'Ministry' && r.href === '/bees'), 'a live ministry is found, at its own address');
+
+  db.prepare("UPDATE pages SET status='draft' WHERE id='bees'").run();
+  const draftMin = await (await call(env, '/api/site-search?q=beekeep', { fresh: true })).json();
+  ok(!draftMin.results.some((r) => r.href === '/bees'), 'the canonical draft state removes it from search');
 
   db.prepare(
     "INSERT INTO youth_pages (slug, title, page_status) VALUES ('retired-ministry', 'Retired Ministry', 'hidden')"
@@ -7391,6 +7395,109 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   } finally {
     delete globalThis.caches;
   }
+}
+
+group('the retired ministry body editors cannot publish invisible content');
+{
+  const { db, env } = await boot();
+  const office = signIn(db, ['ministries_edit', 'pages_edit'], 'office');
+  const before = db.prepare("SELECT blocks, content, hero_image_url FROM youth_pages WHERE slug='music'").get();
+
+  let res = await call(env, '/ministries/editor/music', { cookie: office.cookie });
+  eq(res.status, 302, 'an old editor bookmark redirects');
+  eq(res.headers.get('Location'), '/pages/music/edit', 'to the canonical Site Editor page');
+
+  res = await call(env, '/ministries/api/page/music/publish', { cookie: office.cookie, method: 'POST' });
+  eq(res.status, 409, 'an already-open old editor tab cannot publish');
+  const refusal = await res.json();
+  eq(refusal.editor, '/pages/music/edit', 'and the refusal names the real editor');
+  const afterRefusal = db.prepare("SELECT blocks, content, hero_image_url FROM youth_pages WHERE slug='music'").get();
+  eq(JSON.stringify(afterRefusal), JSON.stringify(before), 'the refused publish changes no legacy content');
+
+  const metadata = await (await call(env, '/ministries/meta/music', { cookie: office.cookie })).text();
+  has(metadata, 'Ministry reporting and posts metadata', 'the surviving ministry screen states its narrow purpose');
+  has(metadata, 'name="value"', 'it keeps the core-value field that is still read');
+  has(metadata, 'name="has_posts"', 'and the posts-feed setting that is still read');
+  lacks(metadata, 'name="content"', 'but exposes no orphaned body editor');
+  lacks(metadata, 'name="hero_image_url"', 'nor a write-only hero image');
+  lacks(metadata, 'name="cta_url"', 'nor write-only buttons');
+
+  db.prepare("UPDATE youth_pages SET content='<p>Preserve me</p>', hero_image_url='/legacy.jpg', cta_url='/legacy-action' WHERE slug='music'").run();
+  res = await call(env, '/ministries/update/music', {
+    cookie: office.cookie, method: 'POST', form: { value: 'education', has_posts: '1' },
+  });
+  eq(res.status, 302, 'metadata saves normally');
+  const saved = db.prepare("SELECT value, has_posts, content, hero_image_url, cta_url FROM youth_pages WHERE slug='music'").get();
+  eq(saved.value, 'education', 'the still-live core-value field changes');
+  eq(saved.has_posts, 1, 'the still-live posts setting changes');
+  eq(saved.content, '<p>Preserve me</p>', 'legacy body data is preserved');
+  eq(saved.hero_image_url, '/legacy.jpg', 'legacy image data is preserved');
+  eq(saved.cta_url, '/legacy-action', 'legacy button data is preserved');
+
+  db.prepare("UPDATE youth_pages SET title='Stale legacy title', in_menu=0 WHERE slug='music'").run();
+  db.prepare("UPDATE pages SET title='Canonical Music', status='published', in_menu=1 WHERE id='music'").run();
+  const values = await (await call(env, '/api/values', { fresh: true })).json();
+  const education = values.find((v) => v.key === 'education');
+  ok(education.ministries.some((m) => m.slug === 'music' && m.title === 'Canonical Music'),
+    'the public values page uses the canonical title and menu state, not stale legacy fields');
+
+  const list = await (await call(env, '/ministries', { cookie: office.cookie })).text();
+  has(list, '/pages/music/edit', 'the ministry list opens the canonical editor');
+  lacks(list, '/ministries/editor/music', 'and no longer advertises the retired one');
+
+  res = await call(env, '/ministries/create', {
+    cookie: office.cookie, method: 'POST', form: { slug: 'outreach-lab', title: 'Outreach Lab', has_posts: '1' },
+  });
+  eq(res.status, 302, 'creating a ministry succeeds');
+  eq(res.headers.get('Location'), '/pages/outreach-lab/edit?tab=page', 'and opens the canonical draft');
+  const createdPage = db.prepare("SELECT id, slug, parent_id, status, in_menu FROM pages WHERE id='outreach-lab'").get();
+  eq(JSON.stringify(createdPage), JSON.stringify({ id: 'outreach-lab', slug: '/outreach-lab', parent_id: 'ministries', status: 'draft', in_menu: 0 }),
+    'the new public page is a safe, unpublished child of Ministries');
+  eq(db.prepare("SELECT has_posts FROM youth_pages WHERE slug='outreach-lab'").get().has_posts, 1,
+    'and its separate ministry metadata is created with it');
+}
+
+group('ministry redirects respect canonical page ownership');
+{
+  const { db, env } = await boot();
+  const leader = signIn(db, ['ministries_edit', 'pages_edit_own'], 'music.leader');
+  db.prepare("UPDATE pages SET owner_username='music.leader' WHERE id='music'").run();
+  let res = await call(env, '/ministries/editor/music', { cookie: leader.cookie });
+  eq(res.status, 302, 'an assigned ministry leader reaches the canonical editor');
+  eq(res.headers.get('Location'), '/pages/music/edit', 'through the same old bookmark');
+
+  db.prepare("UPDATE pages SET owner_username='somebody.else' WHERE id='music'").run();
+  res = await call(env, '/ministries/editor/music', { cookie: leader.cookie });
+  eq(res.status, 200, 'an unassigned leader is not redirected into a 403');
+  const body = await res.text();
+  has(body, 'not assigned to your account', 'the page explains the missing assignment');
+  lacks(body, 'TLCB_EDITOR_CSS', 'and never serves the retired editor shell');
+
+  eq((await call(env, '/ministries/add', { cookie: leader.cookie })).status, 403,
+    'an owner-scoped leader cannot create unassigned site pages through Ministries');
+}
+
+group('retiring a newsletter field does not erase old issues');
+{
+  const { db, env } = await boot();
+  const editor = signIn(db, ['newsletter_edit'], 'writer');
+  db.prepare(
+    `INSERT INTO newsletters (id, subject, status, published_at, format, pastor_note, ministry_content, ministry_type, updated_at)
+     VALUES (975, 'Legacy ministry item', 'draft', '2026-09-07', 'weekly', '<p>Pastor</p>', '<p>Historical ministry copy</p>', 'text', '2026-09-07T09:00:00.000Z')`
+  ).run();
+  const edit = await (await call(env, '/edit/975', { cookie: editor.cookie })).text();
+  lacks(edit, 'name="ministry_content"', 'the composer does not present the retired field as functional');
+  const res = await call(env, '/publish', {
+    cookie: editor.cookie, method: 'POST', form: {
+      newsletter_id: '975', expected_updated_at: '2026-09-07T09:00:00.000Z',
+      subject: 'Legacy ministry item updated', published_at: '2026-09-07', format: 'weekly',
+      pastor_note: '<p>Pastor updated</p>', action: 'draft',
+    },
+  });
+  eq(res.status, 302, 'the ordinary edit succeeds');
+  const row = db.prepare('SELECT ministry_content, ministry_type FROM newsletters WHERE id=975').get();
+  eq(row.ministry_content, '<p>Historical ministry copy</p>', 'the hidden historical content is not blanked');
+  eq(row.ministry_type, 'text', 'and neither is its stored type');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

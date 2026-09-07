@@ -125,7 +125,7 @@ for the route string rather than assuming the row is wrong.
 | `/subscribers` | `tlc-admin-worker.js:7297` | `pattern` | `14-subscribers.html` |
 | `/users` | `tlc-admin-worker.js:8138` | `pattern` | `17-users.html` |
 | `/ministries/api/page/` | `tlc-admin-worker.js:5835` | `n/a` | — · JSON, not a screen. |
-| `/ministries/editor/` | `tlc-admin-worker.js:5824` | `n/a` | `23-ministry-editor.html` · The block editor. Its own full-screen chrome by design (22-page-editor §"The shell"). |
+| `/ministries/editor/` | redirect only | `n/a` | Retired 2026-09-07. Authorized owners are sent to the canonical `/pages/:id/edit`; old page-write API requests are refused. |
 | `/pages/[^/]+/edit` | `tlc-admin-worker.js:5555` | `n/a` | `22-page-editor.html` · Same editor, other mount. |
 | `/youth` | `tlc-admin-worker.js:5981` | `n/a` | — · A 302 to `/ministries`. Not a screen, and not a duplicate of the row below: this one answers the bare path. |
 | `/youth/` | `tlc-admin-worker.js:5984` | `n/a` | — · A 302 for the subtree, preserving the rest of the address. Both are needed. |
@@ -145,4 +145,3 @@ and a purpose line.
 | Payroll's two navy bars | `admin/payroll.html` | **Done** (Task 5) — sand with label type, like every other table header. |
 | Email templates | `admin/email.js` | **Done** (Task 16) — swept onto the Foundations colors. The earlier `n/a` said these have "their own palette on purpose"; they did not. Those were the PRE-redesign values, never swept. Color only: no CSS variables (half the clients drop them), font fallbacks kept, and the email geometry — 6px radii, the 3px note accent, the 14px header radius — left alone, because Task 1's radius audit and its drop-the-stripe rule are browser rules that do not travel to an inbox. |
 | `admin/scheduler.html` | `admin/scheduler.html` | **`n/a`** — dead code behind the session gate (the only endpoint it talks to does not exist). Its colors were swept with Task 16 anyway, so the definition-of-done grep over `admin/` can return clean; nothing else about it changed. |
-

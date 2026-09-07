@@ -155,7 +155,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 |-----|-------------|--------|
 | Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split · **on the shared pattern** at `/newsletters` (2026-08-01), with a live preview built by the real email builder and sent issues locked server-side; see "Phase 5" below |
 | News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news · **on the shared pattern**. Split from Newsletter in v3.0.0: `/newsitems` is News only, the newsletter list stays at `/` |
-| Ministries | Office staff | **DONE** — ministry page content management, now including the block-based **page editor** at `/ministries/editor/:slug` (see "Ministry Page Editor" below); also covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
+| Ministries | Office staff / assigned leaders | **DONE** — canonical page content opens in the Site Editor at `/pages/:id/edit`; `/ministries` retains only ministry-specific value/posts metadata and post management. The retired `youth_pages` body editors preserve their data but accept no writes (2026-09-07 follow-up above). |
 | Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons · **on the shared pattern**, series with their sermons indented beneath |
 | Christian Ed | Pastor/office | **DONE** — Bible class schedule (`bible_classes` table), powers /education · **on the shared pattern** |
 | Notices | Office staff — requires `notices_edit` | **DONE** — self-serve banner notices per static page (renamed from "Pages"; the permission was `pages_edit` before v3.0.0) · **on the shared pattern** |
@@ -584,8 +584,9 @@ blank, consistently, everywhere — the exact Phase C tradeoff, now applied to
 to JavaScript that looked like a working fallback and had already stopped
 being one.
 
-**⚠ A second, live content-management system was found and deliberately NOT
-touched — this is a genuinely open item, not a fixed one.** The old
+**⚠ At the end of Phase D, a second live content-management system had been
+found and deliberately not touched. It is now resolved by the signed-off
+follow-up immediately below this Phase D record.** The old
 ministry-page chain's read side (`/api/ministry/:slug`, reading
 `youth_pages.blocks_html`/`.content`) is what this pass retired from the
 *public* site. Its *write* side is still there, and still reachable by
@@ -607,15 +608,11 @@ staff today:
   primary action on every Ministries list row, and it's what staff are
   actually steered toward.
 
-Both are now writing into a column nothing on the public site reads. That's
-an inconsistency worth closing, but closing it means deciding what happens to
-a working staff-facing editing screen — port `youth_pages.content`'s current
-value into a `pages`-table block for slugs that still need it, retire the
-`/ministries/editor/:slug` mount entirely in favor of `/pages/:id/edit`, or
-something else — and that decision needs the kind of explicit sign-off Phase
-C's own markup deletion got ("Delete it all now"), not a default reached by
-a dead-code sweep. Recorded here and in `admin/BLOCK-EDITOR-ROLLOUT.md` as an
-open question rather than acted on.
+At that checkpoint both were writing into columns nothing on the public site
+read. The later follow-up received the needed sign-off and retired both write
+surfaces while preserving their stored data; this paragraph remains as the
+historical reason that work was separated from Phase D rather than folded into
+its dead-code sweep.
 
 **⚠ Two more things found on the way past — one fixed, one recorded rather
 than fixed, because `admin/escaping.test.mjs`'s own FX-14 group had two
@@ -634,12 +631,11 @@ both the moment the chain came out.**
   place `n.subject` reaches the public site now that it exists at all; fixed
   in the same pass, `escText(n.subject)`, and the test's positive assertion
   passes again on its own account rather than needing to be rewritten.
-- **`ministry_content`/`ministry_type` — the newsletter composer's "From Our
-  Ministries" field — has had no rendering path anywhere a visitor or a
-  recipient can see it since Phase C, and this pass did not create that,
-  only exposed it.** It is still a real, live, editable field: stored on
-  `newsletters`, round-tripped through create/update/duplicate, with its own
-  form control in the composer (`tlc-admin-worker.js:8572`). But
+- **`ministry_content`/`ministry_type` — the newsletter composer's former
+  "From Our Ministries" field — has had no rendering path anywhere a visitor
+  or a recipient can see it since Phase C, and Phase D did not create that,
+  only exposed it.** At this checkpoint it was still stored and round-tripped.
+  But
   `admin/email.js` — the ACTUAL sent email — has no reference to it at all,
   and the `newsletterarchive` block that replaced `/news`'s hardcoded body in
   Phase C never carried it over either (checked both its server-rendered
@@ -651,11 +647,9 @@ both the moment the chain came out.**
   since Phase D. `admin/escaping.test.mjs`'s assertion that it went through
   `escText(safeHref(...))` was checking exactly that dead code; removed, with
   the finding recorded in its own comment rather than silently dropped.
-  Whether to wire it back in somewhere (the archive card? the expansion
-  panel?) or retire the field outright — it looks superseded by
-  `wol_content`/`lasm_content`/`tertiary_note`, which the composer gained
-  later and which DO reach both the email and the block — is an open product
-  question, not something to default on the strength of a dead-code sweep.
+  The follow-up below retires the control and preserves existing values during
+  later edits, rather than silently blanking history. The database/API fields
+  remain for compatibility.
 
 Run: `node test/whole-page.test.mjs` (59, unaffected — it never exercised the
 old chain to begin with; the three groups that did were already removed in
@@ -677,6 +671,77 @@ modified). Every deleted function was confirmed to have no live callers left
 by grepping the whole file for its name before removal, and
 `tlcHydrateFeeds`/`loadNewsletterDetail`'s continued liveness was confirmed
 the same way rather than assumed from reading the surrounding comments.
+
+### The orphaned ministry editors are retired, and failed page bodies retry (Phase A–D follow-up, 2026-09-07)
+
+This closes the two concrete gaps found while reviewing Phases A–D, without
+changing the published content in either table.
+
+**The public retry is no longer poisoned for the rest of an SPA session.** In
+`public/index.html`, `loadPageBody(id)` still coalesces a successful request,
+but removes a failed/null request from `sitePageBodyPromises`. Likewise,
+`tlcMaybeTakeOverSitePage(id)` memoizes only success. If the first client-side
+body fetch fails and a visitor navigates away and back after the admin recovers,
+the body is fetched again and installed once. `test/public-page.test.mjs`
+drives exactly that sequence (503, away, back, 200) and also replaces Phase A's
+now-misleading "hardcoded fallback still exists" assertion with a non-vacuous
+check against the unconditional notices anchor Phase C actually left behind.
+
+**The second ministry authoring system is retired at the write boundary, not
+merely hidden.** In `tlc-admin-worker.js`:
+
+- `/ministries/editor/:slug` resolves the matching canonical `pages.slug` and
+  redirects to `/pages/:id/edit` only when the signed-in user has `pages_edit`
+  or owns that exact page under `pages_edit_own`. An unassigned ministry leader
+  sees an assignment explanation instead of being redirected into a 403.
+- Every POST under `/ministries/api/page/:slug/*` returns 409 with the canonical
+  editor address when available. This matters for old tabs: removing the menu
+  link alone would still let one autosave or publish unused
+  `youth_pages.blocks`/`published_blocks`.
+- `/ministries/edit/:slug` redirects to `/ministries/meta/:slug`. That screen
+  exposes only `value` and `has_posts`, still used by the values report/public
+  values page and ministry posts. Saves update only those columns. Historical
+  body, image, video and CTA columns remain untouched and recoverable.
+- The Ministries list and command search point at canonical page editors when
+  ownership allows it. Menu state and status come from `pages`, and only a
+  full `pages_edit` account can change menu membership.
+- Public search and `/api/values` now take ministry title, address, menu state
+  and publication state from `pages`; `youth_pages` supplies only the ministry
+  relationship and core value. The dashboard task that called an orphaned
+  body "empty" is gone.
+- A new ministry requires `pages_edit` and creates its canonical unpublished,
+  out-of-menu `pages` child plus the `youth_pages` metadata row in one D1 batch.
+  The old metadata-only delete is no longer offered and its direct POST refuses
+  rather than pretending it deleted the public page.
+- The cron no longer promotes scheduled `youth_pages` bodies that the public
+  site cannot read. Canonical scheduled pages continue unchanged.
+
+**The newsletter's already-retired `ministry_content` control no longer erases
+history.** The composer had already stopped rendering that field, but every
+edit still overwrote it with an empty string and reset `ministry_type`. The
+save query now reads and preserves both values on existing issues; new issues
+continue to store the neutral empty/text defaults. The public compatibility
+fields and duplicate behavior remain intact.
+
+**CI now exercises the browser boundary.** `.github/workflows/test.yml` adds a
+narrow, pinned Chromium job for `test/public-page.test.mjs`, the suite that
+proves edge-first rendering, client fallback and the retry behavior above. The
+rest of the longer Playwright set remains targeted local coverage.
+
+Files changed: `public/index.html`, `tlc-admin-worker.js`,
+`test/public-page.test.mjs`, `test/admin-redesign.test.mjs`,
+`.github/workflows/test.yml`, this file, and
+`admin/BLOCK-EDITOR-ROLLOUT.md`, `admin/REDESIGN-STATUS.md`, plus the
+staff-facing correction in `public/manual.html`.
+
+Verification: the real Worker/SQLite suite passes 1,855 checks, including new
+tests that confirm an old publishing tab is refused without changing legacy
+columns, owner-scoped redirects remain scoped, metadata edits preserve every
+retired field, new ministries create both records, and newsletter edits retain
+historical ministry content. `node --check` and every browserless repository
+suite pass. The local container used for this follow-up has no Chromium binary,
+so the new public-page browser test could not run locally; the added PR job is
+the required independent execution of that test before merge.
 
 ### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
 
@@ -7495,6 +7560,11 @@ needed rewriting.
 
 ### Ministry Page Editor (added 2026-07-30)
 
+> **Historical implementation record.** This section describes the original
+> `youth_pages` editor as shipped. Its public read path was removed in Phase D,
+> and its staff write path was retired in the 2026-09-07 follow-up above. The
+> shared block renderer/editor remains live through `/pages/:id/edit`.
+
 Ministry pages are an ordered list of typed **blocks** rather than one TinyMCE box,
 edited in a full-viewport drag-and-drop editor at `/ministries/editor/:slug`. Built
 from the design handoff in `design_handoff_ministry_page_editor/`. The pastor's
@@ -9593,11 +9663,11 @@ navigation is generated from those rows.
   draft-vs-live, list order, filters, `slugify`/`uniqueSlug`/`pageRename`. A
   page reads as a draft when `blocks ≠ published_blocks` **or** `status='draft'`;
   never from a session's change log, or the list and the editor topbar disagree.
-- **One editor, two mounts.** `admin/ministry-editor.html` serves both
-  `/ministries/editor/:slug` and `/pages/:id/edit`; it works out from its own
-  address which API to talk to (`/ministries/api` vs `/pages/api`). The routes
-  that do not care which table the page lives in — media, saved sections,
-  new-block, render — are one implementation in `sharedEditorApi()`.
+- **One editor, formerly two mounts.** `admin/ministry-editor.html` originally
+  served both `/ministries/editor/:slug` and `/pages/:id/edit`. The former now
+  redirects authorized owners to the latter, and its page-write API returns
+  409. Shared media, saved-section, new-block and render helpers remain one
+  implementation in `sharedEditorApi()`.
 - **Two roles.** `site_pages` is office staff — every page, the menu, the
   church details. `site_pages_own` is a ministry leader: they see only the
   pages whose `pages.owner_username` is theirs, can edit the content, and

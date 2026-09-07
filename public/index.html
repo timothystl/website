@@ -1497,7 +1497,9 @@ function loadSitePages() {
 // the edge did NOT already render (an unpublished page, or the admin was
 // unreachable at request time). Memoized per id, the same shape
 // loadSitePages() itself uses, so navigating back to a page already fetched
-// this session costs nothing a second time.
+// this session costs nothing a second time. A failed request is deliberately
+// NOT memoized: the admin can recover while this SPA is still open, and a
+// visitor who comes back to the page must get another chance at its body.
 //
 // `?id=<pageId>` asks the SAME /api/pages route for the SAME cached bundle
 // loadSitePages() and the edge both already trigger the build of — this is a
@@ -1506,11 +1508,15 @@ function loadSitePages() {
 var sitePageBodyPromises = {};
 function loadPageBody(id) {
   if (sitePageBodyPromises[id]) return sitePageBodyPromises[id];
-  sitePageBodyPromises[id] = fetch('https://admin.timothystl.org/api/pages?id=' + encodeURIComponent(id))
+  var request = fetch('https://admin.timothystl.org/api/pages?id=' + encodeURIComponent(id))
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) { return (d && d.rendered && d.rendered[id]) || null; })
     .catch(function () { return null; });
-  return sitePageBodyPromises[id];
+  sitePageBodyPromises[id] = request;
+  return request.then(function (html) {
+    if (!html && sitePageBodyPromises[id] === request) delete sitePageBodyPromises[id];
+    return html;
+  });
 }
 
 // The block stylesheet used to ride inside every /api/ministry response —
@@ -1810,7 +1816,11 @@ async function tlcHydrateFeedsIfPresent(id, root) {
 // down and the blocks render in their place.
 var sitePageTakeover = {};
 async function tlcMaybeTakeOverSitePage(id) {
-  if (sitePageTakeover[id] !== undefined) return sitePageTakeover[id];
+  // Success is permanent for this document; failure is not. The previous
+  // `!== undefined` check paired with `sitePageTakeover[id] = false` below
+  // turned one transient API failure into a session-long failure, even after
+  // the visitor navigated away and came back.
+  if (sitePageTakeover[id]) return true;
   // ⚠ THE EDGE MAY HAVE ALREADY DONE THIS, AND WHEN IT HAS, ITS OUTPUT IS
   // AUTHORITATIVE ON ITS OWN — NOT WHEN loadSitePages() ALSO SAYS SO.
   // site-worker.js puts the published blocks into the HTML as it serves the
@@ -1840,7 +1850,6 @@ async function tlcMaybeTakeOverSitePage(id) {
     await tlcHydrateFeedsIfPresent(id, pre);
     return true;
   }
-  sitePageTakeover[id] = false;
   // The edge did not already render this page (unpublished, or the admin was
   // unreachable when the request was served) — this is the one place a page's
   // own body is still needed from here, so it is fetched on its own rather
