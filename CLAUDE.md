@@ -2,6 +2,11 @@
 
 This file captures the full project context so any Claude session can be resumed immediately.
 
+> **START HERE — DIGITAL OVERHAUL:** Before reviewing or continuing the website's
+> block-editor/public-rendering overhaul, read [`DIGITAL-OVERHAUL.md`](DIGITAL-OVERHAUL.md).
+> It is the canonical review entry point for Phases A–D, identifies stale rollout material,
+> and records the staff-facing legacy ministry editors that remain an open product decision.
+
 > **⚠ American English, in everything a human reads** — screen labels, button text, purpose
 > lines, `◆` notes, toasts, code comments, this file, and `public/manual.html`. The full rule,
 > the four things that look British and must **not** be "corrected", and the grep that checks it
