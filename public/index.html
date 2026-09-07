@@ -3303,43 +3303,59 @@ function buildNav(pages, menu) {
   }
 }
 
+// Fills any posts/events feed block already sitting under `root` — same test
+// tlcHydrateFeeds' own callers always used (tlcHas against the fetched HTML
+// string), rewritten against the DOM that is actually on the page so it works
+// whether that markup arrived from the edge or from tlcTakeOverPage() below.
+async function tlcHydrateFeedsIfPresent(id, root) {
+  if (!root || !root.querySelector('[data-tlcb-feed]')) return;
+  try {
+    var posts = await fetch('https://admin.timothystl.org/api/ministry/' + id + '/posts');
+    if (posts.ok) tlcHydrateFeeds(id, await posts.json());
+  } catch (e) {}
+}
+
 // Takes over a page that has been published from the page editor. Same
 // mechanism as the ministry editor's takeover: the hardcoded sections are stood
 // down and the blocks render in their place.
 var sitePageTakeover = {};
 async function tlcMaybeTakeOverSitePage(id) {
   if (sitePageTakeover[id] !== undefined) return sitePageTakeover[id];
-  sitePageTakeover[id] = false;
-  // ⚠ THE EDGE MAY HAVE ALREADY DONE THIS. site-worker.js puts the published
-  // blocks into the HTML as it serves the page somebody typed the address for,
-  // so there is no flash of the hardcoded markup — see the long note there.
-  // When it has, the marker is on the page div and the injection must NOT
-  // happen twice: a second copy of every block, below the first.
+  // ⚠ THE EDGE MAY HAVE ALREADY DONE THIS, AND WHEN IT HAS, ITS OUTPUT IS
+  // AUTHORITATIVE ON ITS OWN — NOT WHEN loadSitePages() ALSO SAYS SO.
+  // site-worker.js puts the published blocks into the HTML as it serves the
+  // page somebody asked for, hides the hardcoded fallback inline, and marks
+  // the page div — see the long note there. That is already a finished,
+  // correct page before a single line of this file has run.
   //
-  // The feeds below still need filling, so this returns true through the
-  // normal path rather than short-circuiting out of the function — the edge
-  // ships the block markup, not the posts inside it.
+  // The old shape here waited on `await loadSitePages()` to confirm `html`
+  // was non-empty before it would even acknowledge the edge's own work — so a
+  // slow or failed /api/pages (needed only for the NAV, FOOTER and
+  // APPEARANCE, none of which this page's own body depends on) meant this
+  // returned false, which sent a legacy loader chasing after a page that was
+  // already correct, and skipped tlcCalScan()/tlcCalRetire() outright — a
+  // calendar block sitting in an edge-rendered page never mounted at all.
+  // That is the opposite of "authoritative": the render the visitor is
+  // already looking at was being second-guessed by a request for data it
+  // never needed.
   var pre = document.getElementById('page-' + id);
-  var already = !!(pre && pre.getAttribute('data-tlcb-edge'));
+  if (pre && pre.getAttribute('data-tlcb-edge')) {
+    sitePageTakeover[id] = true;
+    tlcCalRetire(pre);
+    tlcCalScan(pre);
+    // Nav, footer and appearance genuinely do come from this fetch — see
+    // loadSitePages() — so it still runs. It is fired, not awaited: nothing
+    // about THIS page's own body is gated on it landing.
+    loadSitePages();
+    await tlcHydrateFeedsIfPresent(id, pre);
+    return true;
+  }
+  sitePageTakeover[id] = false;
   var d = await loadSitePages();
   var html = d && d.rendered && d.rendered[id];
-  if (!html) return false;
-  if (!already && !tlcTakeOverPage(id, html)) return false;
+  if (!html || !tlcTakeOverPage(id, html)) return false;
   sitePageTakeover[id] = true;
-  // ⚠ The edge path injects the markup server-side and never calls
-  // tlcTakeOverPage at all, so the scan has to happen here as well — that is
-  // the case a visitor typing the address straight in actually gets.
-  if (already) {
-    var edged = document.getElementById('page-' + id);
-    tlcCalRetire(edged);
-    tlcCalScan(edged);
-  }
-  if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
-    try {
-      var posts = await fetch('https://admin.timothystl.org/api/ministry/' + id + '/posts');
-      if (posts.ok) tlcHydrateFeeds(id, await posts.json());
-    } catch (e) {}
-  }
+  await tlcHydrateFeedsIfPresent(id, document.getElementById(id + '-blocks'));
   return true;
 }
 

@@ -30,31 +30,84 @@ const eq = (a, b, m) => ok(a === b, `${m} — expected ${JSON.stringify(b)}, got
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
-// Mirrors the site worker: unknown paths fall through to the SPA shell.
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
+
+// ?edge=<id> stands in for site-worker.js having already put that page's
+// published blocks into the HTML — prepend the host, mark the page,
+// hide every one of the page's own OTHER direct children, exactly what
+// rewriteDocument() does in site-worker.js.
+//
+// ⚠ A REAL DOM, NOT A REGEX. An earlier version of this matched only the
+// opening `<div id="page-<id>">` tag and spliced a closing `</div>` in right
+// after the injected host — which closed `#page-<id>` immediately, kicking
+// every one of its real hardcoded children out to become SIBLINGS instead.
+// That went unnoticed because every existing assertion here only ever
+// checked substrings of `textContent`, which does not care about nesting or
+// about `display:none` either — so a test built to check that hidden
+// content is ACTUALLY HIDDEN (not just present somewhere in the document)
+// needs the real nesting a regex over an unparsed string cannot reliably
+// preserve. `DOMParser`, run inside a scratch page, is a real HTML parser
+// with no dependency this dependency-free repo would have to add — and it
+// parses inertly: no script runs, no request fires, so it costs nothing
+// beyond the one extra page.
+async function computeEdgedHtml(rawHtml, pageId, blocksHtml) {
+  const prep = await browser.newPage();
+  try {
+    return await prep.evaluate(({ rawHtml, pageId, blocksHtml }) => {
+      const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
+      const pageEl = doc.getElementById('page-' + pageId);
+      if (pageEl) {
+        const host = doc.createElement('div');
+        host.id = pageId + '-blocks';
+        host.innerHTML = blocksHtml;
+        pageEl.insertBefore(host, pageEl.firstChild);
+        pageEl.setAttribute('data-tlcb-edge', '1');
+        Array.prototype.forEach.call(pageEl.children, (c) => {
+          if (c === host) return;
+          const prev = c.getAttribute('style') || '';
+          c.setAttribute('style', prev ? prev + ';display:none' : 'display:none');
+        });
+      }
+      return '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+    }, { rawHtml, pageId, blocksHtml });
+  } finally {
+    await prep.close();
+  }
+}
+
+// ⚠ `nextEdgeBody` IS SINGLE-USE AND MUST BE SET IMMEDIATELY BEFORE THE ONE
+// page.goto() IT IS FOR. This file drives its visits one at a time (every
+// caller `await`s its own visit before the next starts), so a module-level
+// slot consumed on the very next request that carries `?edge=` is safe; it
+// would not be if two visits were ever in flight at once.
+let nextEdgeBody = null;
 const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(String((err && err.stack) || err));
+  });
+});
+async function handleRequest(req, res) {
   const url = new URL(req.url, 'http://localhost');
   let file = path.join(ROOT, decodeURIComponent(url.pathname));
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(ROOT, 'index.html');
   let body = fs.readFileSync(file);
-  // ?edge=<id> stands in for site-worker.js having already put that page's
-  // published blocks into the HTML. It does the same three things the real
-  // rewriter does — prepend the host, mark the page, hide the original
-  // children — so the SPA sees exactly what a real visitor's first paint has.
+  // The body defaults to a placeholder ("EDGE RENDERED") good enough for
+  // asserting the client did not inject a second copy on top of it; a caller
+  // that needs the ACTUAL published markup on the page — a real calendar
+  // mount, a real feed block — sets nextEdgeBody first.
   const edge = url.searchParams.get('edge');
   if (edge && file.endsWith('index.html')) {
-    const open = new RegExp('<div id="page-' + edge + '"([^>]*)>');
-    body = Buffer.from(String(body).replace(open,
-      (m, attrs) => '<div id="page-' + edge + '"' + attrs + ' data-tlcb-edge="1">' +
-        '<div id="' + edge + '-blocks"><div class="tlcb-page"><div class="tlcb tlcb--text">' +
-        'EDGE RENDERED</div></div></div>'));
+    const inner = nextEdgeBody != null ? nextEdgeBody
+      : '<div class="tlcb-page"><div class="tlcb tlcb--text">EDGE RENDERED</div></div>';
+    nextEdgeBody = null;
+    body = Buffer.from(await computeEdgedHtml(body.toString('utf8'), edge, inner));
   }
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
   res.end(body);
-});
+}
 await new Promise((r) => server.listen(0, r));
 const base = 'http://localhost:' + server.address().port;
-
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
 
 async function visit(slug, apiPage, posts = []) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -89,14 +142,26 @@ async function visit(slug, apiPage, posts = []) {
 // ("marketvendors") and real address ("/christmasmarket/vendors") are two
 // different strings on purpose (`NESTED_PATHS` in public/index.html). A
 // harness that only ever visited `/slug` could never exercise that gap.
-async function visitEdged(slug, renderedHtml, { edged = true, path = null } = {}) {
+// `pagesRoute`, when given, replaces the default /api/pages fulfillment —
+// used to simulate the admin being slow, unreachable, or erroring, which is
+// exactly the case an edge-rendered page's own body must not depend on.
+//
+// `edgeBody`, when given, is what actually lands in the initial HTML at
+// `?edge=` — the default placeholder text is enough to prove the client did
+// not inject a second copy on top of it, but it carries no real block markup
+// (no calendar mount, no feed block), so a test that needs the edge's OWN
+// content to actually do something passes its real rendered HTML here.
+async function visitEdged(slug, renderedHtml, { edged = true, path = null, pagesRoute = null, edgeBody = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const errors = [];
+  const hits = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
+    hits.push(u);
     if (u.includes('/api/pages')) {
+      if (pagesRoute) return pagesRoute(route);
       return route.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify({ pages: [{ id: slug, slug: '/' + slug }], menu: null,
           rendered: { [slug]: renderedHtml }, redirects: {}, css: BLOCK_CSS }) });
@@ -104,9 +169,10 @@ async function visitEdged(slug, renderedHtml, { edged = true, path = null } = {}
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  if (edged && edgeBody != null) nextEdgeBody = edgeBody;
   await page.goto(base + (path || '/' + slug) + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
-  return { page, ctx, errors };
+  return { page, ctx, errors, hits };
 }
 
 // The Worker's response shape for a block-managed page — withCss:false, as
@@ -316,6 +382,109 @@ console.log('\nthe edge already rendered the page');
   ok((await plain.page.textContent('#page-news')).includes('PUBLISHED BODY'),
     'and the published blocks are on the page');
   await plain.ctx.close();
+}
+
+console.log('\nthe edge-rendered body is authoritative — it does not wait on /api/pages');
+{
+  // Phase A: tlcMaybeTakeOverSitePage() used to require /api/pages to
+  // succeed and echo back a non-empty `rendered[id]` before it would even
+  // acknowledge the edge already did its job — so a slow or failed admin
+  // (needed only for the nav, footer and appearance chrome, none of which
+  // this page's own body reads) meant a calendar block sitting in an
+  // edge-rendered page never mounted at all, and a legacy loader was sent
+  // chasing a page that was already correct.
+  const calHtml = renderPage(sanitizeBlocks([newBlock('calendar')]), { slug: 'news', withCss: false });
+  ok(/data-tlc-calendar/.test(calHtml), 'sanity: the fixture really carries a calendar mount');
+
+  // ⚠ NEVER RESOLVES — the closest thing to the real symptom (D1 exhausted,
+  // ~16s per admin query — see CLAUDE.md's "D1 hit its free-tier row-read
+  // ceiling"): a request that is slow rather than one that fails outright.
+  {
+    const { page, ctx, errors, hits } = await visitEdged('news', calHtml, {
+      pagesRoute: () => new Promise(() => {}),
+      edgeBody: calHtml,
+    });
+    eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+    const drew = await page.evaluate(() => {
+      const el = document.querySelector('[data-tlc-calendar]');
+      return el ? el.innerHTML.length > 0 : null;
+    });
+    ok(drew, 'the calendar block mounts even while /api/pages is still hanging');
+    ok(hits.some((u) => u.includes('/api/pages')), 'the fetch was still made — this is additive, not a skip');
+    await ctx.close();
+  }
+
+  // A hard failure (the admin answering, but with an error) must not put a
+  // legacy loader on top of the body the edge already delivered correctly.
+  {
+    const textHtml = renderPage(sanitizeBlocks([newBlock('text', { body: '<p>PUBLISHED BODY</p>' })]),
+      { slug: 'news', withCss: false });
+    const { page, ctx, errors } = await visitEdged('news', textHtml, {
+      pagesRoute: (route) => route.fulfill({ status: 500, body: 'admin unavailable' }),
+      edgeBody: textHtml,
+    });
+    eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+    eq(await page.locator('#news-blocks').count(), 1, 'still exactly one copy of the block host');
+    ok((await page.textContent('#page-news')).includes('PUBLISHED BODY'), 'the edge content is unchanged');
+    await ctx.close();
+  }
+
+  // The successful case: /api/pages is still the one door onto the nav,
+  // footer and appearance chrome — and it is asked for exactly once, not
+  // once for "is this page real" and again for "now build the chrome".
+  {
+    const bodyHtml = renderPage(sanitizeBlocks([newBlock('text', { body: '<p>PUBLISHED BODY</p>' })]),
+      { slug: 'news', withCss: false });
+    const nav = { header: [{ kind: 'external', href: 'https://example.org/give', label: 'Give Now', style: 'button' }] };
+    const details = { settings: { address_line: '123 Test Ave', address_city: 'St. Louis', phone: '555-0100', email: 'office@example.org' }, services: [] };
+    const { page, ctx, errors, hits } = await visitEdged('news', bodyHtml, {
+      pagesRoute: (route) => route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ pages: [{ id: 'news', slug: '/news' }], menu: nav, details,
+          rendered: { news: bodyHtml }, redirects: {}, css: BLOCK_CSS }) }),
+      edgeBody: bodyHtml,
+    });
+    eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+    eq(hits.filter((u) => u.includes('/api/pages')).length, 1, '/api/pages is fetched exactly once');
+    eq(await page.locator('#news-blocks').count(), 1, 'the block host still appears exactly once');
+    // ⚠ Requirement (4): the global chrome this fetch is actually for must
+    // still work — a page whose own body is authoritative is not a page
+    // that stops updating its nav and footer.
+    ok((await page.textContent('.nav-links')).includes('Give Now'), 'the admin-managed nav still renders');
+    ok((await page.locator('.footer-brand-addr').innerHTML()).includes('123 Test Ave'),
+      'and the footer address still renders from church details');
+    await ctx.close();
+  }
+}
+
+console.log('\nan edge-rendered page never shows the hardcoded body first');
+{
+  // Requirement (5). This asks the question at the earliest possible moment —
+  // right after DOMContentLoaded, before any of this file's own JavaScript has
+  // had a chance to run tlcMaybeTakeOverSitePage() at all — because a flash
+  // this brief would never survive to a check made after waitForTimeout(900).
+  // The hardcoded markup being hidden has to be baked into the HTML itself
+  // (site-worker.js's own inline `display:none`), not something the client
+  // applies a moment later.
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await page.route('https://admin.timothystl.org/**', (route) => new Promise(() => {})); // never answers
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.goto(base + '/news?edge=news', { waitUntil: 'domcontentloaded' });
+  const state = await page.evaluate(() => {
+    const pageEl = document.getElementById('page-news');
+    const hardcoded = pageEl ? Array.from(pageEl.children).filter((c) => c.id !== 'news-blocks') : [];
+    return {
+      edgeMarked: !!(pageEl && pageEl.getAttribute('data-tlcb-edge')),
+      hardcodedCount: hardcoded.length,
+      hardcodedAllHidden: hardcoded.every((c) => getComputedStyle(c).display === 'none'),
+      blockHostVisible: !!document.getElementById('news-blocks'),
+    };
+  });
+  ok(state.edgeMarked, 'the edge marker is present at the very first paint');
+  ok(state.hardcodedCount > 0, 'sanity: the hardcoded fallback sections are really still in the document');
+  ok(state.hardcodedAllHidden, 'and every one of them is already display:none before any client script has run');
+  ok(state.blockHostVisible, 'the real block host is already present at the very first paint');
+  await ctx.close();
 }
 
 console.log('\na block ships its own script, and both paths run it');
