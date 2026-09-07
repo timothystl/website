@@ -132,6 +132,12 @@ async function visitEdged(slug, renderedHtml, { edged = true, path = null, pages
   const errors = [];
   const hits = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // Playwright runs matching routes in reverse registration order. Register
+  // the catch-all first so the admin-specific handler below actually sees
+  // /api/pages instead of having every HTTPS request swallowed as an empty
+  // response. Reversing these two registrations makes the takeover tests fail
+  // non-vacuously: `hits` stays empty and no managed body is injected.
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
     hits.push(u);
@@ -143,7 +149,6 @@ async function visitEdged(slug, renderedHtml, { edged = true, path = null, pages
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
-  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   if (edged && edgeBody != null) nextEdgeBody = edgeBody;
   await page.goto(base + (path || '/' + slug) + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
@@ -274,11 +279,13 @@ console.log('\nthe homepage is frugal with its fetches');
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const hits = [];
+  // Catch-all first; Playwright gives the later, more-specific admin route
+  // precedence when both patterns match.
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.route('https://admin.timothystl.org/**', (route) => {
     hits.push(route.request().url());
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
-  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
 
@@ -437,8 +444,8 @@ console.log('\nan edge-rendered page is authoritative at first paint');
   // one still exists merely to make the assertion non-vacuous.
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.route('https://admin.timothystl.org/**', (route) => new Promise(() => {})); // never answers
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.route('https://admin.timothystl.org/**', (route) => new Promise(() => {})); // never answers
   await page.goto(base + '/news?edge=news', { waitUntil: 'domcontentloaded' });
   const state = await page.evaluate(() => {
     const pageEl = document.getElementById('page-news');
