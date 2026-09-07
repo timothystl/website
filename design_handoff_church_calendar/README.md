@@ -1,5 +1,10 @@
 # Handoff: Custom Church Calendar (timothystl.org)
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 > **Two prototypes live in this folder, from two separate Claude Design
 > handoffs sharing one project.** `Calendar Directions.dc.html` (this
 > README) is the public `/calendar` page and the printed month sheet —

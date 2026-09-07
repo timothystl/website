@@ -1,5 +1,10 @@
 # Admin redesign — fix list
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **For:** Claude Code, working in `timothystl/website`
 **Source of truth:** `design_handoff_admin_overhaul/screens/` — `00-foundations.html` (shell values), `00b-header-nav.html` (the new navigation), `AUDIT.html` (why each of these is here), and one file per screen.
 **Audited against:** `main` @ `5f90460`, 1 Aug 2026.

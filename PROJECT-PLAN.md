@@ -1,5 +1,10 @@
 # Timothy Lutheran Church — Website Project Plan
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **Last updated:** March 2026
 **Goal:** Replace the Tithely/Breeze-hosted website with a fully custom site, tested safely, then launched at timothystl.org.
 

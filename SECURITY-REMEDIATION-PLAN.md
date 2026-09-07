@@ -1,5 +1,10 @@
 # Security & Reliability Remediation Plan
 
+> **Security reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Source: Executive assessment, 2026-08-23. This plan turns each finding into a
 scoped, sequenced piece of work with an owner role, acceptance criteria and a
 test to prove it. Nothing in this document has been implemented yet — it is

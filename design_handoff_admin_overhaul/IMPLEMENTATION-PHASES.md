@@ -1,5 +1,10 @@
 # Implementation Phases
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Nine phases, ordered so that **every phase ships something usable** and nothing is half-migrated at the end of a week. Read `README.md` first for the spec; this file is the build order and the definition of done.
 
 Stack assumption: existing Cloudflare Worker (`tlc-admin-worker.js`) + D1, server-rendered HTML with `sidebarShell()`. No framework migration. The prototypes are read for structure and values, never ported.

@@ -1,5 +1,10 @@
 # Handoff: /news redesign and the 1b site language
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 > **Building with Claude Code? Paste `KICKOFF_PROMPT.md` as your first message** — it points the agent at the right files in the right order and asks it to verify against the repo before writing code.
 >
 > **The build plan itself is `CLAUDE_CODE_BRIEF.md`** — a phased build plan with a Phase 0 verification list of the six things most likely to break the plan, plus acceptance criteria and known gaps.

@@ -1,5 +1,10 @@
 # Handoff: Christmas Market Vendor Sign-up
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 ## Overview
 
 A vendor application page for the **Timothy Christmas Market** (Timothy Lutheran Church, 6704 Fyler Ave, St. Louis, MO 63139 — LCMS). It replaces the Google Form + spreadsheet workflow used in 2024 (`Weihnachtsmarkt Registration`) with a page on timothystl.org.

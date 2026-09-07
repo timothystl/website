@@ -1,5 +1,10 @@
 # Kickoff prompt for Claude Code
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Copy everything below the line into Claude Code as your first message, with the
 `design_handoff_news_redesign/` folder present in the repo (or its path adjusted).
 

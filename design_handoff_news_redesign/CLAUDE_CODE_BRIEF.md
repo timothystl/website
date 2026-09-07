@@ -1,5 +1,10 @@
 # Build brief — /news redesign and the 1b site language
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 You are implementing a design handoff into an existing repo. Read this file first, then
 `README.md` for the full specification. `Handoff.dc.html` is the same specification with
 screenshots — open it in a browser if you need to see what something looks like.
