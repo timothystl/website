@@ -173,6 +173,80 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
+### An edge-rendered page's own body no longer waits on `/api/pages` to work (2026-09-07)
+
+FX-18 from the 2026-08-19 review — *"Stop the client re-fetching what the edge
+already delivered"* — sat on the Phase 3 plan unfinished. Picked up as "Phase
+A" of a wider overhaul: make the Site Worker's own render authoritative for a
+page the block editor fully manages, so the browser stops second-guessing it.
+
+**`tlcMaybeTakeOverSitePage()` treated the edge's own work as provisional,
+not authoritative.** When `site-worker.js` had already injected a page's
+published blocks and marked the div `data-tlcb-edge="1"`, the client still
+`await`ed `loadSitePages()` — the `/api/pages` fetch that exists for the
+NAV, FOOTER and APPEARANCE chrome — before it would even agree the page was
+taken care of. Three real consequences, none of them hypothetical given this
+repo's own 2026-09-04 D1 outage where every admin query took ~16s:
+
+- **A calendar block in an edge-rendered page never mounted at all** if that
+  fetch was slow or failed — `tlcCalScan()`/`tlcCalRetire()` sat behind
+  `if (!html) return false;`, and `html` came from the very network call that
+  had nothing to do with this page's own body.
+- **A slow or failed `/api/pages` sent a legacy loader chasing a page that
+  was already correct** — `showPage()`'s `.then(function (took) { if (took)
+  return; … })` saw `took === false` and ran `loadLegacyNewsPage()` /
+  `tlcMaybeTakeOver(id)` / `loadMinistryPage(id)` on top of a body the edge
+  had already finished rendering.
+- **The feed-hydration check read the network-fetched HTML string**
+  (`tlcHas(html, 'posts')`) rather than the DOM already on the page, so it
+  shared the same false dependency.
+
+Fixed by branching on `data-tlcb-edge` FIRST, before anything is awaited: if
+the edge already rendered the page, `tlcCalScan`/`tlcCalRetire` run against
+the live DOM immediately, feed hydration (`tlcHydrateFeedsIfPresent`, new)
+checks the DOM for `[data-tlcb-feed]` instead of a fetched string, and
+`sitePageTakeover[id]` is set `true` and returned without waiting on
+anything. `loadSitePages()` is still called — the nav, footer and appearance
+genuinely do come from it — but it is fired, not awaited, and nothing about
+the page's own body is gated on it landing. The fallback path (no edge
+marker — an unpublished page, or the admin was unreachable at request time)
+is untouched: it still awaits `loadSitePages()`, because that is genuinely
+the only place the fallback's content comes from.
+
+⚠ **Purely a client-side hydration change — nothing about what gets served
+changed.** `site-worker.js` (the edge render itself), the block editor, and
+`/api/pages`'s shape are all untouched. A page with nothing published still
+falls all the way through to its hardcoded markup exactly as before.
+
+Verified non-vacuous: reverting the fix and re-running the new browser
+assertions below reproduces the exact reported shape — a calendar block that
+never draws while `/api/pages` is left hanging.
+
+⚠ **A real bug found on the way past, in the test harness itself, not in
+production.** `test/public-page.test.mjs`'s `?edge=<id>` fixture — which
+stands in for `site-worker.js`'s own edge injection — matched only the
+opening `<div id="page-<id>">` tag with a regex and spliced its own closing
+`</div>` in right after the injected block host. That closed `#page-<id>`
+immediately, kicking every one of the page's real hardcoded children out to
+become SIBLINGS of it rather than children — invisible to every assertion
+that existed before this pass, because they all checked `textContent`
+substrings, which does not care about nesting or about `display:none`
+either. It surfaced only once a test needed the real thing this fixture was
+supposed to prove: that the hardcoded fallback is actually hidden, not just
+present somewhere in the document. Rewritten to use a real `DOMParser`,
+run inertly (no script executes, no request fires) inside a scratch
+Playwright page, which prepends the block host and sets `display:none` on
+every other direct child exactly the way `rewriteDocument()` does — no new
+dependency in a repo that deliberately has none.
+
+Run: the `the edge-rendered body is authoritative — it does not wait on
+/api/pages` and `an edge-rendered page never shows the hardcoded body first`
+groups in `node test/public-page.test.mjs` (Chromium — this suite is not in
+CI, see `.github/workflows/test.yml`'s own note on why), alongside the
+existing `the edge already rendered the page` group in the same file and the
+full `node test/site-edge-render.test.mjs` (unaffected — nothing there
+changed).
+
 ### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
 
 Dinger, once the market fix above was confirmed working, checking whether it
