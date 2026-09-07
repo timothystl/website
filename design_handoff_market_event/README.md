@@ -1,5 +1,10 @@
 # Handoff — Christmas Market as an event: split vendor page, site-wide jump bar, five-tab admin
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **Repo:** `timothystl/website` (branch `main`)
 **Design reference:** `Christmas Market — Event Section.dc.html` in this bundle — options **1b** (public) and **1c** (admin) are the approved ones. 1a and 1d are context only; 1d's Events section is **out of scope here** and comes next.
 

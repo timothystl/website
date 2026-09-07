@@ -1,5 +1,10 @@
 # Every page on the block editor — where it stands, and what is left
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 > **CURRENT REVIEW ENTRY POINT:** Start with [`../DIGITAL-OVERHAUL.md`](../DIGITAL-OVERHAUL.md).
 > This file preserves the original rollout detail, but portions below the dated warning are
 > historical and must not be treated as current production status without rechecking.

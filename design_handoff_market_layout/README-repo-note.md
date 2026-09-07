@@ -1,5 +1,10 @@
 # What is in here, and what was left out
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 The designer's bundle for the Christmas Market admin redesign, committed whole
 for the same reason the four handoffs beside it are: a session reading half a
 handoff builds half a design and cannot tell.

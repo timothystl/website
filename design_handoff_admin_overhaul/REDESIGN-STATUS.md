@@ -1,5 +1,10 @@
 # Moved — the live inventory is `admin/REDESIGN-STATUS.md`
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 The handoff shipped a copy of the screen inventory. It is deliberately not kept
 here, because two copies of a status table are two answers to "is this done
 yet", and the one nobody edits is the one that gets read. This copy was already

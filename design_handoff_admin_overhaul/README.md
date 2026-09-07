@@ -1,5 +1,10 @@
 # Timothy Lutheran Admin — Full Overhaul Spec
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Handoff for the redesign of `admin.timothystl.org`. Two prototypes, twenty sections, one interaction pattern.
 
 Everything here is designed against the **real schema** in `tlc-admin-worker.js` and `admin/db.js` — table and column names in this document are the ones already in the D1 database unless marked **NEW**.
