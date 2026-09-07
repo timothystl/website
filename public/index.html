@@ -1034,82 +1034,14 @@ async function loadHomeSermonCard() {
 }
 loadHomeSermonCard();
 
-// Load news items from admin worker API (for /news page)
-async function loadNewsItems() {
-  try {
-    const res = await fetch('https://admin.timothystl.org/api/news');
-    if (!res.ok) throw new Error('not ok');
-    const items = await res.json();
-    if (!items || items.length === 0) return;
-    const section = document.getElementById('news-items-section');
-    const list = document.getElementById('news-items-list');
-    section.style.display = '';
-    list.innerHTML = items.map(item => {
-      const hasContent = (item.body && item.body.trim().length > 0) || item.summary || item.image_url;
-      const bodyId = 'ni-body-' + item.id;
-      const dateRaw = item.event_date || item.publish_date || '';
-      const dateLabel = dateRaw ? new Date(dateRaw + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
-      const hasImage = item.image_url && item.image_url.trim().length > 0;
-      return `<div style="background:white;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden;">
-  <button onclick="var b=document.getElementById('${bodyId}');var ic=this.querySelector('.ni-chevron');if(b.style.display==='none'){b.style.display='block';ic.textContent='↑';}else{b.style.display='none';ic.textContent='↓';}" style="width:100%;text-align:left;background:none;border:none;cursor:${hasContent ? 'pointer' : 'default'};padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:16px;">
-    <div>
-      ${item.pinned ? `<div style="font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">Pinned</div>` : ''}
-      ${dateLabel ? `<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">${dateLabel}</div>` : ''}
-      <div style="font-family:var(--serif);font-size:19px;color:var(--steel);line-height:1.3;">${escText(item.title)}</div>
-    </div>
-    ${hasContent ? `<span class="ni-chevron" style="font-size:14px;color:var(--mid);flex-shrink:0;">↓</span>` : ''}
-  </button>
-  <div id="${bodyId}" style="display:none;padding:0 22px 20px;">
-    ${hasImage ? `<img src="${item.image_url}" alt="" loading="lazy" style="width:100%;max-height:420px;object-fit:contain;background:var(--linen);border-radius:10px;margin-bottom:14px;">` : ''}
-    ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${escText(item.summary)}</div>` : ''}
-    ${item.body && item.body.trim() ? `<div class="rich-content">${fixImgUrls(item.body)}</div>` : ''}
-  </div>
-</div>`;
-    }).join('');
-  } catch(e) { /* silently fail — section stays hidden */ }
-}
-
-// Load newsletters from admin worker API
-async function loadNewsletters() {
-  try {
-    const res = await fetch('https://admin.timothystl.org/api/newsletters');
-    const newsletters = await res.json();
-    document.getElementById('news-loading').style.display = 'none';
-    if (!newsletters || newsletters.length === 0) {
-      document.getElementById('news-empty').style.display = 'block';
-      return;
-    }
-    const list = document.getElementById('news-list');
-    list.style.display = 'block';
-    list.innerHTML = newsletters.map(n => {
-      const date = new Date(n.published_at + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
-      let eventsHtml = '';
-      if (n.events && n.events.length) {
-        eventsHtml = '<div style="margin-top:16px;"><div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Upcoming Events</div>' +
-          n.events.map(e => {
-            const eDate = e.event_date ? new Date(e.event_date+'T12:00:00') : null;
-            return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--border);">' +
-              (eDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>' + eDate.toLocaleDateString('en-US',{month:'short'}) + '</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>' + eDate.getDate() + '</div></div>' : '') +
-              '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">' + escText(e.event_name||'') + '</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">' + escText(e.event_time||'') + (e.event_desc ? ' · '+escText(e.event_desc) : '') + '</div></div></div>';
-          }).join('') + '</div>';
-      }
-      let ministryHtml = '';
-      if (n.ministry_content && n.ministry_type !== 'none') {
-        ministryHtml = '<div style="margin-top:16px;background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px 16px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>From Our Ministries</div>' +
-          (n.ministry_type === 'image' ? '<img src="' + escText(safeHref(n.ministry_content)) + '" style="max-width:100%;border-radius:8px;" alt="Ministry update">' : '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">' + n.ministry_content.replace(/\n/g,'<br>') + '</div>') +
-          '</div>';
-      }
-      return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
-        '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">' + date + '</div>' +
-        '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:12px;">' + escText(n.subject) + '</div>' +
-        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:12px;border-bottom:1px solid var(--border);">' + (n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>')) + '</div>' : '') +
-        '<div style="margin-top:12px;"><button onclick="loadNewsletterDetail(' + n.id + ')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:0;">Read this letter</button></div>' +
-        eventsHtml + ministryHtml + '</div>';
-    }).join('');
-  } catch(e) {
-    document.getElementById('news-loading').textContent = 'Unable to load newsletters. Please check back later.';
-  }
-}
+// loadNewsItems()/loadNewsletters() were the pre-editor /news page's own
+// loaders — they targeted #news-items-section/#news-list/#news-loading etc.,
+// which no longer exist (the hardcoded /news markup they filled was deleted
+// in Phase C; see admin/BLOCK-EDITOR-ROLLOUT.md, Phase D). Removed rather
+// than kept as a fallback: /news is published, and an unpublished/unreachable
+// page renders blank now, the same tradeoff Phase C already made everywhere
+// else. loadNewsletterDetail() below is unrelated — its own overlay is a
+// separate, still-live mechanism, never part of this old page body.
 
 // The overlay is appended straight to <body>, a sibling of every #page-*
 // container, so tlcTakeOverPage()'s "hide every child of #page-news" loop
@@ -1237,7 +1169,7 @@ async function loadNewsletterDetail(id) {
     content.innerHTML =
       '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
-        '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
+        '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+escText(n.subject)+'</h2>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+(n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>'))+'</div>' : '') +
         secHtml + newsHtml + evHtml + wolLasmHtml + tertiaryHtml + extrasHtml + bibleHtml +
       '</div>';
@@ -1246,83 +1178,10 @@ async function loadNewsletterDetail(id) {
   }
 }
 
-// Load youth page content and posts from admin worker API
-var youthLoaded = false;
-async function loadYouthPage() {
-  if (youthLoaded) return;
-  youthLoaded = true;
-  const today = new Date().toISOString().split('T')[0];
-
-  // Page content block
-  try {
-    const res = await fetch('https://admin.timothystl.org/api/ministry/youth');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.content && data.content.trim()) {
-        document.getElementById('youth-content').innerHTML = fixImgUrls(data.content);
-      } else {
-        document.getElementById('youth-content-section').style.display = 'none';
-      }
-      if (data.cta_label && data.cta_url) {
-        var hardBar = document.querySelector('#page-youth > section.page-cta-bar, #page-youth > div.page-cta-bar');
-        if (hardBar) hardBar.style.display = 'none';
-        var ctaWrap = document.getElementById('youth-admin-cta');
-        if (ctaWrap) {
-          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
-          var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-outline" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
-          ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
-          ctaWrap.style.display = '';
-        }
-      }
-    } else {
-      document.getElementById('youth-content-section').style.display = 'none';
-    }
-  } catch(e) {
-    var _yc = document.getElementById('youth-content');
-    if (_yc) _yc.innerHTML = '<p style="color:var(--gray);font-style:italic;">Content temporarily unavailable — please check back or <button onclick="showPage(\'contact\')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:600;font-size:inherit;padding:0;font-family:inherit;">contact the office</button>.</p>';
-  }
-
-  // Posts
-  try {
-    const res = await fetch('https://admin.timothystl.org/api/ministry/youth/posts');
-    if (!res.ok) return;
-    const posts = await res.json();
-    if (!posts || posts.length === 0) return;
-
-    const upcoming = posts.filter(function(p){ return p.pinned || (p.post_date && p.post_date >= today); });
-    const past     = posts.filter(function(p){ return !p.pinned && (!p.post_date || p.post_date < today); });
-
-    if (upcoming.length > 0) {
-      document.getElementById('youth-upcoming-section').style.display = '';
-      document.getElementById('youth-upcoming-list').innerHTML = upcoming.map(function(p) {
-        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
-        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
-        return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
-          (dateLabel ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">' + dateLabel + '</div>' : '') +
-          '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:16px;">' + p.title + '</div>' +
-          (p.body ? '<div class="rich-content">' + fixImgUrls(p.body) + '</div>' : '') +
-          '</div>';
-      }).join('');
-    }
-
-    if (past.length > 0) {
-      document.getElementById('youth-past-section').style.display = '';
-      document.getElementById('youth-past-list').innerHTML = past.map(function(p, i) {
-        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
-        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
-        var bodyId = 'yp-body-' + (p.id || i);
-        return '<div class="post-accordion-item">' +
-          '<button class="post-accordion-btn" onclick="var el=document.getElementById(\'' + bodyId + '\');var ic=this.querySelector(\'.post-accordion-icon\');if(el.style.display===\'none\'){el.style.display=\'block\';ic.textContent=\'↑\';}else{el.style.display=\'none\';ic.textContent=\'↓\';}">' +
-          '<div><div class="post-accordion-title">' + p.title + '</div>' +
-          (dateLabel ? '<div class="post-accordion-date">' + dateLabel + '</div>' : '') +
-          '</div><span class="post-accordion-icon">↓</span></button>' +
-          '<div id="' + bodyId + '" class="post-accordion-body">' +
-          (p.body ? '<div class="rich-content">' + fixImgUrls(p.body) + '</div>' : '') +
-          '</div></div>';
-      }).join('');
-    }
-  } catch(e) {}
-}
+// loadYouthPage() was /youth's own pre-editor loader — every element id it
+// targeted (#youth-content, #youth-upcoming-section, #youth-past-list, etc.)
+// was deleted from the hardcoded markup in Phase C. /youth is published now;
+// see admin/BLOCK-EDITOR-ROLLOUT.md, Phase D.
 
 // Load self-serve notices (admin → Notices) for a given static page.
 // Renders zero or more banners into a single generic container per page.
@@ -1535,83 +1394,14 @@ async function loadStaff() {
   }
 }
 
-// Load admin-managed content + CTA button for Christmas Market (other static pages use loadMinistryPage)
-var ministryCTALoaded = {};
-async function loadMinistryCta(slug) {
-  if (ministryCTALoaded[slug]) return;
-  ministryCTALoaded[slug] = true;
-  var ctaWrap = document.getElementById(slug + '-admin-cta');
-  try {
-    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
-    if (!res.ok) return;
-    var data = await res.json();
-    var ctaBlocks = (data.blocks_html || '').trim();
-    ministryBlockManaged[slug] = !!ctaBlocks;
-    // Load admin body content if present. These pages put the admin-managed
-    // region under an -admin-content id rather than -content.
-    var contentEl = document.getElementById(slug + '-admin-content');
-    var contentSection = document.getElementById(slug + '-admin-content-section');
-    if (contentEl && contentSection && (ctaBlocks || (data.content && data.content.trim()))) {
-      if (ctaBlocks) {
-        await tlcEnsureBlockCss();
-        if (document.getElementById('tlcb-css')) ctaBlocks = ctaBlocks.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
-        contentEl.classList.remove('rich-content');
-      }
-      contentEl.innerHTML = fixImgUrls(ctaBlocks || data.content);
-      contentSection.style.display = '';
-    }
-    if (tlcHas(ctaBlocks, 'buttons')) {
-      var blockBar2 = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
-      if (blockBar2) blockBar2.style.display = 'none';
-    } else if (data.cta_label && data.cta_url) {
-      var hardBar2 = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
-      if (hardBar2) hardBar2.style.display = 'none';
-      if (ctaWrap) {
-        var b1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
-        var b2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-outline" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
-        ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + b1 + b2 + '</div></div>';
-        ctaWrap.style.display = '';
-      }
-    }
-  } catch(e) {}
-}
-
-// ── Block-managed ministry pages ─────────────────────────────────────────────
-// A page that has been arranged in the admin block editor ships finished HTML
-// from the admin worker, produced by the very same templates the editor canvas
-// draws (admin/blocks.js). There is no second renderer here on purpose — that is
-// what stops the editor preview and the live page from drifting apart.
-//
-// Blocks replace the *content region* of the page. The page banner stays part of
-// the page frame. Legacy admin-driven regions (CTA bar, video grid, post lists)
-// are hidden only when the blocks actually contain an equivalent block, so a page
-// that hasn't been rearranged yet loses nothing.
-function tlcApplyBlocks(slug, blocksHtml) {
-  var host = document.getElementById(slug + '-content');
-  var section = document.getElementById(slug + '-content-section');
-  if (!host || !blocksHtml) return false;
-  var markup = blocksHtml;
-  // The stylesheet ships with every page's HTML; only the first one is needed.
-  if (document.getElementById('tlcb-css')) markup = markup.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
-  host.classList.remove('rich-content');
-  host.innerHTML = fixImgUrls(markup);
-  if (section) section.style.display = '';
-  return true;
-}
-
-function tlcHas(blocksHtml, type) {
-  return blocksHtml.indexOf('tlcb--' + type) !== -1;
-}
-
-// A page whose blocks start with a hero banner has been taken over completely
-// in the editor: the blocks are the page. Everything hardcoded here is stood
-// down and the blocks render in its place, full width. Pages that have not been
-// taken over keep their hardcoded sections and drop blocks into the content
-// region as before, so nothing changes until staff publish a hero.
-function tlcOwnsWholePage(blocksHtml) {
-  var first = blocksHtml.indexOf('tlcb tlcb--');
-  return first !== -1 && blocksHtml.substr(first, 22).indexOf('tlcb--hero') !== -1;
-}
+// loadMinistryCta()/tlcApplyBlocks()/tlcHas()/tlcOwnsWholePage() were the
+// pre-editor ministry-page chain — a second, older way of applying block
+// markup to a page, reading from the youth_pages table's own
+// blocks/published_blocks columns via /api/ministry/:slug rather than the
+// pages table's. Every ministry page is published from the newer, pages-table
+// editor now, and the id it targeted (`<slug>-admin-cta`, `<slug>-content`,
+// `<slug>-content-section`) was deleted from the hardcoded markup in Phase C.
+// See admin/BLOCK-EDITOR-ROLLOUT.md, Phase D.
 
 // ── Giving links ─────────────────────────────────────────────────────────────
 // A button that asks for a *particular fund* is built here from the one base
@@ -2065,33 +1855,11 @@ async function tlcMaybeTakeOverSitePage(id) {
   return true;
 }
 
-// Ministry pages are loaded by three different functions (loadMinistryPage,
-// loadYouthPage, loadMinistryCta). Whole-page takeover is decided here, once,
-// before any of them run, so a page cannot be missed just because of which
-// loader it happens to use.
-var ministryTakeover = {};
-async function tlcMaybeTakeOver(slug) {
-  if (ministryTakeover[slug] !== undefined) return ministryTakeover[slug];
-  ministryTakeover[slug] = false;
-  try {
-    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
-    if (!res.ok) return false;
-    var data = await res.json();
-    var html = (data.blocks_html || '').trim();
-    if (!html || !tlcOwnsWholePage(html)) return false;
-    await tlcEnsureBlockCss();
-    if (!tlcTakeOverPage(slug, html)) return false;
-    ministryTakeover[slug] = true;
-    ministryBlockManaged[slug] = true;
-    if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
-      try {
-        var posts = await fetch('https://admin.timothystl.org/api/ministry/' + slug + '/posts');
-        if (posts.ok) tlcHydrateFeeds(slug, await posts.json());
-      } catch (e) {}
-    }
-    return true;
-  } catch (e) { return false; }
-}
+// tlcMaybeTakeOver() was the old ministry-page-only takeover, checking
+// youth_pages.blocks via /api/ministry/:slug — superseded by
+// tlcMaybeTakeOverSitePage() below, which checks every page (ministry pages
+// included) against the pages table and always wins now that all of them are
+// published there. See admin/BLOCK-EDITOR-ROLLOUT.md, Phase D.
 
 function tlcTakeOverPage(slug, blocksHtml) {
   var pageEl = document.getElementById('page-' + slug);
@@ -2188,152 +1956,14 @@ function tlcHydrateFeeds(slug, posts) {
   }
 }
 
-// Generic loader for ministry sub-pages (sundayschool, confirmation, vbs, egghunt, family)
-var ministryLoaded = {};
-var ministryBlockManaged = {};
-async function loadMinistryPage(slug) {
-  if (ministryLoaded[slug]) return;
-  ministryLoaded[slug] = true;
-  var today = new Date().toISOString().split('T')[0];
-
-  try {
-    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
-    if (res.ok) {
-      var data = await res.json();
-      var blocksHtml = (data.blocks_html || '').trim();
-      ministryBlockManaged[slug] = !!blocksHtml;
-      if (blocksHtml) {
-        await tlcEnsureBlockCss();
-        tlcApplyBlocks(slug, blocksHtml);
-      } else if (data.content && data.content.trim()) {
-        document.getElementById(slug + '-content').innerHTML = fixImgUrls(data.content);
-      } else {
-        document.getElementById(slug + '-content-section').style.display = 'none';
-      }
-      // Hero image — the page banner stays part of the page frame, above the blocks
-      var heroEl = document.getElementById(slug + '-hero');
-      if (heroEl && data.hero_image_url) {
-        heroEl.style.backgroundImage = 'url(' + data.hero_image_url + ')';
-      }
-      // Ministry photo (music page only) — a block-managed page carries its own
-      // photo inside a Text + photo block, so don't also fill the legacy slot.
-      if (slug === 'music' && data.ministry_image_url && !blocksHtml) {
-        var photoWrap = document.getElementById('music-ministry-photo-wrap');
-        if (photoWrap) {
-          photoWrap.innerHTML = '<img src="' + data.ministry_image_url + '" style="width:100%;border-radius:12px;display:block;" alt="Music Ministry">';
-        }
-      }
-      // Video cards (music page only). Once the page carries Video blocks the
-      // whole hardcoded section comes down — its three fallback cards would
-      // otherwise sit under the blocks saying the same thing twice.
-      if (slug === 'music' && tlcHas(blocksHtml, 'video')) {
-        var vidGridEl = document.getElementById('music-vid-grid');
-        var vidSection = vidGridEl && vidGridEl.closest('section');
-        if (vidSection) vidSection.style.display = 'none';
-      } else if (slug === 'music') {
-        var vidGrid = document.getElementById('music-vid-grid');
-        if (vidGrid) {
-          var vids = [
-            { url: data.vid_1_url, title: data.vid_1_title },
-            { url: data.vid_2_url, title: data.vid_2_title },
-            { url: data.vid_3_url, title: data.vid_3_title }
-          ].filter(function(v) { return v.url && v.url.trim(); });
-          if (vids.length > 0) {
-            var playIcon = '<div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>';
-            vidGrid.innerHTML = vids.map(function(v) {
-              var vidId = (v.url.match(/(?:youtu\.be\/|v=|\/embed\/)([A-Za-z0-9_-]{11})/) || [])[1];
-              var thumb = vidId ? 'url(https://img.youtube.com/vi/' + vidId + '/mqdefault.jpg)' : 'linear-gradient(135deg,var(--steel),var(--mid))';
-              return '<a href="' + v.url.replace(/"/g,'&quot;') + '" target="_blank" class="vid-card" style="background:' + thumb + ';background-size:cover;background-position:center;">' +
-                playIcon +
-                '<div class="vid-label">' + (v.title || '') + '</div>' +
-              '</a>';
-            }).join('');
-          }
-        }
-      }
-      // If admin has set any CTA buttons, replace the hardcoded page-cta-bar.
-      // A page whose blocks already contain a Button bar renders its buttons
-      // there instead, so hide the hardcoded bar and skip this entirely.
-      if (tlcHas(blocksHtml, 'buttons')) {
-        var blockBar = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
-        if (blockBar) blockBar.style.display = 'none';
-      } else if (data.cta_label && data.cta_url) {
-        var hardBar = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
-        if (hardBar) hardBar.style.display = 'none';
-        var ctaWrap = document.getElementById(slug + '-admin-cta');
-        if (ctaWrap) {
-          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
-          var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-outline" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
-          ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
-          ctaWrap.style.display = '';
-        }
-      }
-      // A Posts feed / Upcoming events block needs the posts even on a page
-      // that was never flagged has_posts — the block itself is the request.
-      var wantsFeed = tlcHas(blocksHtml, 'posts') || tlcHas(blocksHtml, 'events');
-      if (!data.has_posts && !wantsFeed) return;
-    } else {
-      document.getElementById(slug + '-content-section').style.display = 'none';
-      return;
-    }
-  } catch(e) {
-    var _cs = document.getElementById(slug + '-content-section');
-    if (_cs && _cs.style.display !== 'none') {
-      // Dynamic page — show friendly error since there's no static fallback
-      var _c = document.getElementById(slug + '-content');
-      if (_c) _c.innerHTML = '<p style="color:var(--gray);font-style:italic;">Content temporarily unavailable — please check back or <button onclick="showPage(\'contact\')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:600;font-size:inherit;padding:0;font-family:inherit;">contact the office</button>.</p>';
-    }
-    return;
-  }
-
-  try {
-    var res2 = await fetch('https://admin.timothystl.org/api/ministry/' + slug + '/posts');
-    if (!res2.ok) return;
-    var posts = await res2.json();
-    if (!posts || posts.length === 0) return;
-
-    // Block-managed page: the posts live inside a Posts feed / Upcoming events
-    // block, so fill those and leave the legacy accordions hidden.
-    if (ministryBlockManaged[slug]) {
-      tlcHydrateFeeds(slug, posts);
-      return;
-    }
-
-    var upcoming = posts.filter(function(p){ return p.pinned || (p.post_date && p.post_date >= today); });
-    var past     = posts.filter(function(p){ return !p.pinned && (!p.post_date || p.post_date < today); });
-
-    if (upcoming.length > 0) {
-      document.getElementById(slug + '-upcoming-section').style.display = '';
-      document.getElementById(slug + '-upcoming-list').innerHTML = upcoming.map(function(p) {
-        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
-        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
-        return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
-          (p.pinned ? '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">Pinned</div>' : '') +
-          (dateLabel ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">' + dateLabel + '</div>' : '') +
-          '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:16px;">' + p.title + '</div>' +
-          (p.body ? '<div class="rich-content">' + fixImgUrls(p.body) + '</div>' : '') +
-          '</div>';
-      }).join('');
-    }
-
-    if (past.length > 0) {
-      document.getElementById(slug + '-past-section').style.display = '';
-      document.getElementById(slug + '-past-list').innerHTML = past.map(function(p, i) {
-        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
-        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
-        var bodyId = slug + '-body-' + (p.id || i);
-        return '<div class="post-accordion-item">' +
-          '<button class="post-accordion-btn" onclick="var el=document.getElementById(\'' + bodyId + '\');var ic=this.querySelector(\'.post-accordion-icon\');if(el.style.display===\'none\'){el.style.display=\'block\';ic.textContent=\'↑\';}else{el.style.display=\'none\';ic.textContent=\'↓\';}">' +
-          '<div><div class="post-accordion-title">' + p.title + '</div>' +
-          (dateLabel ? '<div class="post-accordion-date">' + dateLabel + '</div>' : '') +
-          '</div><span class="post-accordion-icon">↓</span></button>' +
-          '<div id="' + bodyId + '" class="post-accordion-body">' +
-          (p.body ? '<div class="rich-content">' + fixImgUrls(p.body) + '</div>' : '') +
-          '</div></div>';
-      }).join('');
-    }
-  } catch(e) {}
-}
+// loadMinistryPage() was the pre-editor generic loader for sundayschool,
+// confirmation, vbs, egghunt, family (and, via loadYouthPage()/
+// loadMinistryCta() above, youth and christmasmarket) — reading
+// youth_pages.blocks_html/content via /api/ministry/:slug. Every one of
+// those pages is published from the pages-table editor now, and the ids it
+// targeted (`<slug>-content`, `<slug>-upcoming-list`, `<slug>-hero`, etc.)
+// were deleted from the hardcoded markup in Phase C. See
+// admin/BLOCK-EDITOR-ROLLOUT.md, Phase D.
 
 // Per-page SEO meta: title + description
 var PAGE_META = {
@@ -2478,27 +2108,18 @@ window.showPage = function(id, addHistory) {
   // Only /ccs — /give's button is a plain link to give.timothystl.org now, so
   // the giving page costs no cross-origin call.
   if (id === 'ccs') { loadGiveLinks(); }
-  var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
-  var ministryPages = adminContentPages.concat(['youth','christmasmarket']);
-  // A page published from the page editor draws itself entirely. Checked first,
-  // and for every page — ministry pages exist in both systems, and the newer
-  // one wins. Only when nothing has been published do the legacy loaders run.
-  tlcMaybeTakeOverSitePage(id).then(function (took) {
-    if (took) return;
-    // /news is not a "ministry page" — it has always had its own hardcoded
-    // markup and its own loaders, not loadMinistryPage(). This is that page's
-    // half of the fallback: it runs only once the block-editor draft has NOT
-    // been published, exactly the same condition every ministry page's own
-    // legacy loader below is gated on.
-    if (id === 'news') { loadLegacyNewsPage(); return; }
-    if (ministryPages.indexOf(id) === -1) return;
-    return tlcMaybeTakeOver(id).then(function (tookMinistry) {
-      if (tookMinistry) return;
-      if (id === 'youth') { loadYouthPage(); return; }
-      if (id === 'christmasmarket') { loadMinistryCta(id); return; }
-      loadMinistryPage(id);
-    });
-  }).then(function () {
+  // A page published from the page editor draws itself entirely, and every
+  // page on the site — ministry pages and /news included — is published
+  // there now (see admin/BLOCK-EDITOR-ROLLOUT.md, Phase D). The old
+  // per-page-type fallback loaders this dispatch used to run when nothing
+  // had been published (tlcMaybeTakeOver()/loadYouthPage()/loadMinistryCta()/
+  // loadMinistryPage() for a ministry page, loadLegacyNewsPage() for /news)
+  // are gone: their target markup was already deleted from the hardcoded
+  // page bodies in Phase C, so they had nothing left to render into. A page
+  // that is genuinely unpublished, or requested during a real admin outage,
+  // now renders blank — the same tradeoff Phase C already made everywhere
+  // else on the site.
+  tlcMaybeTakeOverSitePage(id).then(function () {
     // The FIRST scroll-to-hash attempt, back at the top of this function,
     // almost always finds nothing: on a fresh load the block content a
     // jump-to-name target lives in hasn't been injected yet at that point —
@@ -2506,31 +2127,6 @@ window.showPage = function(id, addHistory) {
     tlcScrollToHash(hash);
   });
 };
-
-// The pre-editor /news page: newsletters, news items, and the calendar
-// iframe. Runs only when /news has not (yet) been published from the page
-// editor — see the takeover check in showPage() above.
-function loadLegacyNewsPage() {
-  // Reset to archive view — UNLESS the address is a newsletter detail link
-  // (/news/:id), in which case the router's own nlDetailMatch handler has
-  // already called showPage('news') and then loadNewsletterDetail() in the
-  // same synchronous pass; the takeover check this runs behind is async, so
-  // by the time this fires that detail view may already be on screen. Reset
-  // it here and it flips straight back to the archive under the visitor.
-  var onDetailUrl = /\/news\/\d+$/.test(location.pathname);
-  var nlArchive = document.getElementById('news-archive');
-  var nlDetail = document.getElementById('newsletter-detail');
-  if (!onDetailUrl) {
-    if (nlArchive) nlArchive.style.display = '';
-    if (nlDetail) nlDetail.style.display = 'none';
-  }
-  loadNewsletters(); loadNewsItems();
-  // The calendar only fetches its month when the page is actually opened, so
-  // /news costs no more to load than it did with the iframe. `compact` keeps
-  // the print sheet off this mount: there is one sheet in the document and
-  // /calendar owns it, or printing from here would produce two pages.
-  tlcCalMount('tlc-cal-news', { compact: true });
-}
 
 // ── THE CHURCH CALENDAR ─────────────────────────────────────────────────────
 // The site draws its own month now. It used to be a Google Calendar iframe, and

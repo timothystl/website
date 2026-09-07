@@ -131,10 +131,20 @@ group('no newsletter field is interpolated bare into the public renderer');
   ok(SPA.includes('escText(n.subject)'), 'the subject goes through escText');
   ok(SPA.includes('escText(safeHref(n.tertiary_cta_url))'),
     'and the CTA address through safeHref then escText, in that order');
-  // Every URL, not just the one that started this — the rule written into
-  // admin/email.js says safeUrl-then-esc, and it has to hold on both sides.
-  ok(SPA.includes('escText(safeHref(n.ministry_content))'),
-    "the ministry update's image address goes the same way");
+  // ⚠ `escText(safeHref(n.ministry_content))` was dropped from this list in
+  // Phase D (admin/BLOCK-EDITOR-ROLLOUT.md) along with the dead
+  // loadNewsletters() it lived in. That was the ONLY place ministry_content
+  // was ever rendered on the public site — the newsletterarchive block that
+  // replaced /news's hardcoded body in Phase C never carried the field over
+  // (neither its card preview nor NEWSLETTER_ARCHIVE_SCRIPT's in-place
+  // expansion in admin/blocks.js render it), and neither does
+  // loadNewsletterDetail()'s overlay, nor the real sent email
+  // (admin/email.js has no reference to it at all). The field is still
+  // stored and still editable in the newsletter composer — it has simply had
+  // no rendering path anywhere a visitor or a recipient can see it since
+  // Phase C, not because of anything Phase D removed. Whether to wire it
+  // back in somewhere, or retire the field, is an open product question
+  // recorded in CLAUDE.md's Phase D section rather than decided here.
 }
 
 // ── FX-16: no hand-rolled partial escape left in the gym ────────────────────

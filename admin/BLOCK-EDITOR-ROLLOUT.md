@@ -17,9 +17,28 @@ view, so `loadSitePages()` stops hauling every page's body down just to build
 the nav — 2026-09-07), **Phase C** (the hardcoded fallback bodies this file's
 whole §2 was written around are now deleted for every page confirmed
 published, on Dinger's explicit "delete it all now" — 2026-09-07, see CLAUDE.md's
-own section by that name), and **Phase D** (simplify what's left of the
-takeover/fallback mechanism once the remaining handful of pages are published
-— explicitly deferred, not started).
+own section by that name), and **Phase D** (the client-side takeover/fallback
+JavaScript is simplified down to one rendering path — DONE, 2026-09-07, see
+CLAUDE.md's "The takeover mechanism is simplified" section; the blocker
+recorded above as "once the remaining handful of pages are published" turned
+out to already be cleared by the time Phase D was picked up — every row in
+the `pages` table, confirmation/sundayschool/vbs/egghunt/family included, was
+already published against the live API).
+
+⚠ **Phase D found a SECOND, separate legacy content system it deliberately did
+NOT touch, and it is worth knowing about before assuming this file's scope is
+finished**: `/ministries/edit/:slug` ("Details") is a still-reachable admin
+screen with a real, working TinyMCE box that writes to `youth_pages.content`,
+and `/ministries/editor/:slug` is a second, still-actively-used block editor —
+separate from the `pages`-table Site Editor this whole file is about — writing
+to `youth_pages.blocks`/`published_blocks`. Both are orphaned on the PUBLIC
+rendering side now (nothing reads them into a page a visitor sees), but both
+are still live, staff-facing screens under the "Ministries" sidebar item. Not
+retired here, on purpose — deciding whether to retire a content-editing
+surface staff currently use is the kind of call that needs its own explicit
+sign-off, the same way Phase C's markup deletion did, not something to fold
+into a mechanical dead-code cleanup. See CLAUDE.md's Phase D section for the
+detail and treat it as a genuinely open item, not a fixed one.
 
 Scoped 2026-08-05, at Andrew's request: *"scope out every page to be a block
 editor."* Everything below this point is the original scoping pass and is kept
