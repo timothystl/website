@@ -1,5 +1,9 @@
 # Every page on the block editor — where it stands, and what is left
 
+> **CURRENT REVIEW ENTRY POINT:** Start with [`../DIGITAL-OVERHAUL.md`](../DIGITAL-OVERHAUL.md).
+> This file preserves the original rollout detail, but portions below the dated warning are
+> historical and must not be treated as current production status without rechecking.
+
 ⚠ **UPDATE 2026-09-07 — most of §2's "24 unpublished pages" is stale.** Checked
 directly against the live `/api/pages` while doing Phase C below: nearly every
 page this file and CLAUDE.md's own "Pending / Deferred Items" still described
