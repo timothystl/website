@@ -1,7 +1,29 @@
 # Every page on the block editor — where it stands, and what is left
 
+⚠ **UPDATE 2026-09-07 — most of §2's "24 unpublished pages" is stale.** Checked
+directly against the live `/api/pages` while doing Phase C below: nearly every
+page this file and CLAUDE.md's own "Pending / Deferred Items" still described
+as unpublished is, in fact, published in production. Don't trust the table in
+§1 or the count in §2/§5 without re-checking `/api/pages` first — see CLAUDE.md's
+own dated correction ("⚠ STALE, AND IT MISLED A SESSION...") for why that
+matters and what it cost the first time it was believed uncritically.
+
+That confirmed-published state is what made Dinger's own four-phase plan
+possible, tracked in CLAUDE.md rather than here since each phase is a code
+change, not a publishing decision: **Phase A** (one rendering path for an
+already-migrated page, no more second-guessing the edge's own render — 2026-09-07),
+**Phase B** (`/api/pages` split into a chrome-only view and a single-page-body
+view, so `loadSitePages()` stops hauling every page's body down just to build
+the nav — 2026-09-07), **Phase C** (the hardcoded fallback bodies this file's
+whole §2 was written around are now deleted for every page confirmed
+published, on Dinger's explicit "delete it all now" — 2026-09-07, see CLAUDE.md's
+own section by that name), and **Phase D** (simplify what's left of the
+takeover/fallback mechanism once the remaining handful of pages are published
+— explicitly deferred, not started).
+
 Scoped 2026-08-05, at Andrew's request: *"scope out every page to be a block
-editor."*
+editor."* Everything below this point is the original scoping pass and is kept
+for its per-page detail — read it knowing the publish counts have moved on.
 
 The headline finding is that **this is much further along than it looks, and
 the thing standing in the way is not code.** Every page on the site has had a

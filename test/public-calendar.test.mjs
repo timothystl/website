@@ -94,8 +94,31 @@ const CHIPS_ALL = 13, CHIPS_NEWS = 6, CHIPS_WORSHIP = 2;
 const FEED = { from: day(1), to: day(28), events: BUSY_SUNDAY.concat(OTHER_DAYS),
   categories: CATEGORIES, sources: { google: true, news: true, googleReason: '' } };
 
+// ⚠ BOTH /calendar AND /news ARE CONFIRMED PUBLISHED IN PRODUCTION now (see
+// admin/BLOCK-EDITOR-ROLLOUT.md, Phase C) — their hardcoded fallback
+// markup (#tlc-cal-main, #tlc-cal-news, and everything else in those two
+// page divs) is gone, so a real visitor's calendar always mounts through a
+// Calendar block's own [data-tlc-calendar] host, never the old fixed ids.
+// DEFAULT_RENDERED is what most groups in this file need: a real hero +
+// calendar block for whichever page is being opened, matching the shape
+// the "A PUBLISHED /calendar PAGE GETS THE REAL CALENDAR" group below
+// already established as the one that reflects a real visitor. A caller
+// that needs something else — a plain embed, an unpublished page, a
+// different block mix — passes its own `rendered` and this default is
+// never consulted (checked against `undefined`, not against `{}`, so an
+// explicit empty object still means "genuinely unpublished").
+function defaultRendered(which) {
+  if (which !== 'calendar' && which !== 'news') return {};
+  const blocks = [
+    sanitizeBlock({ ...newBlock('hero'), title: which === 'news' ? 'News & Events' : 'Calendar' }),
+    sanitizeBlock({ ...newBlock('calendar'), url: '' }),
+  ];
+  return { [which]: renderPage(blocks, { editing: false, withCss: false }) };
+}
+
 async function open(opts = {}) {
-  const { feed = FEED, width = 1280, height = 950, status = 200, page: which = 'calendar', rendered = {} } = opts;
+  const { feed = FEED, width = 1280, height = 950, status = 200, page: which = 'calendar', rendered } = opts;
+  const finalRendered = rendered !== undefined ? rendered : defaultRendered(which);
   const ctx = await browser.newContext({ viewport: { width, height } });
   const p = await ctx.newPage();
   const errors = [];
@@ -109,13 +132,13 @@ async function open(opts = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(feed) });
     }
     if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ pages: [], menu: null, rendered, redirects: {},
-        css: Object.keys(rendered).length ? BLOCK_CSS : '' }) });
+      body: JSON.stringify({ pages: [], menu: null, rendered: finalRendered, redirects: {},
+        css: Object.keys(finalRendered).length ? BLOCK_CSS : '' }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
   await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.goto(base + '/' + which, { waitUntil: 'domcontentloaded' });
-  await p.waitForSelector('#tlc-cal-' + (which === 'news' ? 'news' : 'main') + ' .tlc-cal', { timeout: 5000 }).catch(() => {});
+  await p.waitForSelector('#page-' + (which || 'calendar') + ' .tlc-cal', { timeout: 5000 }).catch(() => {});
   await p.waitForTimeout(500);
   return { p, ctx, errors, calls: () => calls };
 }
@@ -578,16 +601,17 @@ async function goToFixtureMonth(p) {
     const stripped = stripHasRules(await res.text());
     await route.fulfill({ response: res, body: stripped, contentType: 'text/css' });
   });
+  const calRendered = defaultRendered('calendar');
   await p.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
     if (u.includes('/api/calendar')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FEED) });
     if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ pages: [], menu: null, rendered: {}, redirects: {}, css: '' }) });
+      body: JSON.stringify({ pages: [], menu: null, rendered: calRendered, redirects: {}, css: BLOCK_CSS }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
   await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.goto(base + '/calendar', { waitUntil: 'domcontentloaded' });
-  await p.waitForSelector('#tlc-cal-main .tlc-cal', { timeout: 5000 }).catch(() => {});
+  await p.waitForSelector('#page-calendar .tlc-cal', { timeout: 5000 }).catch(() => {});
   await p.waitForTimeout(500);
   ok(await goToFixtureMonth(p), 'the month can be navigated to');
 
@@ -613,7 +637,7 @@ async function goToFixtureMonth(p) {
   const stray = await p.evaluate(() => {
     const sheet = document.querySelector('.tlc-print-sheet');
     const out = [];
-    document.querySelectorAll('#page-calendar .tlc-cal, .nav, footer, #newsletter-band, #page-calendar .page-hero').forEach((el) => {
+    document.querySelectorAll('#page-calendar .tlc-cal, .nav, footer, #newsletter-band, #page-calendar .tlcb--hero').forEach((el) => {
       if (el.contains(sheet)) return;                       // on the path down to it
       if (getComputedStyle(el).display !== 'none') out.push(el.className || el.tagName);
     });
@@ -661,8 +685,8 @@ async function goToFixtureMonth(p) {
 // ── the /news strip ─────────────────────────────────────────
 {
   const { p, ctx, errors, calls } = await open({ page: 'news' });
-  ok(await p.$('#tlc-cal-news .tlc-cal'), 'the same calendar renders on /news');
-  ok(await p.$$eval('#tlc-cal-news .tlc-cal-chip', (c) => c.length) >= 0, 'and draws its month');
+  ok(await p.$('#page-news .tlc-cal'), 'the same calendar renders on /news');
+  ok(await p.$$eval('#page-news .tlc-cal-chip', (c) => c.length) >= 0, 'and draws its month');
   // ⚠ ONE PRINT SHEET IN THE DOCUMENT. Two would print two pages, and the
   // second would be a month nobody asked for.
   eq(await p.$$eval('.tlc-print-sheet', (s) => s.length), 0, '/news does not carry its own print sheet');
@@ -676,8 +700,8 @@ async function goToFixtureMonth(p) {
   await p.waitForTimeout(120);
   const news = await p.evaluate(() => {
     const shown = (sel) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== 'none'; };
-    return { cal: shown('#tlc-cal-news .tlc-cal'), nav: shown('.nav'), foot: shown('footer'),
-             hero: shown('#page-news .page-hero') };
+    return { cal: shown('#page-news .tlc-cal'), nav: shown('.nav'), foot: shown('footer'),
+             hero: shown('#page-news .tlcb--hero') };
   });
   eq(news.cal, false, 'the calendar widget does not print from /news either');
   ok(news.nav && news.foot && news.hero, 'but the rest of the page prints exactly as it did before this feature');

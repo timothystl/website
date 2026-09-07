@@ -190,384 +190,50 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 <!-- HOME -->
 <div id="page-home" class="page active">
-  <section class="hero">
-    <div class="hero-inner">
-      <div>
-        <span class="eyebrow eyebrow--light">Lindenwood Park · St. Louis, Missouri</span>
-        <h1>Whoever you are,<br>wherever you've been —<br><em>you are welcome here.</em></h1>
-        <p class="hero-sub">We are a congregation shaped by grace — not by what we've done for God, but by what God has done for us in Jesus Christ. We gather every Sunday in South City St. Louis to receive that grace together. And we scatter into the week to give it away.</p>
-        <div class="btn-row">
-          <button class="btn btn-secondary" onclick="showPage('worship')">New Here? Plan Your Visit</button>
-          <button class="btn btn-ghost" id="btn-watch-live" onclick="showPage('sermons')">Livestream worship</button>
-        </div>
-      </div>
-      <div class="hero-card">
-        <div class="hero-card-label">Join us Sunday</div>
-        <div class="hero-card-time" style="margin-bottom:16px;">8:00 &amp; 10:45 am</div>
-        <hr>
-        <div class="hero-card-addr">
-          6704 Fyler Ave<br>St. Louis, MO 63139<br>Corner of Fyler &amp; Ivanhoe
-          <a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank">Get directions</a>
-          <a href="tel:+13147818673" style="display:block;margin-top:6px;">(314) 781-8673</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Self-serve notices (admin → Notices → Home) -->
+  <!-- The block-rendered page (see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C)
+       takes over this page on every load — it has been published since
+       before this fallback was retired, and /api/pages confirms it renders.
+       Only the one live anchor with no block equivalent survives here:
+       loadNotices('home') fills this from admin → Notices → Home on every
+       load, whether or not the takeover has happened yet. -->
   <div id="notices-home"></div>
-
-  <div class="welcome">
-    <div class="welcome-inner">
-      <div class="welcome-quote">"A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ."</div>
-      <div class="welcome-body">
-        Timothy Lutheran is rooted in Lindenwood Park. We are Lutheran, which means we lead with grace — not a reward for the righteous but a gift for the broken. Every person who walks through our doors carries something. The gospel is strong enough to carry it with them.<br><br>
-        <a href="#" onclick="showPage('about')">Learn more about who we are</a>
-      </div>
-    </div>
-  </div>
-
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow">This Week</span>
-      <h2>What's happening at Timothy</h2>
-      <div class="this-week-grid">
-
-        <!-- SERMON SERIES — populated dynamically from admin API -->
-        <div>
-          <div class="this-week-col-label">Current series</div>
-          <div id="home-sermon-card" class="sermon-card">
-            <div style="color:var(--gray);font-size:14px;padding:4px 0;">Loading…</div>
-          </div>
-        </div>
-
-        <!-- NEWS — populated dynamically from admin API -->
-        <div>
-          <div class="this-week-col-label">News &amp; announcements</div>
-          <div id="home-news-list">
-            <div style="color:var(--gray);font-size:14px;padding:12px 0;">Loading…</div>
-          </div>
-          <button class="btn btn-outline" onclick="showPage('news')" style="font-size:13px;padding:9px 20px;margin-top:16px;">All news &amp; events</button>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <div class="mdo-strip">
-    <div class="mdo-inner">
-      <div class="mdo-text">
-        <div class="mdo-eye">Mother's Day Out</div>
-        <div class="mdo-title">Now enrolling — join our community</div>
-        <div class="mdo-desc">Over twenty years of experienced, caring childcare for children from birth through preschool. Right here in Lindenwood Park.</div>
-      </div>
-      <a href="https://mdo.timothystl.org" target="_blank" class="btn btn-secondary">Learn about MDO</a>
-    </div>
-  </div>
 </div>
 
 <!-- ABOUT -->
 <div id="page-about" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Who we are</span>
-    <h1>About Timothy Lutheran</h1>
-    <p>A diverse city church in St. Louis — rooted in grace, sent to the world.</p>
-  </div>
-  <!-- Self-serve notices (admin → Notices → About) -->
+  <!-- Published — has real servicetimes/contact/map/staff blocks (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). loadNotices('about') is the
+       one live anchor with no block equivalent. -->
   <div id="notices-about"></div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="about-grid">
-        <div>
-          <span class="eyebrow">Our vision</span>
-          <h2>Planted Here.<br><em>Sent Everywhere.</em></h2>
-          <p>Planted in culturally diverse St. Louis. Sent to the world as a congregation alive to the Gospel that breaks every wall — welcoming every person, bearing bold witness to the saving grace of God through Jesus, from our neighborhood to the nations.</p>
-          <span class="eyebrow eyebrow--sage" style="margin-top:28px;display:block;">Our mission</span>
-          <h3 style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:12px;">Gathered Around Grace. Sent in Love.</h3>
-          <p>Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ. Gathered in worship around the Word and Sacraments of the risen Lord, we accept every person as one for whom Christ died. Growing in faith through Christian education and honest community, we go — from our neighborhood to the nations — bearing the tangible love of God to all.</p>
-          <p style="font-size:14px;color:var(--gray);">We are a congregation of the Lutheran Church — Missouri Synod (LCMS), rooted in the Lindenwood Park neighborhood of St. Louis.</p>
-          <div class="btn-row" style="margin-top:24px;">
-            <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit</button>
-            <button class="btn btn-outline" onclick="showPage('contact')">Contact us</button>
-          </div>
-        </div>
-        <div>
-          <span class="eyebrow eyebrow--sage" style="margin-bottom:16px;">Our core values</span>
-          <!-- Filled from /api/values so the value blurbs and their partner
-               ministries are edited in one place and every page follows. The
-               markup below is the fallback shown if the admin is unreachable —
-               same four values, just without the partners. -->
-          <div class="about-values" id="about-values">
-            <div class="value-card"><h4>Worship</h4><p>Gathering as God's people, celebrating His grace, receiving His gifts of Word and Sacrament.</p></div>
-            <div class="value-card"><h4>Acceptance</h4><p>Intentionally welcoming and loving all people as Jesus does.</p></div>
-            <div class="value-card"><h4>Christian Education</h4><p>Equipping people for a lifelong journey with Christ.</p></div>
-            <div class="value-card"><h4>Outreach</h4><p>Sharing the love of Jesus with those who don't yet know Him.</p></div>
-          </div>
-          <div style="margin-top:18px;">
-            <button class="btn btn-outline" onclick="showPage('values')">Our values and partners</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--mist">
-    <div class="wrap">
-      <div class="two-col" style="gap:48px;align-items:start;">
-        <div>
-          <span class="eyebrow eyebrow--sage">Find us</span>
-          <h2>Location &amp; service times</h2>
-          <p>We worship every Sunday at two morning services. Come as you are — children of all ages are welcome in worship.</p>
-          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;margin:24px 0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-              <div><div style="font-family:var(--serif);font-size:20px;color:var(--steel);">8:00 am</div></div>
-              <span style="font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-              <div><div style="font-family:var(--serif);font-size:20px;color:var(--steel);">10:45 am</div></div>
-              <span style="font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
-            </div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit</button>
-            <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">Watch live stream</a>
-          </div>
-        </div>
-        <div>
-          <span class="eyebrow eyebrow--sky">Address</span>
-          <h2>Lindenwood Park, South City</h2>
-          <p>We are located at the corner of Ivanhoe and Fyler in Lindenwood Park — with a large parking lot on Ivanhoe directly across from the church office.</p>
-          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;margin:24px 0;">
-            <div style="font-size:13px;color:var(--charcoal);line-height:2;">
-              <strong>Timothy Lutheran Church</strong><br>
-              6704 Fyler Ave · St. Louis, MO 63139<br>
-              Corner of Ivanhoe &amp; Fyler<br>
-              <a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank" style="font-weight:700;color:var(--mid);">Open in Google Maps</a>
-            </div>
-            <iframe src="https://www.google.com/maps?q=6704+Fyler+Ave,+St+Louis,+MO+63139&output=embed" width="100%" height="220" style="border:0;border-radius:8px;margin-top:16px;display:block;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map to Timothy Lutheran Church"></iframe>
-          </div>
-          <p style="font-size:13px;color:var(--gray);">Free parking in the lot on Ivanhoe. Street parking available on Fyler and surrounding streets.</p>
-          <button class="btn btn-outline" onclick="showPage('contact')" style="margin-top:8px;">Contact us</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Our team</span>
-      <h2>Staff &amp; leadership</h2>
-      <div id="staff-grid" class="staff-grid">
-        <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
-      </div>
-    </div>
-  </section>
-
-
 </div>
 
 <!-- WORSHIP -->
 <div id="page-worship" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Sunday mornings</span>
-    <h1>Worship at Timothy</h1>
-    <p>Two services every Sunday. Come as you are.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="two-col" style="gap:48px;">
-        <div>
-          <span class="eyebrow">Service times</span>
-          <h2>Join us Sunday</h2>
-          <p>We offer two Sunday morning worship services. Both share the same sermon and liturgy — choose whichever time fits your schedule.</p>
-          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:24px;margin:24px 0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">
-              <div>
-                <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">8:00 am</div>
-              </div>
-              <span style="font-family:var(--sans);font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
-              <div>
-                <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">10:45 am</div>
-              </div>
-              <span style="font-family:var(--sans);font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
-            </div>
-          </div>
-          <p style="font-size:13px;color:var(--gray);">Can't make it in person? Watch our live stream on <a href="https://www.youtube.com/@TimothySTL" target="_blank">YouTube</a>.</p>
-          <div class="btn-row" style="margin-top:24px;">
-            <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary">Watch live stream</a>
-            <button class="btn btn-outline" onclick="showPage('contact')">Get directions</button>
-          </div>
-        </div>
-        <div>
-          <span class="eyebrow eyebrow--sage">Location</span>
-          <h2>Location</h2>
-          <p>We are located at the corner of Ivanhoe and Fyler in Lindenwood Park, South City St. Louis.</p>
-          <p>The church office is on Ivanhoe, across from the large parking lot. Parking is available in the lot and on surrounding streets.</p>
-          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:20px;margin-top:24px;">
-            <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
-              <strong>Timothy Lutheran Church</strong><br>
-              6704 Fyler Ave · St. Louis, MO 63139<br><br>
-              <a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank" style="font-weight:700;color:var(--mid);">Open in Google Maps</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <!-- Self-serve notices (admin → Notices → Worship) -->
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C.
+       loadNotices('worship') is the one live anchor. -->
   <div id="notices-worship"></div>
-  <section class="section section--mist">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sky">First time visiting?</span>
-      <h2>Plan Your Visit</h2>
-      <p style="max-width:600px;color:var(--gray);">We want your first Sunday to be easy. Here's everything you need to know before you arrive.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-top:36px;">
-        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
-          <div style="font-size:26px;margin-bottom:12px;">🅿️</div>
-          <h3>Parking</h3>
-          <p style="font-size:14px;color:var(--gray);margin:0;">Free parking in the lot on Ivanhoe, directly across from the church office. Street parking is available on Fyler and surrounding streets.</p>
-        </div>
-        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
-          <div style="font-size:26px;margin-bottom:12px;">👶</div>
-          <h3>Kids &amp; Families</h3>
-          <p style="font-size:14px;color:var(--gray);margin:0;">Children are welcome in worship at any age. Sunday School meets during the 10:45 am service. Our volunteers are background-checked and trained. Nursery available for infants.</p>
-        </div>
-        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
-          <div style="font-size:26px;margin-bottom:12px;">👕</div>
-          <h3>What to Wear</h3>
-          <p style="font-size:14px;color:var(--gray);margin:0;">From suits to shorts — you're welcome here. Come as you are. We mean it. What matters is that you show up.</p>
-        </div>
-        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
-          <div style="font-size:26px;margin-bottom:12px;">❓</div>
-          <h3>Questions Before You Come?</h3>
-          <p style="font-size:14px;color:var(--gray);margin:0;">Our greeters are at the door before every service. Or reach us anytime: <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> · <a href="tel:3148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a></p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow eyebrow--sky">Worship at Timothy</span>
-      <h2>Where Tradition Meets the Unexpected</h2>
-      <p>At Timothy, we believe that the beauty of holiness isn't confined to a single era or instrument. We are a community deeply rooted in the Lutheran liturgical tradition, yet we remain vibrantly open to the full spectrum of musical gifts God has placed in our hands.</p>
-      <p style="margin-top:16px;">If you are looking for a worship experience that feels both grounded and adventurous, you've found your home.</p>
-    </div>
-  </section>
-
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow eyebrow--sky">Music &amp; Sound</span>
-      <h2>A Soundscape as Wide as Grace</h2>
-      <p>We take worship seriously, but we don't believe "traditional" has to mean "predictable." On any given Sunday, our sanctuary becomes a meeting place for the ancient and the eclectic.</p>
-      <p style="margin-top:20px;font-family:var(--serif);font-size:17px;color:var(--steel);">You might hear:</p>
-      <ul style="list-style:none;margin:16px 0 24px;padding:0;display:flex;flex-direction:column;gap:10px;">
-        <li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:var(--charcoal);line-height:1.6;"><span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-top:8px;"></span>The thunderous resonance of a pipe organ.</li>
-        <li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:var(--charcoal);line-height:1.6;"><span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-top:8px;"></span>The delicate shimmer of a hammered dulcimer or handbell choir.</li>
-        <li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:var(--charcoal);line-height:1.6;"><span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-top:8px;"></span>The rhythmic pulse of a drum kit or steel drums.</li>
-        <li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:var(--charcoal);line-height:1.6;"><span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-top:8px;"></span>The soulful soaring of a violin, trumpet, or an African choir.</li>
-      </ul>
-      <p>Sometimes, you'll hear them all in the same service. We don't mix these styles for the sake of novelty; we do it because the grace we celebrate is just as wide-ranging and diverse as the music we make.</p>
-    </div>
-  </section>
-
-  <section class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow eyebrow--sage">Rooted &amp; Fresh</span>
-      <h2>Deeply Rooted. Spiritually Fresh.</h2>
-      <p>Our worship follows the timeless patterns of the liturgy, providing a "unique — but familiar" rhythm to your week. We value the substance of our heritage while making room for the Holy Spirit to surprise us.</p>
-      <ul style="list-style:none;margin:24px 0 0;padding:0;display:flex;flex-direction:column;gap:20px;">
-        <li style="display:flex;align-items:flex-start;gap:16px;">
-          <span style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--sage);margin-top:7px;"></span>
-          <div><strong style="color:var(--steel);">Weekly Communion:</strong> <span style="color:var(--charcoal);">We celebrate the Eucharist every Sunday, centering our lives on the tangible promise of God's presence.</span></div>
-        </li>
-        <li style="display:flex;align-items:flex-start;gap:16px;">
-          <span style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--sage);margin-top:7px;"></span>
-          <div><strong style="color:var(--steel);">Theologically Rich:</strong> <span style="color:var(--charcoal);">Our music is chosen to reflect the depth of the Gospel, ensuring that what we sing and play nourishes the soul.</span></div>
-        </li>
-        <li style="display:flex;align-items:flex-start;gap:16px;">
-          <span style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--sage);margin-top:7px;"></span>
-          <div><strong style="color:var(--steel);">A Place for Every Voice:</strong> <span style="color:var(--charcoal);">Whether you are a master of a rare instrument or simply love to sing from the pew, there is a place for your "joyful noise" here.</span></div>
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:680px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Come worship with us</span>
-      <h2>Experience it This Sunday</h2>
-      <p style="margin-bottom:28px;">Come as you are and enter into a space where the pipe organ and the drum kit sit side-by-side in praise.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary">Watch live stream</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Get directions</button>
-      </div>
-    </div>
-  </section>
 </div>
 
 <!-- CHRISTIAN EDUCATION -->
 <div id="page-education" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Growing in faith</span>
-    <h1>Christian Education at Timothy</h1>
-    <p>Equipping people for a lifelong journey with Christ — from the nursery to the pew.</p>
-  </div>
-
-  <!-- Class offerings grid -->
-  <section class="section section--white">
-    <div class="wrap">
-      <div style="text-align:center;max-width:640px;margin:0 auto 48px;">
-        <span class="eyebrow eyebrow--sky">What we offer</span>
-        <h2>Something for Every Season of Faith</h2>
-        <p style="color:var(--gray);">Christian Education is one of Timothy's four core values. Whether you are new to the faith, returning after years away, or have followed Christ your whole life, there is a place for you to keep growing.</p>
-      </div>
-      <div id="bible-classes-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;">
-        <div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px);">Loading…</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Admin-managed schedule & topics block (hidden until populated in admin → Pages) -->
+  <!-- Published — has a real classes block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C).
+       loadNotices('education') is the one live anchor. -->
   <div id="notices-education" style="max-width:760px;margin:0 auto;"></div>
-
-  <!-- Why it matters -->
-  <section class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow eyebrow--sage">Core value</span>
-      <h2>Why Christian Education matters</h2>
-      <p>At Timothy, we believe Christian Education is not just a program — it is how the Gospel takes root and grows in a community across generations. We want every person who walks through our doors to leave more equipped to follow Jesus in their daily life.</p>
-      <blockquote style="border-left:3px solid var(--amber);padding:16px 20px;margin:32px 0 0;background:var(--white);border-radius:0 var(--r-md) var(--r-md) 0;">
-        <p style="font-family:var(--serif);font-size:17px;font-style:italic;color:var(--steel);margin:0;">"Growing in faith through Christian education and honest community."</p>
-        <cite style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:8px;display:block;">— Timothy Lutheran Mission Statement</cite>
-      </blockquote>
-    </div>
-  </section>
-
-  <div class="page-cta-bar">
-    <h3>Ready to grow?</h3>
-    <p>Join a class, ask a question, or just show up. We'll take it from there.</p>
-    <div class="btn-row">
-      <button onclick="showPage('worship')" class="btn btn-primary">Plan your visit</button>
-      <button onclick="showPage('contact')" class="btn btn-outline">Contact us</button>
-    </div>
-  </div>
 </div>
 
 <!-- SERMONS -->
 <div id="page-sermons" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Preaching &amp; teaching</span>
-    <h1>Sunday Worship</h1>
-    <p>Full worship services, live and archived — every Sunday on YouTube.</p>
-  </div>
+  <!-- Published — has real sermon/sermonlist blocks (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). Three anchors survive here
+       because they are genuinely live regardless of takeover, not fallback:
+       loadNotices('sermons'), and two sections loadLatestSermon()/
+       loadSermons() unhide unconditionally on top of the block-rendered
+       content — the current week's video (nothing else on the page pulls
+       that from the channel feed) and the full sermon-notes outlines
+       (sermonlist only shows title/date/a watch link, not the outline
+       text). Both stay display:none until there is something to show. -->
   <div id="notices-sermons"></div>
-  <!-- THIS WEEK'S SERVICE — filled by loadLatestSermon() from the channel's own
-       feed, so nobody has to post a link each week. Hidden until there is
-       something to show: an empty video frame reads as a broken page, and the
-       "Watch on YouTube" button below has always been the way through. -->
   <section class="section section--white" id="sermons-latest-section" style="display:none;">
     <div class="wrap">
       <span class="eyebrow">This week</span>
@@ -577,20 +243,6 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       </div>
     </div>
   </section>
-  <!-- CURRENT SERIES — loaded dynamically -->
-  <section class="section section--white" id="sermons-series-section">
-    <div class="wrap" id="sermons-series-content">
-      <!-- fallback shown until API responds -->
-      <span class="eyebrow">Current series</span>
-      <div style="margin-top:12px;">
-        <div class="btn-row" style="margin-top:28px;">
-          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary">Watch on YouTube</a>
-        </div>
-        <div style="margin-top:16px;font-size:13px;color:var(--gray);">We stream each service live and keep the full recording available afterward. We don't clip individual sermons — you'll find complete worship services with music, liturgy, and preaching together.</div>
-      </div>
-    </div>
-  </section>
-  <!-- SERMON NOTES — loaded dynamically -->
   <section class="section section--linen" id="sermons-notes-section" style="display:none;">
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Sermon notes</span>
@@ -603,111 +255,9 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 <!-- MINISTRIES -->
 <div id="page-ministries" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Life at Timothy</span>
-    <h1>Ministries</h1>
-    <p>Ways to connect, serve, grow, and belong at Timothy Lutheran.</p>
-  </div>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C.
+       loadNotices('ministries') is the one live anchor. -->
   <div id="notices-ministries"></div>
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow">Church ministries</span>
-      <h2>Connect &amp; serve</h2>
-      <div class="min-grid">
-        <div class="min-card">
-          <img src="/images/ministries/wol-logo.webp" alt="Word of Life Lutheran School" class="min-card-img" loading="lazy" width="299" height="253">
-          <h3>Word of Life Lutheran School</h3>
-          <p>Providing a high-quality educational program in an environment where Christ prevails. A Christ-centered school for students in our neighborhood.</p>
-          <a href="/wol" onclick="event.preventDefault();showPage('wol')">Learn more</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/mdo-thumb.webp" alt="Mother's Day Out" class="min-card-img" loading="lazy" width="240" height="240">
-          <h3>Mother's Day Out</h3>
-          <p>Over twenty years of experienced, caring childcare for children from birth through preschool. Small classrooms, flexible scheduling, community.</p>
-          <a href="https://mdo.timothystl.org" target="_blank">Visit MDO site</a>
-        </div>
-        <div class="min-card">
-          <h3>Music Ministry</h3>
-          <p>Traditional with eclectic music — organ, handbells, guitar, drums, African choir, hammer dulcimer, and steel drums. A unique but familiar worship experience.</p>
-          <a href="/music" onclick="event.preventDefault();showPage('music')">Learn more</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/ss-logo.webp" alt="Stephen Ministry" class="min-card-img" loading="lazy" width="700" height="620">
-          <h3>Stephen Ministry</h3>
-          <p>Through Stephen Ministry, Timothy listens to the real life pains of our members and community. Trained caregivers walk alongside people in difficult seasons.</p>
-          <a href="/stephen" onclick="event.preventDefault();showPage('stephen')">Learn more</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/food-pantry-thumb.webp" alt="Food Pantry" class="min-card-img" loading="lazy" width="311" height="240">
-          <h3>Food Pantry</h3>
-          <p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>
-          <a href="/foodpantry" onclick="event.preventDefault();showPage('foodpantry')">Get details</a>
-        </div>
-        <div class="min-card">
-          <h3>Youth &amp; Family Ministry</h3>
-          <p>Families of all kinds are welcome here. Formation for children, confirmation for middle schoolers, and community for parents and families at every stage.</p>
-          <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')">Explore</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/lwml.webp" alt="LWML" class="min-card-img" loading="lazy" width="523" height="192">
-          <h3>LWML</h3>
-          <p>Lutheran Women's Missionary League — a community of women in mission for Christ. Rooted in Scripture, sent in service.</p>
-          <a href="https://lwml.org" target="_blank">Visit LWML</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/Bees-thumb.webp?v=20260328" alt="Urban Beekeepers" class="min-card-img" loading="lazy" width="480" height="240">
-          <h3>Urban Beekeepers</h3>
-          <p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>
-          <a href="/bees" onclick="event.preventDefault();showPage('bees')">Learn more</a>
-        </div>
-        <div class="min-card">
-          <img src="/images/ministries/christmas-mkt-thumb.webp" alt="Christmas Market" class="min-card-img" loading="lazy" width="300" height="240">
-          <h3>Christmas Market</h3>
-          <p>An annual community event in Lindenwood Park. Shopping, fellowship, and celebration — a gift to the neighborhood every December.</p>
-          <a href="/christmasmarket" onclick="event.preventDefault();showPage('christmasmarket')">Learn more</a>
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">In the neighborhood</span>
-      <h2>Community partners</h2>
-      <p style="max-width:600px;color:var(--gray);">Timothy Lutheran is grateful to partner with organizations sharing our commitment to Lindenwood Park and the city of St. Louis.</p>
-      <div class="partner-grid">
-        <div class="partner-card">
-          <img src="/images/ministries/lasm.webp" alt="Lindenwood Area Senior Ministry" class="partner-logo" loading="lazy" width="1500" height="765">
-          <h3>Lindenwood Area Senior Ministry</h3>
-          <p>Enhancing the quality of life of older adults in the Lindenwood Park neighborhood.</p>
-          <a href="https://youtu.be/BAkmTsL3uNQ" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Watch video</a>
-        </div>
-        <div class="partner-card">
-          <img src="/images/ministries/cfna.webp" alt="Christian Friends of New Americans" class="partner-logo" loading="lazy" width="776" height="784">
-          <h3>Christian Friends of New Americans</h3>
-          <p>CFNA links you with opportunities to serve immigrants and refugees living in the St. Louis area.</p>
-          <a href="https://youtu.be/Ur2C1-PIh4A" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Watch video</a>
-        </div>
-        <div class="partner-card">
-          <h3>Concordia Seminary</h3>
-          <p>Preparing pastors and church workers for service in the Lutheran Church — Missouri Synod and beyond.</p>
-          <a href="https://www.csl.edu" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Visit site</a>
-        </div>
-        <div class="partner-card">
-          <h3>Concordia Children's Services</h3>
-          <p>A Christian children's home in the Philippines providing care, education, and the love of Christ to vulnerable children.</p>
-          <button onclick="showPage('ccs')" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);background:none;border:none;cursor:pointer;padding:0;">Learn more</button>
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--white" style="text-align:center;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--amber">Get involved</span>
-      <h2>Ready to serve?</h2>
-      <p style="max-width:560px;margin:0 auto 28px;color:var(--gray);font-size:15px;">From Sunday morning setup to the food pantry to seasonal events — there are always ways to put your hands to work. Browse current openings and sign up at our volunteer page.</p>
-      <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Find volunteer opportunities</a>
-    </div>
-  </section>
 </div>
 
 
@@ -804,564 +354,100 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 <!-- PRAYER -->
 <div id="page-prayer" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">We pray for each other and the world</span>
-    <h1>Prayer Requests</h1>
-    <p>Share what's on your heart. Our pastoral staff prays for each request.</p>
-  </div>
+  <!-- Published — has a real prayerform block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). loadNotices('prayer') is
+       the one live anchor. The old #prayer-form's submit listener
+       registration (below, in the shared script) is guarded rather than
+       removed — see the note above it. -->
   <div id="notices-prayer"></div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div style="max-width:600px;margin:0 auto;text-align:center;margin-bottom:48px;">
-        <p style="font-size:16px;color:var(--gray);">The pastoral staff wants to know how to pray for you and walk alongside you in the joys and struggles of life. We can't care well if we don't know what's happening.</p>
-        <p style="font-size:16px;color:var(--gray);margin-top:12px;">Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href="https://timothystl.org/prayer" target="_blank">timothystl.org/prayer</a>.</p>
-      </div>
-      <div style="max-width:560px;margin:0 auto;">
-        <form id="prayer-form">
-          <div id="prayer-alert" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;"></div>
-          <div class="form-group">
-            <label class="form-label">Your name</label>
-            <input type="text" name="name" class="form-input" placeholder="First name is fine">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Email (optional)</label>
-            <input type="email" name="email" class="form-input" placeholder="If you'd like us to follow up">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Prayer request</label>
-            <textarea name="message" class="form-input" style="min-height:160px;" placeholder="Share what's on your heart..." required></textarea>
-          </div>
-          <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off" aria-hidden="true">
-          <div class="tlc-turnstile" style="margin-bottom:14px;"></div>
-          <button type="submit" class="btn btn-primary" id="prayer-btn">Submit prayer request</button>
-        </form>
-      </div>
-    </div>
-  </section>
 </div>
 
 
 <!-- NEWS ARCHIVE -->
 <div id="page-news" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What's happening at Timothy</span>
-    <h1>News &amp; Events</h1>
-    <p>Announcements, upcoming events, and weekly letters from our congregation.</p>
-  </div>
+  <!-- Published — has real newsletterarchive/newsfeed/calendar blocks (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). loadNotices('news') is the
+       one live anchor. The single-newsletter detail view is a separate,
+       self-contained overlay appended to <body> (tlcNewsletterOverlayBuild,
+       loadNewsletterDetail) — it was never part of this page's own markup. -->
   <div id="notices-news"></div>
-
-  <!-- NEWSLETTER DETAIL — shown when navigating to /news/:id -->
-  <section id="newsletter-detail" style="display:none;" class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <div style="margin-bottom:24px;">
-        <button onclick="showPage('news')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;padding:0;text-decoration:none;">← All newsletters</button>
-      </div>
-      <div id="newsletter-detail-content"></div>
-    </div>
-  </section>
-
-  <!-- NEWS ARCHIVE — hidden when viewing newsletter detail -->
-  <div id="news-archive">
-    <!-- NEWS ITEMS (from admin portal) -->
-    <section class="section section--linen" id="news-items-section" style="display:none;">
-      <div class="wrap" style="max-width:760px;">
-        <span class="eyebrow">Announcements</span>
-        <h2>Current news</h2>
-        <div id="news-items-list"></div>
-      </div>
-    </section>
-
-    <!-- NEWSLETTERS -->
-    <section class="section section--linen">
-      <div class="wrap" style="max-width:760px;">
-        <span class="eyebrow">From the pastor</span>
-        <h2>Weekly newsletters</h2>
-        <div id="news-loading" style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading newsletters...</div>
-        <div id="news-list" style="display:none;"></div>
-        <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
-      </div>
-    </section>
-
-    <!-- CALENDAR, embedded below the posts. News, events and the calendar are
-         one page now: somebody asking "what's happening" should not have to
-         guess which of three pages to open. /calendar stays live as its own
-         page for anyone who has bookmarked it or printed it on a flyer. -->
-    <section class="section section--white" id="news-calendar-section">
-      <div class="wrap">
-        <span class="eyebrow">On the calendar</span>
-        <h2>What's coming up</h2>
-        <!-- The month the site renders itself. See tlcCalMount() below and
-             admin/calendar.js in the Worker; it is filled when this page is
-             opened, never at load. -->
-        <div id="tlc-cal-news" style="margin-top:18px;"></div>
-        <div style="margin-top:12px;">
-          <a href="/calendar" onclick="event.preventDefault();showPage('calendar');" style="font-family:var(--font-ui);font-size:13px;color:var(--mid);font-weight:600;">See the full calendar</a>
-        </div>
-      </div>
-    </section>
-  </div>
 </div>
 
 <!-- VALUES — /about/values -->
 <div id="page-values" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What we are for</span>
-    <h1>Our Four Values</h1>
-    <p>Worship, Acceptance, Christian Education, Outreach — and the ministries who carry each of them with us.</p>
-  </div>
+  <!-- Published — has a real values block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). loadNotices('values') is
+       the one live anchor. -->
   <div id="notices-values"></div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div id="values-list" style="display:grid;gap:22px;">
-        <p style="font-family:var(--sans);font-size:14px;color:var(--gray);">Loading…</p>
-      </div>
-    </div>
-  </section>
 </div>
 
 <!-- CALENDAR -->
 <div id="page-calendar" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What's coming up</span>
-    <h1>Calendar</h1>
-    <p>Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
-  </div>
+  <!-- Published — has a real calendar block, which self-mounts via
+       tlcCalScan() the same way /news's does (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). loadNotices('calendar') is
+       the one live anchor. -->
   <div id="notices-calendar"></div>
-  <section class="section section--white">
-    <div class="wrap">
-      <!-- ⚠ THIS IS NOT AN EMBED ANY MORE. The month is drawn here, from
-           /api/calendar — the two Google calendars and the News & Events
-           records merged into one feed. Google's own month view caps how many
-           events a day cell shows ("N more") at any iframe height, which is
-           why raising the height twice never fixed it; there is no cap here.
-           The print sheet is written into this container too, and everything
-           else on the page carries data-noprint. -->
-      <div id="tlc-cal-main"></div>
-    </div>
-  </section>
 </div>
 
 <!-- GIVE -->
 <div id="page-give" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Support our ministry</span>
-    <h1>Give to Timothy Lutheran</h1>
-    <p>Your generosity makes this congregation's work possible — in our neighborhood and beyond.</p>
-  </div>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C.
+       loadNotices('give') is the one live anchor. -->
   <div id="notices-give"></div>
-  <section class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow">Why we give</span>
-      <h2>Participation, not obligation.</h2>
-      <p style="font-size:17px;line-height:1.8;color:var(--charcoal);margin-bottom:16px;">Giving at Timothy is not an obligation — it is a participation with God in what he is already doing in the world. We give because God has given. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>
-      <p style="font-size:15px;line-height:1.8;color:var(--gray);">You are always welcome to come and simply receive that Sunday's grace.</p>
-
-      <!-- Online -->
-      <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:32px;margin-top:40px;">
-        <span class="eyebrow eyebrow--sky">Online giving</span>
-        <h3 style="margin-bottom:8px;">Give securely online</h3>
-        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">Choose an amount and a fund on our giving page, then finish on <strong style="color:var(--steel);">Tithe.ly</strong> — a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer, one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>
-        <!-- Deliberately give.timothystl.org rather than a Tithe.ly address. That
-             page reads the office's own link from the Giving tab at request time,
-             so this button can never be the copy that goes stale. -->
-        <a href="https://give.timothystl.org" class="btn btn-primary">Give Online</a>
-        <p style="font-size:12px;color:var(--gray);margin-top:14px;margin-bottom:0;">Takes you to give.timothystl.org, then on to Tithe.ly's secure page.</p>
-      </div>
-
-      <!-- Other ways grid -->
-      <div class="two-col" style="gap:16px;margin-top:32px;">
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">On Sunday morning</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Offering plates are passed at both services. Cash or check (payable to <strong>Timothy Lutheran Church</strong>) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>
-        </div>
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Bank bill pay</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Set up automatic giving directly through your bank's online bill pay — no fees, no middleman. Payable to <strong>Timothy Lutheran Church</strong>, 6704 Fyler Ave, St. Louis, MO 63139.</p>
-        </div>
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Thrivent Charitable</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin-bottom:14px;">Thrivent members can give through Thrivent Charitable Impact &amp; Investing. Thrivent covers all processing fees, so 100% of your gift reaches the church.</p>
-          <a href="https://thriventcharitable.thrivent.com/giving/make-gift" target="_blank" style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--mid);">Give through Thrivent</a>
-        </div>
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">IRA charitable distribution</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">If you are 70½ or older, a Qualified Charitable Distribution (QCD) directly from your IRA to Timothy can count toward your required minimum distribution — and is not included in taxable income. Contact your IRA administrator to arrange.</p>
-        </div>
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Donor Advised Fund</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Recommend a grant to Timothy Lutheran Church from your Donor Advised Fund at Fidelity Charitable, Schwab Charitable, or any other DAF sponsor. Our EIN is available from the church office.</p>
-        </div>
-        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Planned giving</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. <a href="#" onclick="showPage('contact')" style="color:var(--mid);font-weight:600;">Speak with a pastor</a></p>
-        </div>
-      </div>
-
-      <!-- Stewardship through service -->
-      <div style="margin-top:40px;background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
-        <span class="eyebrow eyebrow--sage">Stewardship of time &amp; talent</span>
-        <h3 style="margin-bottom:8px;">Give through service</h3>
-        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:20px;">Stewardship isn't only financial. Serving your neighbors — in and around Timothy — is one of the most meaningful ways to participate in what God is doing here. Find upcoming volunteer opportunities at our volunteer site.</p>
-        <a href="https://serve.timothystl.org" target="_blank" class="btn btn-outline">Find ways to serve</a>
-      </div>
-    </div>
-  </section>
 </div>
 
 <!-- WORD OF LIFE -->
 <div id="page-wol" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">A ministry of Timothy Lutheran</span>
-    <h1>Word of Life Lutheran School</h1>
-    <p>Providing a high-quality educational program in an environment where Christ prevails.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap" style="max-width:720px;">
-      <span class="eyebrow">Our school</span>
-      <h2>Where Christ prevails</h2>
-      <p>Word of Life Lutheran School is a Christ-centered school providing high-quality education for students in the Lindenwood Park neighborhood. We believe that every child bears the image of God, and that the best education forms the whole person — mind, heart, and faith.</p>
-      <p>Our school is a ministry of Timothy Lutheran Church (LCMS), rooted in the conviction that Christian education is one of the most important investments a congregation can make in its neighborhood and in the future of the church.</p>
-      <div style="margin:32px 0;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--r-md);box-shadow:var(--shadow);">
-        <iframe id="wol-yt-frame" src="" data-src="https://www.youtube.com/embed/Cq0S3ZSOZts" title="Word of Life Lutheran School" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy" style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
-      </div>
-      <div class="btn-row" style="margin-top:28px;">
-        <a href="https://wordoflifeschool.net" target="_blank" class="btn btn-primary">Visit wordoflifeschool.net</a>
-      </div>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. wol has no
+       loadNotices() call and its old video-src-fill (wol-yt-frame) never
+       unhid its own section — genuinely dead, no anchor needed. -->
 </div>
 
 <!-- MUSIC MINISTRY -->
 <div id="page-music" class="page">
-  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Music Ministry → Hero banner image -->
-  <div id="music-hero" class="page-hero page-hero--photo">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Music Ministry</span>
-    <h1>Praise the Lord with Every Gift</h1>
-    <p>Rooted in the Lutheran tradition. Wide open to every sound God's people bring.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="two-col" style="gap:56px;align-items:start;">
-        <div>
-          <span class="eyebrow eyebrow--sky">A unique — but familiar — sound</span>
-          <h2>Traditional with eclectic music</h2>
-          <p>We are a congregation shaped by the Lutheran liturgical tradition — and deeply open to the full range of musical gifts God has placed in our community. On any given Sunday you might hear a pipe organ prelude, a handbell choir, a drum kit, a hammer dulcimer, a steel drum ensemble, or an African choir. Sometimes all in the same service.</p>
-          <p>The music here is wide-ranging because the grace we celebrate is wide-ranging. <em>A unique — but familiar — worship experience.</em></p>
-        </div>
-        <div>
-          <!-- Photo: filled dynamically from admin portal → Ministries → Music Ministry → Ministry photo -->
-          <div id="music-ministry-photo-wrap">
-            <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sky">Special music</span>
-      <h2>Moments from worship</h2>
-      <p style="max-width:600px;color:var(--gray);">Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>
-      <div class="vid-grid" id="music-vid-grid">
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,var(--steel),var(--mid));">
-          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
-          <div class="vid-label">Handbell Choir</div>
-        </a>
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#2a4d2e,var(--sage));">
-          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
-          <div class="vid-label">African Choir</div>
-        </a>
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#4a3010,var(--amber));">
-          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
-          <div class="vid-label">Steel Drums &amp; Special Music</div>
-        </a>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:20px;"><a href="https://www.youtube.com/@TimothySTL" target="_blank" style="color:var(--mid);font-weight:600;">See all videos on YouTube</a></p>
-    </div>
-  </section>
-  <!-- Admin-managed community concert announcement (set in admin → Pages → Community Concert) -->
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. music has no
+       loadNotices() call. One live anchor survives: loadConcertBlock()
+       unconditionally unhides this section whenever admin → Pages →
+       Community Concert has a published entry — not replicated by any
+       block. Stays display:none until there is something to show. -->
   <section id="music-concert-section" class="section section--linen" style="display:none;">
     <div class="wrap" style="max-width:760px;">
       <span class="eyebrow eyebrow--sky">Community Concert</span>
       <div id="music-concert-block" class="rich-content"></div>
     </div>
   </section>
-
-  <section class="section section--white">
-    <div class="wrap" style="max-width:720px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Share your gift</span>
-      <h2>There's a place for you here</h2>
-      <p style="max-width:580px;margin:0 auto 12px;">Whether you play an instrument, sing, or want to learn — there is a place for you in worship at Timothy. We welcome musicians of all skill levels and backgrounds. The music here, like the congregation, belongs to everybody.</p>
-      <p style="max-width:580px;margin:0 auto 28px;color:var(--gray);font-size:15px;">Check the volunteer page to see current openings — choir rehearsals, special services, seasonal events, and more.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Browse music volunteer opportunities</a>
-        <a href="mailto:jinah@timothystl.org" class="btn btn-outline">Email our Music Director</a>
-      </div>
-    </div>
-  </section>
-  <!-- Admin-managed content (set in admin → Ministries → Music → Edit body field) -->
-  <section id="music-content-section" class="section section--white" style="display:none;">
-    <div class="wrap" style="max-width:760px;"><div id="music-content" class="rich-content"></div></div>
-  </section>
-  <!-- Admin-managed posts (upcoming / past announcements) -->
-  <div id="music-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="music-upcoming-list"></div></div></section></div>
-  <div id="music-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="music-past-list"></div></div></section></div>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Music → Edit) -->
-  <div id="music-admin-cta" style="display:none;"></div>
-  <!-- ═══════════════════════════════════════════════════════════════════
-       MUSIC PAGE — CTA BUTTON BAR
-       To change a button: edit the text between > and <  (e.g. "Watch on YouTube")
-       To change where it goes: edit the href="..." value
-       To hide a button: add   style="display:none;"   to the <a> tag
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="page-cta-bar">
-    <h3>Ready to get involved?</h3>
-    <p>There's a place for every voice and every instrument at Timothy.</p>
-    <div class="btn-row">
-      <!-- Button 1: Volunteer signup -->
-      <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up</a>
-      <!-- Button 2: YouTube channel -->
-      <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">Watch on YouTube</a>
-      <!-- Button 3: Contact -->
-      <a href="mailto:jinah@timothystl.org" class="btn btn-outline">Email our Music Director</a>
-    </div>
-  </div>
 </div>
 
 <!-- STEPHEN MINISTRY -->
 <div id="page-stephen" class="page">
-  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Stephen Ministry → Hero banner image -->
-  <div id="stephen-hero" class="page-hero page-hero--photo">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Stephen Ministry</span>
-    <h1>You Don't Have to Face This Alone</h1>
-    <p>Trained lay caregivers walking alongside people in life's hardest seasons.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap" style="max-width:800px;">
-      <span class="eyebrow">What is Stephen Ministry?</span>
-      <h2>One-to-one Christian care</h2>
-      <p>Stephen Ministry equips congregation members to provide confidential, one-to-one Christian care to people going through difficult times — grief, illness, job loss, divorce, loneliness, or any of life's challenges. A trained Stephen Minister walks alongside you as a caring presence for as long as you need.</p>
-      <p>Stephen Ministers are not counselors or therapists. They are listeners — people who have been trained to be fully present, to keep confidence, and to bring the compassion of Christ to someone who is hurting.</p>
-      <div class="two-col" style="gap:32px;margin-top:40px;">
-        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
-          <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Request a Caregiver</div>
-          <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>
-          <a href="mailto:dinger@timothystl.org" class="btn btn-primary" style="font-size:14px;padding:10px 20px;">Contact the office</a>
-        </div>
-        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
-          <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Become a Stephen Minister</div>
-          <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>
-          <a href="mailto:dinger@timothystl.org" class="btn btn-outline" style="font-size:14px;padding:10px 20px;">Inquire about training</a>
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:720px;text-align:center;">
-      <div style="font-family:var(--serif);font-size:clamp(20px,3vw,28px);color:var(--steel);font-style:italic;line-height:1.5;margin-bottom:20px;">"Bear one another's burdens, and so fulfill the law of Christ."</div>
-      <div style="font-family:var(--sans);font-size:13px;color:var(--gray);margin-bottom:28px;">Galatians 6:2</div>
-      <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:dinger@timothystl.org" style="color:var(--mid);font-weight:600;">dinger@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
-    </div>
-  </section>
-  <!-- Admin-managed content (set in admin → Ministries → Stephen Ministry → Edit body field) -->
-  <section id="stephen-content-section" class="section section--white" style="display:none;">
-    <div class="wrap" style="max-width:760px;"><div id="stephen-content" class="rich-content"></div></div>
-  </section>
-  <!-- Admin-managed posts (upcoming / past announcements) -->
-  <div id="stephen-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="stephen-upcoming-list"></div></div></section></div>
-  <div id="stephen-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="stephen-past-list"></div></div></section></div>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Stephen Ministry → Edit) -->
-  <div id="stephen-admin-cta" style="display:none;"></div>
-  <!-- ═══════════════════════════════════════════════════════════════════
-       STEPHEN MINISTRY PAGE — CTA BUTTON BAR
-       To change a button: edit the text between > and <
-       To change where it goes: edit the href="..." value
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="page-cta-bar">
-    <h3>We're here for you.</h3>
-    <p>Reaching out is the first step. Everything is kept strictly confidential.</p>
-    <div class="btn-row">
-      <!-- Button 1: Request a caregiver -->
-      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-primary">Request a caregiver</a>
-      <!-- Button 2: Training inquiry -->
-      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Training Interest" class="btn btn-outline">Learn about training</a>
-    </div>
-  </div>
+  <!-- Published — has a real cardgrid block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). No loadNotices() call,
+       no other live anchor. -->
 </div>
 
 <!-- FOOD PANTRY -->
 <div id="page-foodpantry" class="page">
-  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Food Pantry → Hero banner image -->
-  <div id="foodpantry-hero" class="page-hero page-hero--photo">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Food Pantry</span>
-    <h1>Caring for Neighbors in Jesus' Name</h1>
-    <p>Practical love for families in Lindenwood Park, offered freely and without condition.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="two-col" style="gap:56px;align-items:start;">
-        <div>
-          <span class="eyebrow">About the pantry</span>
-          <h2>Serving our neighborhood</h2>
-          <p>Timothy's food pantry serves members and neighbors in Lindenwood Park and the surrounding community. We believe that caring for the hungry is not a program — it is a natural expression of what it means to be the church in a neighborhood.</p>
-          <p>No residency requirement. No appointment needed. All are welcome.</p>
-          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:24px;margin-top:24px;">
-            <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Pantry Details</div>
-            <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:2;">
-              <strong>Location:</strong> Timothy Lutheran Church<br>
-              6704 Fyler Ave · St. Louis, MO 63139<br>
-              <strong>Hours:</strong> 9:00–10:00 am<br>
-              <strong>Schedule:</strong> 1st &amp; 3rd Saturday of every month<br>
-              <strong>Questions:</strong> <a href="mailto:dinger@timothystl.org" style="color:var(--mid);font-weight:600;">dinger@timothystl.org</a>
-            </div>
-          </div>
-        </div>
-        <div>
-          <img src="/images/ministries/food-pantry.webp" alt="Timothy Food Pantry" loading="lazy" width="2000" height="1545" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap">
-      <div class="two-col" style="gap:32px;">
-        <div>
-          <span class="eyebrow eyebrow--sage">Receive food</span>
-          <h2>How to get help</h2>
-          <p>The pantry is open to anyone in need — no residency requirement, no appointment, no paperwork. Just come during pantry hours. Bring a bag or box if you have one.</p>
-          <p style="font-size:14px;color:var(--gray);">Open the <strong>1st &amp; 3rd Saturday</strong> of every month, <strong>9:00–10:00 am</strong>.</p>
-        </div>
-        <div>
-          <span class="eyebrow eyebrow--sky">Give &amp; serve</span>
-          <h2>How to help</h2>
-          <p>There are two ways to support the pantry: donate non-perishable food items, or volunteer to help on pantry day with setup, sorting, and distribution.</p>
-          <div class="btn-row" style="margin-top:20px;">
-            <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up</a>
-            <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Donate food</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <!-- Admin-managed content (set in admin → Ministries → Food Pantry → Edit body field) -->
-  <section id="foodpantry-content-section" class="section section--white" style="display:none;">
-    <div class="wrap" style="max-width:760px;"><div id="foodpantry-content" class="rich-content"></div></div>
-  </section>
-  <!-- Admin-managed posts (upcoming / past announcements) -->
-  <div id="foodpantry-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="foodpantry-upcoming-list"></div></div></section></div>
-  <div id="foodpantry-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="foodpantry-past-list"></div></div></section></div>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Food Pantry → Edit) -->
-  <div id="foodpantry-admin-cta" style="display:none;"></div>
-  <!-- ═══════════════════════════════════════════════════════════════════
-       FOOD PANTRY PAGE — CTA BUTTON BAR
-       To change a button: edit the text between > and <
-       To change where it goes: edit the href="..." value
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="page-cta-bar">
-    <h3>Help us serve the neighborhood.</h3>
-    <p>Volunteer on pantry day, donate non-perishables, or spread the word.</p>
-    <div class="btn-row">
-      <!-- Button 1: Volunteer -->
-      <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up</a>
-      <!-- Button 2: Pantry dates (links to news/events page) -->
-      <button onclick="showPage('news')" class="btn btn-outline">See pantry dates</button>
-      <!-- Button 3: Contact -->
-      <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Email the office</a>
-    </div>
-  </div>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- URBAN BEEKEEPERS -->
 <div id="page-bees" class="page">
-  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Urban Beekeepers → Hero banner image -->
-  <div id="bees-hero" class="page-hero page-hero--photo">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Urban Beekeepers</span>
-    <h1>Creation Care in the City</h1>
-    <p>St. Louis neighbors tending hives, learning together, and celebrating the gift of creation.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="two-col" style="gap:56px;align-items:start;">
-        <div>
-          <span class="eyebrow">About the ministry</span>
-          <h2>Beekeeping in Lindenwood Park</h2>
-          <p>Timothy's Urban Beekeepers ministry brings together neighbors who want to learn about and support the art of beekeeping in an urban setting. Our hives are tended by congregation members and community friends — a joyful reminder that creation care is part of our calling as people of God.</p>
-          <p>This ministry is open to curious beginners and experienced beekeepers alike. No prior experience is needed — just a love for the neighborhood and a willingness to learn.</p>
-          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;">
-            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Beekeeping basics</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Urban pollinator support</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Honey harvest</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Community education</span>
-          </div>
-        </div>
-        <div>
-          <img src="/images/ministries/Bees.webp?v=20260328" alt="Urban Beekeepers" loading="lazy" width="1500" height="750" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:720px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get involved</span>
-      <h2>Join the hive</h2>
-      <p style="max-width:560px;margin:0 auto 28px;">Whether you want to learn about bees, help with the hives, or just show up for the honey harvest — we'd love to have you. Contact the church office to find out when the next gathering is.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Volunteer opportunities</a>
-        <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Email the office</a>
-      </div>
-    </div>
-  </section>
-  <!-- Admin-managed content (set in admin → Ministries → Urban Beekeepers → Edit body field) -->
-  <section id="bees-content-section" class="section section--white" style="display:none;">
-    <div class="wrap" style="max-width:760px;"><div id="bees-content" class="rich-content"></div></div>
-  </section>
-  <!-- Admin-managed posts (upcoming / past announcements) -->
-  <div id="bees-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="bees-upcoming-list"></div></div></section></div>
-  <div id="bees-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="bees-past-list"></div></div></section></div>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Urban Beekeepers → Edit) -->
-  <div id="bees-admin-cta" style="display:none;"></div>
-  <!-- ═══════════════════════════════════════════════════════════════════
-       URBAN BEEKEEPERS PAGE — CTA BUTTON BAR
-       To change a button: edit the text between > and <
-       To change where it goes: edit the href="..." value
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="page-cta-bar">
-    <h3>Come tend the hive with us.</h3>
-    <p>Beginners welcome — no experience necessary, just curiosity.</p>
-    <div class="btn-row">
-      <!-- Button 1: Volunteer -->
-      <a href="https://serve.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up</a>
-      <!-- Button 2: Contact -->
-      <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Email the office</a>
-    </div>
-  </div>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- CHRISTMAS MARKET -->
 <div id="page-christmasmarket" class="page">
-  <!-- Hero uses the Christmas Market photo -->
-  <div class="page-hero page-hero--photo" style="background-image:url('/images/ministries/christmas-mkt.webp');">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Annual Community Event</span>
-    <h1>Timothy Christmas Market</h1>
-    <p>Shopping, fellowship, and celebration — a gift to Lindenwood Park every December.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <div class="two-col" style="gap:56px;align-items:start;">
-        <div>
-          <span class="eyebrow">About the market</span>
-          <h2>A neighborhood tradition</h2>
-          <p>The Timothy Christmas Market is an annual outdoor market bringing the Lindenwood Park community together each December. Local artisans and vendors set up in the church grounds — offering handmade goods, food, and festive fun for families and neighbors of all kinds.</p>
-          <p>The market is free and open to the public. It's one of our favorite ways to be a blessing to the neighborhood God has planted us in.</p>
-          <!-- Admin-managed market info posts load here -->
-          <div id="xmas-posts-wrap"></div>
-        </div>
-        <div>
-          <img src="/images/ministries/christmas-mkt.webp" alt="Timothy Christmas Market" loading="lazy" width="980" height="784" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
-        </div>
-      </div>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call. Two live anchors survive: loadChristmasMarketPosts()
+       unconditionally fills xmas-posts-wrap and unhides the announcements
+       section whenever the ministry has posts — not replicated by any
+       block. The vendor-coordinator email obfuscation script and the
+       standalone /christmasmarket/vendors[/apply] pages below are
+       untouched. -->
+  <div id="xmas-posts-wrap"></div>
   <section class="section section--linen" id="xmas-announcements-section" style="display:none;">
     <div class="wrap" style="max-width:720px;">
       <span class="eyebrow eyebrow--sage">Announcements</span>
@@ -1369,53 +455,6 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       <div id="xmas-announcements-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:720px;">
-      <span class="eyebrow eyebrow--amber" style="color:var(--amber);">Vendors</span>
-      <h2>Apply to be a vendor</h2>
-      <p style="max-width:600px;">Are you a local artisan, crafter, or small business? We'd love to have you at the market. Tables are $30 each, the application takes about five minutes, and you pay by card at the end.</p>
-      <div class="btn-row" style="margin-top:28px;">
-        <!-- ⚠ This used to be a mailto with an "update this href each year with
-             the Google Form URL" comment over it. There is no annual link to
-             paste any more: /christmasmarket/vendors is the application, and
-             the dates and the fee on it come from settings. -->
-        <a href="/christmasmarket/vendors" onclick="event.preventDefault();showPage('marketvendors')" class="btn btn-primary">Apply for a table</a>
-        <!-- ⚠ No plain mailto: here — a scraper reading raw page source
-             found this exact link and started sending the coordinator's inbox
-             spam. The address is character codes; the script right after
-             rebuilds the real link for a real browser. See obfMailLink() in
-             admin/blocks.js, which the block-rendered market pages share this
-             same fix with. -->
-        <a data-mail-c="116,108,99,46,99,104,114,105,115,116,109,97,115,109,97,114,107,101,116,64,103,109,97,105,108,46,99,111,109" class="btn btn-outline">Email the coordinator</a>
-        <script>(function(){var a=document.currentScript.previousElementSibling;if(!a||!a.getAttribute)return;var c=a.getAttribute('data-mail-c');if(!c)return;var codes=c.split(','),addr='';for(var i=0;i<codes.length;i++)addr+=String.fromCharCode(+codes[i]);a.href='mailto:'+addr;})();</script>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:16px;">Marla is the market coordinator — she'd rather hear from you before you apply than after.</p>
-    </div>
-  </section>
-  <!-- Admin-managed content (set in admin → Ministries → Christmas Market → Edit body field) -->
-  <section id="christmasmarket-admin-content-section" class="section section--white" style="display:none;">
-    <div class="wrap" style="max-width:760px;"><div id="christmasmarket-admin-content" class="rich-content"></div></div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Christmas Market → Edit) -->
-  <div id="christmasmarket-admin-cta" style="display:none;"></div>
-  <!-- ═══════════════════════════════════════════════════════════════════
-       CHRISTMAS MARKET PAGE — CTA BUTTON BAR
-       No longer an annual edit. The vendor application lives at
-       /christmasmarket/vendors and reads its dates, its fee and whether it is
-       open at all from settings, so nothing here changes from year to year.
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="page-cta-bar">
-    <h3>Join us at the market.</h3>
-    <p>Free and open to the public — vendors, volunteers, and neighbors all welcome.</p>
-    <div class="btn-row">
-      <!-- Button 1: Vendor application -->
-      <a href="/christmasmarket/vendors" onclick="event.preventDefault();showPage('marketvendors')" class="btn btn-primary">Apply to be a vendor</a>
-      <!-- Button 2: Volunteer at the market -->
-      <a href="https://serve.timothystl.org" target="_blank" class="btn btn-outline">Volunteer at the market</a>
-      <!-- Button 3: Contact -->
-      <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Email the office</a>
-    </div>
-  </div>
 </div>
 <!-- ═══════════════════════════════════════════════════════════════════
      CHRISTMAS MARKET — VENDOR PAGES  (/christmasmarket/vendors and, from
@@ -1439,437 +478,64 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 <!-- CONCORDIA CHILDREN'S SERVICES -->
 <div id="page-ccs" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Mission Partner</span>
-    <h1>Concordia Children's Services</h1>
-    <p>Caring for vulnerable children in the Philippines through the love of Christ.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow">About the ministry</span>
-      <h2>A home for children in the Philippines</h2>
-      <p>Concordia Children's Services in the Philippines is a Christian home providing care, shelter, education, and the Gospel of Jesus Christ to vulnerable and orphaned children. Rooted in the Lutheran faith, the ministry offers a family environment where children experience safety, dignity, and hope.</p>
-      <p>Timothy Lutheran Church has a long-standing connection to this ministry and is grateful to support its work through prayer and giving.</p>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:720px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Give to CCS</span>
-      <h2>Support children in the Philippines</h2>
-      <p style="max-width:560px;margin:0 auto 28px;">Your gift helps provide food, shelter, education, and Christian care for children at Concordia Children's Services.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a data-give-link data-give-fund="49cdc381-ff0e-4b7e-b029-091f206850c1" data-give-frequency="one-time" href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-primary">Give to CCS</a>
-        <button onclick="showPage('ministries')" class="btn btn-outline">Back to Ministries</button>
-      </div>
-    </div>
-  </section>
-  <div class="page-cta-bar">
-    <h3>Support children in the Philippines.</h3>
-    <p>Your giving makes a difference in the lives of vulnerable children through Concordia Children's Services.</p>
-    <div class="btn-row">
-      <a data-give-link data-give-fund="49cdc381-ff0e-4b7e-b029-091f206850c1" data-give-frequency="one-time" href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-primary">Give to CCS</a>
-    </div>
-  </div>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call. loadGiveLinks()'s [data-give-link] targets were
+       here (the old fund-specific Tithe.ly buttons) but the published
+       content's own Button bar links plainly to give.timothystl.org
+       instead — confirmed via the live published_blocks, not carried
+       over, so there is nothing left for that call to find. -->
 </div>
 
 <!-- YOUTH & FAMILY HUB -->
 <div id="page-youthfamily" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Children, Youth &amp; Families</span>
-    <h1>Youth &amp; Family Ministry</h1>
-    <p>Formation, community, and belonging for children and families at every stage of life.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Programs</span>
-      <h2>Find your place</h2>
-      <p style="max-width:640px;color:var(--gray);margin-bottom:8px;">Whether your kids are just starting Sunday School or your teenager is working through Confirmation, there's a place here for every family.</p>
-      <div class="min-grid" style="margin-top:32px;">
-        <div class="min-card" style="border-top-color:var(--amber);">
-          <div style="font-size:32px;margin-bottom:14px;">🎒</div>
-          <h3>Youth Ministry</h3>
-          <p>Faith formation, community, and service for students in grades 7–12. Events, retreats, and a place to belong.</p>
-          <a href="/youth" onclick="event.preventDefault();showPage('youth')">Learn more</a>
-        </div>
-        <div class="min-card" style="border-top-color:var(--sage);">
-          <div style="font-size:32px;margin-bottom:14px;">📖</div>
-          <h3>Sunday School</h3>
-          <p>Bible stories, community, and faith formation for children every Sunday morning during the 10:45 am service.</p>
-          <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')">Learn more</a>
-        </div>
-        <div class="min-card" style="border-top-color:var(--teal);">
-          <div style="font-size:32px;margin-bottom:14px;">✝️</div>
-          <h3>Confirmation</h3>
-          <p>A two-year journey for middle schoolers to explore and own their faith — rooted in Scripture and Lutheran tradition.</p>
-          <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')">Learn more</a>
-        </div>
-        <div class="min-card" style="border-top-color:var(--amber);">
-          <div style="font-size:32px;margin-bottom:14px;">⛺</div>
-          <h3>Vacation Bible School</h3>
-          <p>An unforgettable week of faith, fun, and community for children each summer. All are welcome.</p>
-          <a href="/vbs" onclick="event.preventDefault();showPage('vbs')">Learn more</a>
-        </div>
-        <div class="min-card" style="border-top-color:var(--sage);">
-          <div style="font-size:32px;margin-bottom:14px;">🥚</div>
-          <h3>Easter Egg Hunt</h3>
-          <p>An annual Easter celebration for families in Lindenwood Park — a free gift to our neighborhood every spring.</p>
-          <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')">Learn more</a>
-        </div>
-        <div class="min-card" style="border-top-color:var(--teal);">
-          <div style="font-size:32px;margin-bottom:14px;">🏠</div>
-          <h3>Family Ministry</h3>
-          <p>Families of all kinds are welcome here. Formation, community, and support for parents and children at every stage.</p>
-          <a href="/family" onclick="event.preventDefault();showPage('family')">Learn more</a>
-        </div>
-      </div>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about Youth &amp; Family?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE (Director of Christian Education) — we'd love to connect your family with what's happening here.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <div id="page-youth" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Grades 7–12</span>
-    <h1>Youth Ministry</h1>
-    <p>Growing in faith, serving together, and building friendships that last.</p>
-  </div>
-
-  <!-- Page content (from admin) + sidebar -->
-  <section class="section section--white">
-    <div class="wrap">
-      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;">
-        <div id="youth-content-section" style="flex:1 1 440px;min-width:0;">
-          <div id="youth-content" class="rich-content"></div>
-        </div>
-        <aside style="flex:0 0 210px;">
-          <div style="background:var(--linen);border:1px solid var(--border);border-radius:14px;padding:20px 22px;position:sticky;top:80px;">
-            <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:14px;text-decoration:none;">← Youth &amp; Family</a>
-            <div style="display:flex;flex-direction:column;gap:2px;">
-              <a href="/youth" onclick="event.preventDefault();showPage('youth')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;background:white;border:1px solid var(--border);">Youth Ministry</a>
-              <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;margin-top:4px;">Sunday School</a>
-              <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Confirmation</a>
-              <a href="/vbs" onclick="event.preventDefault();showPage('vbs')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Vacation Bible School</a>
-              <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Easter Egg Hunt</a>
-              <a href="/family" onclick="event.preventDefault();showPage('family')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Family Ministry</a>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-  </section>
-
-  <!-- Upcoming posts -->
-  <section class="section section--linen" id="youth-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="youth-upcoming-list"></div>
-    </div>
-  </section>
-
-  <!-- Past posts -->
-  <section class="section section--white" id="youth-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent activities</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="youth-past-list"></div>
-    </div>
-  </section>
-
-  <!-- Admin-managed CTA button (set in admin → Ministries → Youth → Edit) -->
-  <div id="youth-admin-cta" style="display:none;"></div>
-  <!-- Contact -->
-  <section class="section section--white page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about youth ministry?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE (Director of Christian Education) — we'd love to connect your family with what's happening here.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- SUNDAY SCHOOL -->
 <div id="page-sundayschool" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Children &amp; families</span>
-    <h1>Sunday School</h1>
-    <p>Growing in faith together — Bible stories, community, and formation for children every Sunday morning.</p>
-  </div>
-  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
-    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
-      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
-    </div>
-  </div>
-  <section class="section section--white" id="sundayschool-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="sundayschool-content" class="rich-content"></div>
-    </div>
-  </section>
-  <section class="section section--linen" id="sundayschool-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="sundayschool-upcoming-list"></div>
-    </div>
-  </section>
-  <section class="section section--white" id="sundayschool-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="sundayschool-past-list"></div>
-    </div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Sunday School → Edit) -->
-  <div id="sundayschool-admin-cta" style="display:none;"></div>
-  <section class="section section--linen page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about Sunday School?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- CONFIRMATION -->
 <div id="page-confirmation" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Middle school</span>
-    <h1>Confirmation</h1>
-    <p>A two-year journey for middle schoolers — rooted in the faith, preparing for a lifetime with Christ.</p>
-  </div>
-  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
-    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
-      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
-    </div>
-  </div>
-  <section class="section section--white" id="confirmation-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="confirmation-content" class="rich-content"></div>
-    </div>
-  </section>
-  <section class="section section--linen" id="confirmation-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="confirmation-upcoming-list"></div>
-    </div>
-  </section>
-  <section class="section section--white" id="confirmation-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="confirmation-past-list"></div>
-    </div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Confirmation → Edit) -->
-  <div id="confirmation-admin-cta" style="display:none;"></div>
-  <section class="section section--linen page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about Confirmation?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — has a real lessons block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). No loadNotices() call, no
+       other live anchor. -->
 </div>
 
 <!-- VBS -->
 <div id="page-vbs" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Summer at Timothy</span>
-    <h1>Vacation Bible School</h1>
-    <p>A week of adventure, music, friendship, and the Good News — open to every child in our neighborhood.</p>
-  </div>
-  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
-    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
-      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
-    </div>
-  </div>
-  <section class="section section--white" id="vbs-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="vbs-content" class="rich-content"></div>
-    </div>
-  </section>
-  <section class="section section--linen" id="vbs-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="vbs-upcoming-list"></div>
-    </div>
-  </section>
-  <section class="section section--white" id="vbs-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="vbs-past-list"></div>
-    </div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → VBS → Edit) -->
-  <div id="vbs-admin-cta" style="display:none;"></div>
-  <section class="section section--linen page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about VBS?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to have your kids join us.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — has a real registration block (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C). No loadNotices() call, no
+       other live anchor. -->
 </div>
 
 <!-- EGG HUNT -->
 <div id="page-egghunt" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Spring event</span>
-    <h1>Easter Egg Hunt</h1>
-    <p>An Easter celebration for families in Lindenwood Park — a gift to our neighborhood every spring.</p>
-  </div>
-  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
-    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
-      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
-    </div>
-  </div>
-  <section class="section section--white" id="egghunt-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="egghunt-content" class="rich-content"></div>
-    </div>
-  </section>
-  <section class="section section--linen" id="egghunt-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="egghunt-upcoming-list"></div>
-    </div>
-  </section>
-  <section class="section section--white" id="egghunt-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="egghunt-past-list"></div>
-    </div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Egg Hunt → Edit) -->
-  <div id="egghunt-admin-cta" style="display:none;"></div>
-  <section class="section section--linen page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about the Egg Hunt?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our office — we'd love to see you there.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dinger@timothystl.org" class="btn btn-primary">Email the office</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- FAMILY MINISTRY -->
 <div id="page-family" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">All ages, all stages</span>
-    <h1>Family Ministry</h1>
-    <p>Families are welcome at every stage here. Formation, community, and support for parents and children together.</p>
-  </div>
-  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
-    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
-      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
-    </div>
-  </div>
-  <section class="section section--white" id="family-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="family-content" class="rich-content"></div>
-    </div>
-  </section>
-  <section class="section section--linen" id="family-upcoming-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow">Coming up</span>
-      <h2>Upcoming events</h2>
-      <div id="family-upcoming-list"></div>
-    </div>
-  </section>
-  <section class="section section--white" id="family-past-section" style="display:none;">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Recent</span>
-      <h2>Past events &amp; recaps</h2>
-      <div id="family-past-list"></div>
-    </div>
-  </section>
-  <!-- Admin-managed CTA button (set in admin → Ministries → Family Ministry → Edit) -->
-  <div id="family-admin-cta" style="display:none;"></div>
-  <section class="section section--linen page-cta-bar">
-    <div class="wrap" style="max-width:620px;text-align:center;">
-      <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about Family Ministry?</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
-      <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE</a>
-        <button class="btn btn-outline" onclick="showPage('contact')">Contact form</button>
-      </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
-    </div>
-  </section>
+  <!-- Published — see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C. No
+       loadNotices() call, no other live anchor. -->
 </div>
 
 <!-- VOTERS PAGE -->
 <div id="page-voters" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Members of the congregation</span>
-    <h1>Voters Meeting</h1>
-    <p>Meeting information, Zoom access, and council documents.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap" style="max-width:680px;">
-      <div id="voters-loading" style="text-align:center;padding:40px;color:var(--gray);">Loading…</div>
-      <div id="voters-content" style="display:none;">
-        <div id="voters-meeting-info" style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;margin-bottom:32px;">
-          <span class="eyebrow">Meeting details</span>
-          <div id="voters-info-text" style="font-size:16px;color:var(--charcoal);line-height:1.85;white-space:pre-wrap;margin-top:8px;"></div>
-        </div>
-        <div id="voters-zoom-wrap" style="margin-bottom:40px;display:none;">
-          <span class="eyebrow eyebrow--sky">Join online</span>
-          <h2 style="margin-bottom:16px;">Zoom meeting</h2>
-          <a id="voters-zoom-link" href="#" target="_blank" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Join Zoom meeting</a>
-          <p style="margin-top:12px;font-size:13px;color:var(--gray);">Click the button above to join. If prompted, allow your browser to open Zoom.</p>
-        </div>
-        <div id="voters-files-wrap" style="display:none;">
-          <span class="eyebrow eyebrow--sage">Council documents</span>
-          <h2 style="margin-bottom:20px;">Downloads</h2>
-          <div id="voters-files-list"></div>
-        </div>
-        <div id="voters-empty" style="display:none;text-align:center;padding:40px 0;color:var(--gray);">
-          <p>Meeting details will be posted here when available. Check back closer to the meeting date.</p>
-        </div>
-      </div>
-    </div>
-  </section>
+  <!-- Published — has real Callout/Button bar/Documents blocks (see
+       admin/BLOCK-EDITOR-ROLLOUT.md, Phase C, and CLAUDE.md's "voters ...
+       reversed 2026-09-02"). No loadNotices() call. loadVotersPage()'s own
+       toggling was entirely between two descendants of the same hidden
+       takeover child — confirmed dead, no anchor needed. -->
 </div>
 
 <div id="page-404" class="page">
@@ -2995,19 +1661,31 @@ function giveLinkFor(base, fundId, frequency) {
 }
 
 // ── Site pages ───────────────────────────────────────────────────────────────
-// Every page on the site has a row in the admin's `pages` table. The one call
-// below brings back the navigation and, for any page that has been published
-// from the page editor, that page's finished HTML.
+// Every page on the site has a row in the admin's `pages` table. This call
+// brings back the navigation, the church details, and the redirect map —
+// the GLOBAL site data every page needs, whatever page it is.
 //
-// A page with nothing published is simply absent from `rendered`, and its
-// hardcoded markup below renders exactly as it always has. That fallback is
-// what lets the site be converted one page at a time — and what keeps the site
-// working if the admin is unreachable.
+// ⚠ PHASE B — IT NO LONGER CARRIES ANY PAGE'S RENDERED BODY. Before this, the
+// one fetch every page load made for its nav/footer/appearance also hauled
+// down the full published HTML of every OTHER page on the site — a cost that
+// was pure waste on an edge-rendered page (Phase A already means this page's
+// own body needs nothing from here at all) and unnecessary even on the
+// fallback path, which only ever needed ONE page's body, not all of them.
+// `?chrome=1` asks admin.timothystl.org's /api/pages for exactly this: the
+// same route, the same cache entry, just without `rendered` in the answer.
+// See loadPageBody() below for how a page's own body is fetched now — a
+// separate, per-page call, made only when this page's body did not already
+// arrive rendered from the edge.
+//
+// A page with nothing published simply has no body available from either
+// path, and its hardcoded markup below renders exactly as it always has.
+// That fallback is what lets the site be converted one page at a time — and
+// what keeps the site working if the admin is unreachable.
 var sitePagesPromise = null;
 var sitePagesData = null;
 function loadSitePages() {
   if (sitePagesPromise) return sitePagesPromise;
-  sitePagesPromise = fetch('https://admin.timothystl.org/api/pages')
+  sitePagesPromise = fetch('https://admin.timothystl.org/api/pages?chrome=1')
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d || !Array.isArray(d.pages)) return null;
@@ -3021,6 +1699,28 @@ function loadSitePages() {
     })
     .catch(function () { return null; });
   return sitePagesPromise;
+}
+
+// ── A single page's own body, fetched on its own ────────────────────────────
+// The one caller that still needs a page's rendered HTML rather than the
+// chrome around it: tlcMaybeTakeOverSitePage()'s fallback branch, for a page
+// the edge did NOT already render (an unpublished page, or the admin was
+// unreachable at request time). Memoized per id, the same shape
+// loadSitePages() itself uses, so navigating back to a page already fetched
+// this session costs nothing a second time.
+//
+// `?id=<pageId>` asks the SAME /api/pages route for the SAME cached bundle
+// loadSitePages() and the edge both already trigger the build of — this is a
+// third view onto it, not a second computation, so asking for a body here
+// costs no more D1 work than any other request to this route already did.
+var sitePageBodyPromises = {};
+function loadPageBody(id) {
+  if (sitePageBodyPromises[id]) return sitePageBodyPromises[id];
+  sitePageBodyPromises[id] = fetch('https://admin.timothystl.org/api/pages?id=' + encodeURIComponent(id))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { return (d && d.rendered && d.rendered[id]) || null; })
+    .catch(function () { return null; });
+  return sitePageBodyPromises[id];
 }
 
 // The block stylesheet used to ride inside every /api/ministry response —
@@ -3351,8 +2051,14 @@ async function tlcMaybeTakeOverSitePage(id) {
     return true;
   }
   sitePageTakeover[id] = false;
-  var d = await loadSitePages();
-  var html = d && d.rendered && d.rendered[id];
+  // The edge did not already render this page (unpublished, or the admin was
+  // unreachable when the request was served) — this is the one place a page's
+  // own body is still needed from here, so it is fetched on its own rather
+  // than through loadSitePages(), which no longer carries any page's body at
+  // all. Fired alongside it, not awaited first, for the nav/footer/appearance
+  // this page still needs regardless of how its body arrives.
+  loadSitePages();
+  var html = await loadPageBody(id);
   if (!html || !tlcTakeOverPage(id, html)) return false;
   sitePageTakeover[id] = true;
   await tlcHydrateFeedsIfPresent(id, document.getElementById(id + '-blocks'));
@@ -5081,7 +3787,16 @@ function tlcFormData(form) {
 }
 
 // ── CONTACT FORM ──────────────────────────────────────────────
-document.getElementById('contact-form').addEventListener('submit', async function(e) {
+// Guarded: /contact is the one page whose hardcoded fallback is still live
+// (its published blocks are missing the required native form — see
+// missingNativeForm() in tlc-admin-worker.js), but every OTHER page's
+// hardcoded form has been removed as Phase C of the block-editor rollout,
+// and this registration runs unconditionally on every page load regardless
+// of which page is showing. An unguarded .addEventListener on a null
+// element throws, which would have silently aborted every top-level
+// statement after it in this same <script> block.
+var tlcContactFormEl = document.getElementById('contact-form');
+if (tlcContactFormEl) tlcContactFormEl.addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn = document.getElementById('contact-btn');
   const alert = document.getElementById('contact-alert');
@@ -5113,7 +3828,11 @@ document.getElementById('contact-form').addEventListener('submit', async functio
 });
 
 // ── PRAYER FORM ───────────────────────────────────────────────
-document.getElementById('prayer-form').addEventListener('submit', async function(e) {
+// Guarded — see the identical note above the contact form. /prayer's
+// hardcoded fallback is gone now that its published blocks carry a real
+// prayerform block, so this element no longer exists on every page load.
+var tlcPrayerFormEl = document.getElementById('prayer-form');
+if (tlcPrayerFormEl) tlcPrayerFormEl.addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn = document.getElementById('prayer-btn');
   const alert = document.getElementById('prayer-alert');

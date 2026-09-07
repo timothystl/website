@@ -99,7 +99,15 @@ const mobileLabels = (page) => page.$$eval('#navMobile button', (els) => els.map
 
 group('the menu is generated from the pages table');
 {
-  const { page, ctx, errors } = await visit('/about', apiPages());
+  // ⚠ Worship is published in the mock here — as it genuinely is in
+  // production (see admin/BLOCK-EDITOR-ROLLOUT.md, Phase C) — because
+  // its old hardcoded body is gone and an unpublished #page-worship now
+  // collapses to zero height (nothing but a hidden notices anchor), which
+  // Playwright reads as "not visible" whatever `.active` says. That is not
+  // this group's concern — it is the "published vs unpublished" mechanism,
+  // covered below — so this click needs real content to land on.
+  const api = apiPages({ publish: { worship: [newBlock('hero', { title: 'Worship at Timothy' })] } });
+  const { page, ctx, errors } = await visit('/about', api);
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
   const expected = SITE_PAGES.filter((p) => p.in_menu && !p.parent_id).map((p) => p.menu_label || p.title);
   eq(JSON.stringify(await navLabels(page)), JSON.stringify(expected), 'the desktop nav is exactly the top-level menu pages, in order');
@@ -111,7 +119,7 @@ group('the menu is generated from the pages table');
   ok(await page.locator('#navMobile a[href="https://mdo.timothystl.org"]').count() > 0, 'external mobile links are not pages and survive the rebuild');
   // the nav still works
   await page.click('.nav-links button:has-text("Worship")');
-  await page.waitForTimeout(200);
+  await page.waitForSelector('#page-worship .tlcb--hero', { timeout: 5000 });
   eq(await page.locator('#page-worship').isVisible(), true, 'a generated nav button navigates');
   eq(new URL(page.url()).pathname, '/worship', 'and pushes the right address');
   await ctx.close();
@@ -151,59 +159,73 @@ group('the footer reads the church details record');
 // to give — the plate, bank bill pay, a QCD, a bequest — and its online button
 // simply hands off. give.timothystl.org is the transaction, and it resolves the
 // office's link server-side, so /give never holds a second copy of it.
+//
+// ⚠ Both /give and /ccs are confirmed published in production now (see
+// admin/BLOCK-EDITOR-ROLLOUT.md, Phase C), so their old hardcoded fallback
+// markup — including the CCS-specific [data-give-link]/data-give-fund
+// mechanism loadGiveLinks()/giveLinkFor() resolved — is gone. That mechanism
+// was never ported to a block type (there is no way to put a custom
+// data-give-* attribute on any block's button, and sanitizeRich() would
+// strip one pasted into rich text), so it was already unreachable by any
+// currently-published page before this pass touched anything: CCS's own
+// real published content (checked directly against the live database) is a
+// plain Button bar linking to give.timothystl.org, exactly like /give's —
+// a visitor picks "Concordia Children's Orphanage" from the fund dropdown
+// there instead of landing on a pre-selected fund. loadGiveLinks() and
+// giveLinkFor() are left in public/index.html regardless — dead code
+// removal is Phase D, not this pass — but there is no page left whose
+// [data-give-link] markup this test can drive, so both pages are tested
+// through their real, current shape: a plain hand-off button and no baked
+// Tithe.ly address, with the "which fund a visitor lands on" question left
+// to the actual give.timothystl.org page's own tests (see
+// test/give-page.test.mjs).
 group('the giving pages hand off rather than each carrying the link');
 {
-  const { page, ctx, errors } = await visit('/give', apiPages());
+  const giveBlocks = [
+    newBlock('hero', { title: 'Give to Timothy Lutheran' }),
+    newBlock('buttons', { items: [{ title: 'Give Online', url: 'https://give.timothystl.org' }] }),
+  ];
+  const { page, ctx, errors } = await visit('/give', apiPages({ publish: { give: giveBlocks } }));
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
-  const href = await page.getAttribute('#page-give a.btn-primary', 'href');
+  const href = await page.getAttribute('#page-give .tlcb-btn', 'href');
   eq(href, 'https://give.timothystl.org', 'the Give Online button hands off to the giving page');
   eq(await page.locator('#page-give [data-give-link]').count(), 0,
     'and nothing on /give resolves the Tithe.ly link itself');
   ok(!(await page.innerHTML('#page-give')).includes('give.tithe.ly'),
     'the page holds no Tithe.ly address at all');
-  // all six offline paths are still the reason to come here
-  const body = await page.textContent('#page-give');
-  for (const way of ['On Sunday morning', 'Bank bill pay', 'Thrivent Charitable',
-                     'IRA charitable distribution', 'Donor Advised Fund', 'Planned giving']) {
-    ok(body.includes(way), `/give still explains "${way}"`);
-  }
   await ctx.close();
 }
 {
-  // The CCS appeal is the exception: it asks for a specific fund, which cannot
-  // be expressed as a link to give.timothystl.org, so it is resolved in the page.
-  const { page, ctx } = await visit('/ccs', apiPages());
+  // CCS's real published content is the same shape as /give's — a plain
+  // hand-off button, no fund-specific resolution baked into the page.
+  const ccsBlocks = [
+    newBlock('hero', { title: "Concordia Children's Services" }),
+    newBlock('buttons', { items: [{ title: 'Give to CCS', url: 'https://give.timothystl.org' }] }),
+  ];
+  const { page, ctx } = await visit('/ccs', apiPages({ publish: { ccs: ccsBlocks } }));
   await page.waitForTimeout(600);
-  const ccs = await page.$$eval('#page-ccs [data-give-link]', (els) => els.map((e) => e.getAttribute('href')));
-  eq(ccs.length, 2, 'both CCS buttons are wired');
-  for (const h of ccs) {
-    ok(h.includes('NEW-FORM-ID'), 'CCS follows the managed link: ' + h);
-    ok(!h.includes('e1769a0f'), 'and not the copy baked into the page');
-    ok(h.includes('fundId=49cdc381-ff0e-4b7e-b029-091f206850c1'), 'and keeps its own fund');
-    eq((h.match(/fundId=/g) || []).length, 1, 'with one fundId, not two');
-    ok(h.includes('frequency=one-time'), 'and its one-time frequency');
-  }
+  eq(await page.locator('#page-ccs [data-give-link]').count(), 0,
+    'CCS holds no fund-specific Tithe.ly resolution of its own any more');
+  ok(!(await page.innerHTML('#page-ccs')).includes('give.tithe.ly'),
+    'and no baked-in Tithe.ly address either');
+  const href = await page.getAttribute('#page-ccs .tlcb-btn', 'href');
+  eq(href, 'https://give.timothystl.org', 'CCS hands off to the giving page, same as /give');
   await ctx.close();
-}
-{
-  // If the admin cannot be reached the CCS buttons must still give someone a
-  // way to give — the href in the markup is the fallback.
-  GIVE_URL = null;
-  const { page, ctx } = await visit('/ccs', apiPages());
-  await page.waitForTimeout(600);
-  const href = await page.getAttribute('#page-ccs [data-give-link]', 'href');
-  ok(/^https:\/\/give\.tithe\.ly\//.test(href), 'the button still points somewhere real: ' + href);
-  await ctx.close();
-  GIVE_URL = 'https://give.tithe.ly/?formId=NEW-FORM-ID&locationId=LOC';
 }
 
 group('the site still works when the admin is unreachable');
 {
+  // ⚠ Phase C (admin/BLOCK-EDITOR-ROLLOUT.md) deleted the hardcoded body
+  // /about used to fall back to during an outage — a deliberate, discussed
+  // tradeoff (the plan's own "delete it all now" call), not a bug this test
+  // should paper over. What survives an outage now is the site's CHROME —
+  // the nav and footer, both driven from the hardcoded fallback markup that
+  // is still in the document for THEM — not this page's own content.
   const { page, ctx, errors } = await visit('/about', null);
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
   ok((await navLabels(page)).length >= 9, 'the hardcoded nav is left in place');
-  ok((await page.textContent('#page-about')).includes('Timothy Lutheran'), 'the hardcoded page still renders');
-  eq(await page.locator('.tlcb').count(), 0, 'and no block markup appears');
+  eq((await page.textContent('#page-about')).trim(), '', 'the page body is blank without its old hardcoded fallback (the accepted Phase C tradeoff)');
+  eq(await page.locator('.tlcb').count(), 0, 'and no block markup appears either');
   await ctx.close();
 }
 
@@ -221,11 +243,15 @@ group('a published page takes over; an unpublished one does not');
   const visibleLegacy = await page.$$eval('#page-worship > *', (els) =>
     els.filter((e) => !e.id.endsWith('-blocks') && e.style.display !== 'none').length);
   eq(visibleLegacy, 0, 'the hardcoded sections are all stood down');
-  // a page with nothing published is untouched
+  // a page with nothing published is untouched — no takeover happens, so no
+  // blocks appear. ⚠ Since Phase C there is no longer meaningful hardcoded
+  // content left to check for either (see the "admin unreachable" group
+  // above for the same tradeoff) — the mechanism this asserts is "an
+  // unpublished page never gets blocks," not "an unpublished page still
+  // looks like something."
   await page.click('.nav-links button:has-text("About")');
   await page.waitForTimeout(400);
-  eq(await page.locator('#page-about .tlcb').count(), 0, 'an unpublished page keeps its hardcoded markup');
-  ok((await page.textContent('#page-about')).length > 200, 'and still has its content');
+  eq(await page.locator('#page-about .tlcb').count(), 0, 'an unpublished page never takes on blocks');
   await ctx.close();
 }
 
@@ -258,11 +284,19 @@ group('a section landing lists its child pages');
 
 group('a renamed page redirects instead of 404ing');
 {
-  const api = apiPages({ redirects: { '/oldname': '/worship' } });
+  // Worship is published here for the same reason as the nav-generation
+  // group above — its hardcoded fallback is gone, so it needs real content
+  // to have any height for isVisible() to read true.
+  const api = apiPages({
+    redirects: { '/oldname': '/worship' },
+    publish: { worship: [newBlock('hero', { title: 'Worship at Timothy' })] },
+  });
   const { page, ctx, errors } = await visit('/oldname', api);
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await page.waitForSelector('#page-worship .tlcb--hero', { timeout: 5000 });
   eq(await page.locator('#page-worship').isVisible(), true, 'the old address lands on the renamed page');
   eq(await page.locator('#page-404').isVisible(), false, 'and not on the 404');
+  await ctx.close();
 }
 
 group('an address that really is unknown still 404s');
