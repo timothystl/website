@@ -3634,6 +3634,32 @@ export default {
     // falls back to its own hardcoded markup — that fallback is what lets the
     // site be converted one page at a time.
     if (path === '/api/pages' && method === 'GET') {
+      // ── FX-39 / Phase B: two lean views onto the SAME cached bundle ──
+      // Every visitor's initial load calls this once for the nav, footer and
+      // appearance chrome (loadSitePages() in public/index.html) — and, until
+      // now, paid for the full rendered HTML of EVERY published page to get
+      // it, because that is the one thing this route ever built. `?chrome=1`
+      // answers with everything BUT `rendered`; `?id=<pageId>` answers with
+      // ONLY that one page's entry. Neither is a second computation or a
+      // second cache entry — both slice the identical object this route has
+      // always built and cached under PAGES_CACHE_URL, so a bust still
+      // invalidates all three views at once and a cache MISS on either lean
+      // view still costs exactly the one full rebuild a plain request always
+      // has, not a rebuild of its own.
+      //
+      // ⚠ PURELY ADDITIVE. A request with neither query param takes the exact
+      // path this route always has, byte for byte — including the cache-hit
+      // fast path below, which returns the cached Response directly rather
+      // than paying to parse and re-serialize it.
+      const chromeOnly = url.searchParams.get('chrome') === '1';
+      const onlyId = url.searchParams.get('id') || '';
+      const sliceForLeanView = (full) => {
+        if (onlyId) return { rendered: (full.rendered && full.rendered[onlyId]) ? { [onlyId]: full.rendered[onlyId] } : {} };
+        if (chromeOnly) return Object.assign({}, full, { rendered: {} });
+        return full;
+      };
+      const leanHeaders = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' };
+
       // Served from the edge once built — the whole payload is the same for
       // every visitor, and rebuilding it means five queries plus rendering
       // every published page. Posts under /pages and /menu bust it.
@@ -3641,7 +3667,12 @@ export default {
         const c = edgeCache();
         if (c) {
           const hit = await c.match(new Request(PAGES_CACHE_URL)).catch(() => null);
-          if (hit) return hit;
+          if (hit) {
+            if (!chromeOnly && !onlyId) return hit;
+            const full = await hit.clone().json().catch(() => null);
+            if (full) return new Response(JSON.stringify(sliceForLeanView(full)), { headers: leanHeaders });
+            // An unparseable cached body falls through to a fresh build below.
+          }
         }
       }
       const publicPage = (r) => ({
@@ -3693,7 +3724,11 @@ export default {
       const menuPages = new Map(list.map((p) => [p.id, p]));
       const strip = (i) => ({ label: i.label, href: i.href, style: i.style, kind: i.kind,
         children: (i.children || []).map((c) => ({ label: c.label, href: c.href, kind: c.kind })) });
-      const pagesRes = new Response(JSON.stringify({
+      // Built as a plain object, not stringified straight into the Response,
+      // so a chrome-only or single-page request on a cache MISS can slice
+      // this same value rather than paying to parse back out what was just
+      // serialized — see sliceForLeanView above.
+      const payload = {
         // The church details, so the footer reads the same record the map
         // block and the sidebar do. Staff change a phone number once.
         details: { settings: data.settings, services: data.services, appearance: data.appearance },
@@ -3739,13 +3774,15 @@ export default {
           for (const k of Object.keys(merged)) if (outbound[merged[k]]) merged[k] = outbound[merged[k]];
           return merged;
         })(),
-      }), {
+      };
+      const pagesRes = new Response(JSON.stringify(payload), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }
       });
       {
         const c = edgeCache();
         if (c) { try { ctx.waitUntil(c.put(new Request(PAGES_CACHE_URL), pagesRes.clone())); } catch (_) {} }
       }
+      if (chromeOnly || onlyId) return new Response(JSON.stringify(sliceForLeanView(payload)), { headers: leanHeaders });
       return pagesRes;
     }
 

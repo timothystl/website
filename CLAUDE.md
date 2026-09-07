@@ -247,6 +247,95 @@ existing `the edge already rendered the page` group in the same file and the
 full `node test/site-edge-render.test.mjs` (unaffected — nothing there
 changed).
 
+### `loadSitePages()` stopped hauling down every page's body to get the chrome (Phase B, 2026-09-07)
+
+The follow-on to the entry above, in the shape Dinger laid out himself as a
+four-phase plan: *"Phase A: one rendering path for already-migrated pages.
+Phase B: separate global site-data loading from page-body loading."* Phase A
+made an edge-rendered page's own body authoritative and stopped the client
+re-fetching it. It left the other half of the same waste untouched:
+`loadSitePages()` — the one fetch **every** page load makes, for nav, footer
+and appearance — was still the same `/api/pages` call that also carries the
+full rendered HTML of **every other published page on the site**
+(CLAUDE.md's own FX-39/PERF-2 finding from the 2026-08-19 review). On an
+edge-rendered page that payload's `rendered` map was pure dead weight —
+nothing reads it, because Phase A's own edge branch never awaits it for the
+page's own body — and even on the one path that DOES still need a page's
+body (a client-side SPA navigation to a page the edge did not render), only
+ONE page's HTML was ever needed, not the whole map.
+
+**The fix is two lean views onto the exact same cached bundle, not a second
+computation.** `/api/pages` still answers in full when asked for plainly —
+byte for byte, same cache-hit fast path as always. Two query parameters, on
+the SAME route and the SAME `PAGES_CACHE_URL` cache entry:
+
+- **`?chrome=1`** answers with everything BUT `rendered` — the nav, the
+  church details, the redirect map, the stylesheet link. This is what
+  `loadSitePages()` asks for now, on every page load.
+- **`?id=<pageId>`** answers with ONLY that one page's `rendered` entry
+  (`{ rendered: { home: '<div…' } }`, nothing else) — or an empty map if
+  nothing is published under that id. `loadPageBody(id)` (new, beside
+  `loadSitePages()`) is the one caller, and it is the one place left in
+  `public/index.html` that reads a page's own rendered body from the
+  network: `tlcMaybeTakeOverSitePage()`'s fallback branch (a page the edge
+  did NOT already render — unpublished, or the admin was unreachable at
+  request time) now awaits `loadPageBody(id)` instead of `d.rendered[id]`
+  off `loadSitePages()`'s own promise, and fires `loadSitePages()` alongside
+  it, unawaited, for the chrome that page still needs regardless of how its
+  body arrives — the identical fire-and-forget shape Phase A's edge branch
+  already established for the same reason.
+
+**⚠ NEITHER QUERY PARAMETER IS A SECOND ROUTE OR A SECOND CACHE KEY.**
+`bustPagesCache()` deletes exactly one entry, keyed on the fixed
+`PAGES_CACHE_URL` string, regardless of what query string a real request
+carried — so a `?chrome=1` or `?id=` request has always shared that one
+cache entry with a plain request, and a publish still invalidates all three
+views at once with no second list to keep in step. On a cache MISS, whichever
+of the three variants asks first pays for the one full build (the ~30
+queries `pageData()` and the page loop already cost) and the other two are a
+plain object slice of the result — `sliceForLeanView()` in
+`tlc-admin-worker.js`, run against the freshly-built payload object before it
+is ever serialized, or against a cache HIT's own JSON (cloned first, so the
+cached Response itself is never consumed and a second view can still read
+it a moment later). Verified directly: with a warmed cache, `env.DB.log`
+grows by zero statements for a `?chrome=1` or `?id=` request.
+
+**⚠ PURELY ADDITIVE, THE SAME WAY EVERY PIECE OF THIS INFRASTRUCTURE HAS
+BEEN.** A request naming neither parameter — every caller that existed
+before this shipped, `site-worker.js`'s own `getPublishedPages()` included —
+takes the exact path this route has always taken, unchanged. `loadSitePages()`'s
+own resolved shape is unchanged too: `{details, pages, menu, rendered, css,
+redirects}`, same keys, just an empty `rendered` — so `buildNav`,
+`fillFooter`, `applyAppearance`, `tlcEnsureBlockCss` and the unknown-path
+router's redirect check (all of which read `pages`/`menu`/`details`/`redirects`/
+`css` and never `rendered`) needed no changes at all. `d.rendered` was read
+in exactly one place in the whole file before this — the line now replaced
+by `loadPageBody(id)`.
+
+**Not touched, deliberately.** `site-worker.js`'s own `getPublishedPages()`
+still fetches the plain, full `/api/pages` and caches the whole bundle for up
+to a day, re-validated by the existing 60-second content-stamp probe. That
+cost is already amortized per isolate rather than per visitor — CLAUDE.md's
+own review filed reshaping it under "Phase 7 — structural, each its own
+project" (FX-39), and nothing about the edge's own render path needed to
+change to get the real, per-visitor win here: the client.
+
+Run: two new groups in
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1820 total) — `Phase B: /api/pages splits into a chrome-only view and a
+single-page view` (the chrome view carries the same pages/menu/details/redirects/css
+and an empty `rendered`; the single-page view carries exactly one page's body
+and nothing else; an unpublished id answers an empty map, not an error) and
+`...and both are slices of the ONE cached bundle, not a second computation`
+(a warmed cache absorbs both lean requests with zero additional D1
+statements). Both verified non-vacuous by reverting the admin-worker change
+alone and re-running against the new tests: the first fails with the real
+symptom (the chrome view still carrying every page's full rendered HTML);
+the second crashes outright (`Body is unusable: Body has already been read`)
+because the old code returns a cached Response directly with no per-view
+clone, and a second `.json()` read against the same already-consumed body is
+exactly the failure the clone exists to prevent.
+
 ### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
 
 Dinger, once the market fix above was confirmed working, checking whether it

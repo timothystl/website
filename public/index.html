@@ -2995,19 +2995,31 @@ function giveLinkFor(base, fundId, frequency) {
 }
 
 // ── Site pages ───────────────────────────────────────────────────────────────
-// Every page on the site has a row in the admin's `pages` table. The one call
-// below brings back the navigation and, for any page that has been published
-// from the page editor, that page's finished HTML.
+// Every page on the site has a row in the admin's `pages` table. This call
+// brings back the navigation, the church details, and the redirect map —
+// the GLOBAL site data every page needs, whatever page it is.
 //
-// A page with nothing published is simply absent from `rendered`, and its
-// hardcoded markup below renders exactly as it always has. That fallback is
-// what lets the site be converted one page at a time — and what keeps the site
-// working if the admin is unreachable.
+// ⚠ PHASE B — IT NO LONGER CARRIES ANY PAGE'S RENDERED BODY. Before this, the
+// one fetch every page load made for its nav/footer/appearance also hauled
+// down the full published HTML of every OTHER page on the site — a cost that
+// was pure waste on an edge-rendered page (Phase A already means this page's
+// own body needs nothing from here at all) and unnecessary even on the
+// fallback path, which only ever needed ONE page's body, not all of them.
+// `?chrome=1` asks admin.timothystl.org's /api/pages for exactly this: the
+// same route, the same cache entry, just without `rendered` in the answer.
+// See loadPageBody() below for how a page's own body is fetched now — a
+// separate, per-page call, made only when this page's body did not already
+// arrive rendered from the edge.
+//
+// A page with nothing published simply has no body available from either
+// path, and its hardcoded markup below renders exactly as it always has.
+// That fallback is what lets the site be converted one page at a time — and
+// what keeps the site working if the admin is unreachable.
 var sitePagesPromise = null;
 var sitePagesData = null;
 function loadSitePages() {
   if (sitePagesPromise) return sitePagesPromise;
-  sitePagesPromise = fetch('https://admin.timothystl.org/api/pages')
+  sitePagesPromise = fetch('https://admin.timothystl.org/api/pages?chrome=1')
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d || !Array.isArray(d.pages)) return null;
@@ -3021,6 +3033,28 @@ function loadSitePages() {
     })
     .catch(function () { return null; });
   return sitePagesPromise;
+}
+
+// ── A single page's own body, fetched on its own ────────────────────────────
+// The one caller that still needs a page's rendered HTML rather than the
+// chrome around it: tlcMaybeTakeOverSitePage()'s fallback branch, for a page
+// the edge did NOT already render (an unpublished page, or the admin was
+// unreachable at request time). Memoized per id, the same shape
+// loadSitePages() itself uses, so navigating back to a page already fetched
+// this session costs nothing a second time.
+//
+// `?id=<pageId>` asks the SAME /api/pages route for the SAME cached bundle
+// loadSitePages() and the edge both already trigger the build of — this is a
+// third view onto it, not a second computation, so asking for a body here
+// costs no more D1 work than any other request to this route already did.
+var sitePageBodyPromises = {};
+function loadPageBody(id) {
+  if (sitePageBodyPromises[id]) return sitePageBodyPromises[id];
+  sitePageBodyPromises[id] = fetch('https://admin.timothystl.org/api/pages?id=' + encodeURIComponent(id))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { return (d && d.rendered && d.rendered[id]) || null; })
+    .catch(function () { return null; });
+  return sitePageBodyPromises[id];
 }
 
 // The block stylesheet used to ride inside every /api/ministry response —
@@ -3351,8 +3385,14 @@ async function tlcMaybeTakeOverSitePage(id) {
     return true;
   }
   sitePageTakeover[id] = false;
-  var d = await loadSitePages();
-  var html = d && d.rendered && d.rendered[id];
+  // The edge did not already render this page (unpublished, or the admin was
+  // unreachable when the request was served) — this is the one place a page's
+  // own body is still needed from here, so it is fetched on its own rather
+  // than through loadSitePages(), which no longer carries any page's body at
+  // all. Fired alongside it, not awaited first, for the nav/footer/appearance
+  // this page still needs regardless of how its body arrives.
+  loadSitePages();
+  var html = await loadPageBody(id);
   if (!html || !tlcTakeOverPage(id, html)) return false;
   sitePageTakeover[id] = true;
   await tlcHydrateFeedsIfPresent(id, document.getElementById(id + '-blocks'));

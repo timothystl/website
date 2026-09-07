@@ -7312,5 +7312,86 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   ok(readStamp() !== after, 'a staff edit — a self-filling block — moves it as well');
 }
 
+// ── Phase B: /api/pages splits into a chrome-only view and a single-page view
+// ────────────────────────────────────────────────────────────────────────────
+// Phase A made an edge-rendered page's own body authoritative — the browser
+// never needs a page's rendered HTML to show the page it is already looking
+// at. But loadSitePages() (public/index.html), the ONE fetch every page load
+// makes for its nav/footer/appearance, still hauled down the full rendered
+// HTML of every OTHER published page too, because that was the only shape
+// this route had ever answered in. `?chrome=1` is the same route, the same
+// cached bundle, with `rendered` sliced out; `?id=<pageId>` is the
+// complementary single-page view the one remaining caller (loadPageBody(),
+// used only when a page's own body did NOT already arrive from the edge)
+// asks for instead of the whole map.
+{
+  group('Phase B: /api/pages splits into a chrome-only view and a single-page view');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // Publish something real to look for — home is seeded with draft blocks
+  // already, the same "bare POST publishes what is already there" shape the
+  // content-stamp group above already relies on.
+  await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+
+  const full = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(full.rendered && full.rendered.home, "sanity: the ordinary full response really carries home's body");
+
+  const chrome = await (await call(env, '/api/pages?chrome=1', { fresh: true })).json();
+  eq(JSON.stringify(chrome.pages), JSON.stringify(full.pages), 'the chrome view carries the same pages list');
+  eq(JSON.stringify(chrome.menu), JSON.stringify(full.menu), 'the same menu');
+  eq(JSON.stringify(chrome.details), JSON.stringify(full.details), 'the same church details');
+  eq(JSON.stringify(chrome.redirects), JSON.stringify(full.redirects), 'the same redirect map');
+  eq(chrome.css, full.css, 'the same stylesheet link');
+  eq(JSON.stringify(chrome.rendered), '{}',
+    "but none of any page's rendered body — that is the whole point of asking for it");
+
+  const single = await (await call(env, '/api/pages?id=home', { fresh: true })).json();
+  eq(single.rendered.home, full.rendered.home, "the single-page view carries exactly that page's body");
+  eq(Object.keys(single.rendered).length, 1, "and nobody else's");
+  ok(!('pages' in single) && !('menu' in single) && !('details' in single),
+    'and no chrome at all — loadPageBody() only ever reads .rendered');
+
+  const missing = await (await call(env, '/api/pages?id=does-not-exist', { fresh: true })).json();
+  eq(JSON.stringify(missing.rendered), '{}', 'an id nothing was published under answers an empty map, not an error');
+}
+
+// ── ...and both are slices of the ONE cached bundle, not a second computation
+// ────────────────────────────────────────────────────────────────────────────
+// The whole reason this is safe to ship additively: a chrome-only or
+// single-page request costs no more D1 work than a plain one ever did. Proven
+// with a recording cache exactly like the one above — asserted against the
+// harness's absent `caches` this would pass whether or not it is really
+// sharing the cached bundle, since every call would just rebuild from D1 and
+// still answer correctly.
+{
+  group('...and both are slices of the ONE cached bundle, not a second computation');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+
+  let cached = null;
+  globalThis.caches = { default: {
+    match: async () => cached,
+    put: async (req, res) => { cached = res.clone ? res.clone() : res; },
+    delete: async () => { cached = null; return true; },
+  } };
+  try {
+    await call(env, '/api/pages', { fresh: true });
+    ok(cached, 'sanity: the plain request actually populated the cache');
+
+    const before = env.DB.log.length;
+    const chrome = await (await call(env, '/api/pages?chrome=1', { fresh: true })).json();
+    eq(env.DB.log.length, before, 'a chrome-only request on a warm cache issues no new D1 queries at all');
+    ok(chrome.pages && chrome.pages.length, 'and still answers with the real chrome');
+
+    const single = await (await call(env, '/api/pages?id=home', { fresh: true })).json();
+    eq(env.DB.log.length, before, 'neither does a single-page request');
+    ok(single.rendered.home, 'and it still answers with the real body');
+  } finally {
+    delete globalThis.caches;
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
