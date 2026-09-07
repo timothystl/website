@@ -1677,30 +1677,13 @@ function valuePhotoUploadScript() {
 }
 
 // ── MAIN HANDLER ─────────────────────────────────────────────
-// Promotes ministry pages whose scheduled publish time has come. Run from the
-// cron trigger in wrangler.toml, and again whenever staff open the Ministries
-// list so the admin never shows a page as "scheduled" after its moment passed.
+// Promotes site pages whose scheduled publish time has come. The former
+// youth_pages publisher was retired once the public site stopped reading that
+// table's bodies; keeping it alive would let an invisible editor continue to
+// claim that unused content had gone live.
 async function promoteScheduledPages(env) {
   const nowIso = new Date().toISOString();
   let promoted = 0;
-  try {
-    const due = await env.DB.prepare(
-      "SELECT slug, title, blocks FROM youth_pages WHERE page_status = 'scheduled' AND publish_at IS NOT NULL AND publish_at <= ?"
-    ).bind(nowIso).all();
-    for (const row of due.results || []) {
-      const json = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks)));
-      await env.DB.prepare(
-        "UPDATE youth_pages SET published_blocks = ?, page_status = 'live', publish_at = NULL, change_log = '[]', updated_at = ? WHERE slug = ?"
-      ).bind(json, nowIso, row.slug).run();
-      await env.DB.prepare('INSERT INTO ministry_page_revisions (slug, blocks, published_at, published_by) VALUES (?, ?, ?, ?)')
-        .bind(row.slug, json, nowIso, 'scheduled').run();
-      promoted += 1;
-    }
-  } catch (e) {
-    console.error('Scheduled ministry publish failed:', e && e.message);
-  }
-  // Site pages schedule the same way. Kept in one function so removing the cron
-  // trigger cannot break "publish later" for one kind of page but not the other.
   try {
     const due = await env.DB.prepare(
       'SELECT id, title, blocks FROM pages WHERE publish_at IS NOT NULL AND publish_at <= ?'
@@ -3999,13 +3982,17 @@ export default {
       const grab = async (sql, ...binds) => {
         try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
       };
-      const [pages, news, ministries] = await Promise.all([
+      const [pages, news] = await Promise.all([
         // Same filter /api/pages itself uses — a page reaches this list only
         // once it is actually published, whatever its editor is doing to it.
+        // Joining youth_pages labels ministry results without letting that
+        // retired body table decide the title, address or publication state.
         grab(
-          "SELECT id, title, slug, external_url, seo_description FROM pages " +
-          "WHERE status = 'published' AND (LOWER(title) LIKE ? OR LOWER(COALESCE(seo_description,'')) LIKE ?) " +
-          "ORDER BY title ASC LIMIT 8", like, like
+          "SELECT p.id, p.title, p.slug, p.external_url, p.seo_description, " +
+          "CASE WHEN y.slug IS NULL THEN 'Page' ELSE 'Ministry' END AS section " +
+          "FROM pages p LEFT JOIN youth_pages y ON p.slug = '/' || y.slug " +
+          "WHERE p.status = 'published' AND (LOWER(p.title) LIKE ? OR LOWER(COALESCE(p.seo_description,'')) LIKE ?) " +
+          "ORDER BY p.title ASC LIMIT 14", like, like
         ),
         // NEWS_WHERE_SQL is the one rule /api/news itself is built on — see the
         // comment above it. A post that has expired, is not yet published, or
@@ -4015,27 +4002,19 @@ export default {
           'AND (LOWER(title) LIKE ? OR LOWER(COALESCE(summary,\'\')) LIKE ?) ORDER BY publish_date DESC LIMIT 6',
           today, today, today, like, like
         ),
-        // A ministry marked 'hidden' has no content — see the identical check
-        // on /api/ministry/:slug — so it is excluded here for the same reason:
-        // a search result that opens to nothing is worse than no result.
-        grab(
-          "SELECT slug, title FROM youth_pages WHERE COALESCE(page_status,'live') <> 'hidden' " +
-          "AND (LOWER(title) LIKE ? OR LOWER(slug) LIKE ?) ORDER BY title ASC LIMIT 6", like, like
-        ),
       ]);
       const results = [
         // give-landing is a `pages` row only so it gets the editor/publish
         // machinery for free — see the identical exclusion on /api/pages. It
         // is not a page of this site and must never be offered as one.
         ...pages.filter((p) => p.id !== GIVE_LANDING_PAGE_ID).map((p) => ({
-          section: 'Page', label: p.title, meta: p.seo_description || '',
+          section: p.section, label: p.title, meta: p.seo_description || '',
           href: outboundUrl(p) || p.slug,
         })),
         // News posts have no address of their own — every one is a card on
         // /news — so every result points there rather than to a fragment
         // nothing on the page answers to.
         ...news.map((n) => ({ section: 'News & Events', label: n.title, meta: n.summary || '', href: '/news' })),
-        ...ministries.map((m) => ({ section: 'Ministry', label: m.title || m.slug, meta: '', href: '/' + m.slug })),
       ];
       return new Response(JSON.stringify({ results: results.slice(0, 20) }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
@@ -4051,7 +4030,11 @@ export default {
       const q = async (sql) => { try { return (await env.DB.prepare(sql).all()).results || []; } catch (_) { return []; } };
       const [partners, counts, coreValueRows] = await Promise.all([
         q('SELECT name, short_name, value, blurb, site_url, also_note, sort_order FROM partners'),
-        q("SELECT value, slug, title FROM youth_pages WHERE value IS NOT NULL AND value <> '' AND COALESCE(in_menu,1) = 1"),
+        q(`SELECT y.value, y.slug, p.title
+             FROM youth_pages y
+             JOIN pages p ON p.slug = '/' || y.slug
+            WHERE y.value IS NOT NULL AND y.value <> ''
+              AND p.status = 'published' AND p.in_menu = 1`),
         q('SELECT key, short, name, blurb, tag, why, photo_url FROM core_values'),
       ]);
       const byValue = Object.fromEntries(partners.map((p) => [p.value, p]));
@@ -5329,7 +5312,6 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       const canApprove = hasPermission(currentUser, 'newsletter_approve');
       const canGym = hasPermission(currentUser, 'gym_manage');
       const canPages = hasPermission(currentUser, 'pages_edit') || hasPermission(currentUser, 'pages_edit_own');
-      const canMinistries = hasPermission(currentUser, 'ministries_edit');
 
       const badges = await pageBadges();
       const q = async (sql, ...binds) => {
@@ -5408,20 +5390,6 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
             title: `${pluralise(soon.length, 'news post', 'news posts')} about to expire`,
             detail: soon.map((s) => `“${escapeHtml(s.title)}” on ${escapeHtml(s.expire_date)}`).join(' · '),
             action: 'Extend', href: soon.length === 1 ? `/newsitems/edit/${soon[0].id}` : '/newsitems?filter=live',
-          });
-        }
-      }
-
-      if (canMinistries) {
-        const emptyPages = await q(
-          "SELECT slug, title FROM youth_pages WHERE COALESCE(TRIM(content),'') = '' AND COALESCE(TRIM(blocks),'') = '' ORDER BY slug LIMIT 5"
-        );
-        if (emptyPages.length) {
-          tasks.push({
-            glyph: '✏️',
-            title: `${pluralise(emptyPages.length, 'ministry page is', 'ministry pages are')} still empty`,
-            detail: emptyPages.map((p) => escapeHtml(p.title || p.slug)).join(' · '),
-            action: 'Fill in', href: '/ministries',
           });
         }
       }
@@ -5622,8 +5590,14 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
           sql: 'SELECT id, title, slug FROM pages WHERE LOWER(title) LIKE ? OR LOWER(slug) LIKE ? LIMIT 5',
           map: (r) => ({ label: r.title, meta: r.slug, href: `/pages/${encodeURIComponent(r.id)}/edit` }) },
         { on: hp('ministries_edit'), section: 'Ministries',
-          sql: 'SELECT slug, title FROM youth_pages WHERE LOWER(title) LIKE ? OR LOWER(slug) LIKE ? LIMIT 5',
-          map: (r) => ({ label: r.title || r.slug, meta: `/${r.slug}`, href: `/ministries/editor/${encodeURIComponent(r.slug)}` }) },
+          sql: `SELECT y.slug, COALESCE(p.title, y.title) AS title, p.id AS page_id, p.owner_username
+                  FROM youth_pages y LEFT JOIN pages p ON p.slug = '/' || y.slug
+                 WHERE LOWER(COALESCE(p.title, y.title)) LIKE ? OR LOWER(y.slug) LIKE ? LIMIT 5`,
+          map: (r) => {
+            const mayOpen = r.page_id && (hp('pages_edit') || (hp('pages_edit_own') && r.owner_username === currentUser?.username));
+            return { label: r.title || r.slug, meta: `/${r.slug}`,
+              href: mayOpen ? `/pages/${encodeURIComponent(r.page_id)}/edit` : `/ministries/meta/${encodeURIComponent(r.slug)}` };
+          } },
         { on: hp('news_edit'), section: 'News & Events',
           sql: 'SELECT id, title, publish_date FROM news_items WHERE LOWER(title) LIKE ? OR LOWER(COALESCE(summary,\'\')) LIKE ? ORDER BY publish_date DESC LIMIT 5',
           map: (r) => ({ label: r.title, meta: r.publish_date || '', href: `/newsitems/edit/${r.id}` }) },
@@ -8072,7 +8046,7 @@ function pickFormat(fmt) {
         const lockId = form.get('newsletter_id');
         if (lockId) {
           const existing = await env.DB.prepare(
-            'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id, updated_at, updated_by FROM newsletters WHERE id = ?'
+            'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id, updated_at, updated_by, ministry_content, ministry_type FROM newsletters WHERE id = ?'
           ).bind(lockId).first();
           existingBeforeSave = existing;
           const verdict = canEditNewsletter(existing);
@@ -8141,9 +8115,11 @@ function pickFormat(fmt) {
         : '[]';
       const tertiaryCtaLabel = fmt === 'weekly' ? form.get('tertiary_cta_label') || '' : '';
       const tertiaryCtaUrl = fmt === 'weekly' ? form.get('tertiary_cta_url') || '' : '';
-      // Legacy fields kept for DB compat but no longer used in the form
-      const ministryContent = '';
-      const ministryType = 'text';
+      // Legacy fields kept for DB/API compatibility but no longer shown in the
+      // composer. Preserve an older issue's values when it is edited: removing
+      // a write-only control must not silently erase historical content.
+      const ministryContent = editId ? (existingBeforeSave?.ministry_content || '') : '';
+      const ministryType = editId ? (existingBeforeSave?.ministry_type || 'text') : 'text';
 
       // Quick-announcement-specific fields
       const quickBody = cleanRich(form.get('quick_body') || '');
@@ -8569,8 +8545,6 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
 
       const bodyVal = (fmt === 'quick' ? row.pastor_note : '') || '';
       const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
-      const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
-
       const copiedNotice = url.searchParams.get('copied') === '1'
         ? `<div class="alert alert-success">✓ Duplicated as a new draft. Update the subject, date, and content, then publish when ready.</div>`
         : '';
@@ -10302,6 +10276,13 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
 
     if (path.startsWith('/ministries')) {
       const CORE_SLUGS = ['youth','sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees','christmasmarket'];
+      const canonicalPageFor = (slug) => env.DB.prepare(
+        'SELECT id, title, slug, status, in_menu, owner_username, blocks, published_blocks, publish_at, updated_at FROM pages WHERE slug = ?'
+      ).bind('/' + slug).first();
+      const canEditCanonical = (page) => !!(page && (page.id || page.site_page_id)) && (
+        hasPermission(currentUser, 'pages_edit') ||
+        (hasPermission(currentUser, 'pages_edit_own') && page.owner_username === currentUser?.username)
+      );
 
       // ── BLOCK PAGE EDITOR ────────────────────────────────────────────────
       // Full-viewport editor screen. Served as a static shell (same pattern as
@@ -10310,13 +10291,28 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         const slug = decodeURIComponent(path.slice('/ministries/editor/'.length));
         const exists = await env.DB.prepare('SELECT slug FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!exists) return new Response('', { status: 302, headers: { Location: '/ministries' } });
-        const editorHtml = MINISTRY_EDITOR_HTML
-          .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
-          // The link picker's rules, from the same file the Worker checks
-          // links with — one definition, two runtimes. See admin/links.js.
-          .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
-          .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD);
-        return new Response(editorHtml, { headers: EDITOR_HEADERS });
+        const canonical = await canonicalPageFor(slug);
+        if (canEditCanonical(canonical)) {
+          return new Response('', { status: 302, headers: { Location: `/pages/${encodeURIComponent(canonical.id)}/edit` } });
+        }
+        const reason = canonical
+          ? 'This page exists in the Site Editor, but it is not assigned to your account.'
+          : 'This ministry has no matching Site Editor page.';
+        return html(`${sidebarShell('ministries', currentUser, '<a href="/ministries">← All ministries</a>', await pageBadges())}
+<div class="tlc-wrap"><div class="alert alert-warn"><strong>The old ministry editor has been retired.</strong>
+${escapeHtml(reason)} Nothing entered in the old editor appeared on the public website after the page migration, so it no longer accepts edits or publishing. Ask a website administrator to create or assign the canonical page.</div></div>`, 'Editor retired');
+      }
+
+      // An already-open tab must not be able to keep autosaving or publishing
+      // into the retired youth_pages body columns after the UI is gone.
+      if (path.startsWith('/ministries/api/page/') && method === 'POST') {
+        const rest = path.slice('/ministries/api/page/'.length);
+        const slug = decodeURIComponent(rest.split('/')[0]);
+        const canonical = await canonicalPageFor(slug);
+        return jsonResponse({
+          error: 'The old ministry editor is retired. Use the Site Editor.',
+          editor: canEditCanonical(canonical) ? `/pages/${encodeURIComponent(canonical.id)}/edit` : null,
+        }, 409);
       }
 
       // Everything the editor needs in one round trip.
@@ -10459,11 +10455,18 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         // moment it was meant to publish.
         await promoteScheduledPages(env);
         const pages = await env.DB.prepare(
-          'SELECT slug, title, has_posts, updated_at, blocks, published_blocks, page_status, publish_at, value, in_menu FROM youth_pages ORDER BY rowid'
+          `SELECT y.slug, COALESCE(p.title, y.title) AS title, y.has_posts, y.value,
+                  p.id AS site_page_id, p.slug AS site_slug, p.status AS page_status,
+                  p.in_menu, p.owner_username, p.blocks, p.published_blocks,
+                  p.publish_at, p.updated_at
+             FROM youth_pages y
+             LEFT JOIN pages p ON p.slug = '/' || y.slug
+            ORDER BY y.rowid`
         ).all();
         const msg = url.searchParams.get('msg');
         let alertHtml = '';
         if (msg === 'saved')       alertHtml = `<div class="alert alert-success">✓ Page saved and published.</div>`;
+        if (msg === 'metasaved')   alertHtml = `<div class="alert alert-success">✓ Ministry metadata saved.</div>`;
         if (msg === 'created')     alertHtml = `<div class="alert alert-success">✓ Ministry page created — open the editor to lay it out.</div>`;
         if (msg === 'deleted')     alertHtml = `<div class="alert alert-info">Ministry page deleted.</div>`;
         if (msg === 'postsaved')   alertHtml = `<div class="alert alert-success">✓ Post saved.</div>`;
@@ -10477,18 +10480,24 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
         } catch (_) {}
 
-        const TONE = { draft: 'warn', live: 'good', scheduled: 'auto', hidden: 'plain' };
-        const LABEL = { draft: 'Draft edits', live: 'Live', scheduled: 'Scheduled', hidden: 'Hidden' };
+        const TONE = { draft: 'warn', published: 'good', scheduled: 'auto', hidden: 'plain', missing: 'bad' };
+        const LABEL = { draft: 'Draft', published: 'Published', scheduled: 'Scheduled', hidden: 'Hidden', missing: 'No site page' };
 
         const listRows = pages.results.map((p) => {
-          const draftCount = sanitizeBlocks(parseBlocks(p.blocks)).length;
-          const status = LABEL[p.page_status] ? p.page_status : 'live';
+          const status = p.site_page_id && LABEL[p.page_status] ? p.page_status : (p.site_page_id ? 'published' : 'missing');
           const postCount = countMap[p.slug] || 0;
-          const inMenu = p.in_menu === null || p.in_menu === undefined ? 1 : p.in_menu;
+          const inMenu = !!p.in_menu;
           const v = valueByKey(p.value);
+          const canOpen = canEditCanonical(p);
+          const canManageMenu = !!p.site_page_id && hasPermission(currentUser, 'pages_edit');
+          const editorHref = canOpen ? `/pages/${encodeURIComponent(p.site_page_id)}/edit` : `/ministries/meta/${encodeURIComponent(p.slug)}`;
+          const warnings = [];
+          if (!p.site_page_id) warnings.push('No canonical Site Editor page matches this ministry.');
+          else if (!canOpen) warnings.push('The canonical page is not assigned to your account.');
+          if (!p.value) warnings.push('No core value is assigned, so this ministry is missing from the values report.');
 
           return {
-            href: `/ministries/editor/${encodeURIComponent(p.slug)}`,
+            href: editorHref,
             filter: [
               status === 'draft' ? 'draft-edits' : '',
               postCount ? 'with-posts' : '',
@@ -10503,36 +10512,35 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
                 <span class="tlc-primary-title">${escapeHtml(p.title)}${v ? ` ${valueChip(p.value)}` : ''}</span>
                 <span class="tlc-primary-sub">/ministries/${escapeHtml(p.slug)}${postCount ? ` · ${pluralise(postCount, 'post')}` : ''}</span>
               </span></div>`,
-              `<a href="/${escapeHtml(p.slug)}" target="_blank" rel="noopener" style="color:var(--tlc-blue);text-decoration:none;">/${escapeHtml(p.slug)}</a>`,
-              toggleCell(`/ministries/toggle-menu/${encodeURIComponent(p.slug)}`, !!inMenu, `${p.title} in the menu`),
+              `<a href="${escapeHtml(p.site_slug || '/' + p.slug)}" target="_blank" rel="noopener" style="color:var(--tlc-blue);text-decoration:none;">${escapeHtml(p.site_slug || '/' + p.slug)}</a>`,
+              canManageMenu
+                ? toggleCell(`/ministries/toggle-menu/${encodeURIComponent(p.slug)}`, inMenu, `${p.title} in the menu`)
+                : `<span style="color:var(--tlc-muted);">${inMenu ? 'Yes' : 'No'}</span>`,
               statusPill(TONE[status], LABEL[status]),
             ],
             actions: rowActions(
-              { label: 'Open editor', href: `/ministries/editor/${encodeURIComponent(p.slug)}` },
+              { label: canOpen ? 'Open Site Editor' : 'Ministry metadata', href: editorHref },
               [
-                { label: 'Details', href: `/ministries/edit/${encodeURIComponent(p.slug)}` },
+                { label: 'Metadata', href: `/ministries/meta/${encodeURIComponent(p.slug)}` },
                 p.has_posts ? { label: 'Posts', href: `/ministries/${encodeURIComponent(p.slug)}/posts` } : null,
                 { label: 'View live', href: `https://timothystl.org/${encodeURIComponent(p.slug)}` },
-                !CORE_SLUGS.includes(p.slug)
-                  ? { label: 'Delete', action: `/ministries/delete/${encodeURIComponent(p.slug)}`, confirm: 'Delete this ministry page?', danger: true }
-                  : null,
               ]
             ),
-            warn: !p.value ? 'No core value on this ministry, so it is missing from the values report on the dashboard.' : '',
-            warnCta: !p.value ? { label: 'Tag it', href: `/ministries/edit/${encodeURIComponent(p.slug)}` } : null,
+            warn: warnings.join(' '),
+            warnCta: warnings.length ? { label: 'Review metadata', href: `/ministries/meta/${encodeURIComponent(p.slug)}` } : null,
           };
         });
 
         const cfg = sectionCfg('ministries');
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/manual#ministry-editor">How the editor works</a>`, await pageBadges())}
+${sidebarShell('ministries', currentUser, `<a href="/pages">Open Site Editor</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'ministries',
     title: cfg.title,
     purpose: cfg.purpose,
-    action: { label: cfg.action, href: '/ministries/add' },
+    action: hasPermission(currentUser, 'pages_edit') ? { label: cfg.action, href: '/ministries/add' } : null,
     search: cfg.search,
     filters: filtersOf('ministries'),
     valueChips: sectionCfg('ministries').valueChips,
@@ -10547,6 +10555,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/manual#ministry-editor">How
 
       // ── Add ministry form (GET) ──
       if (path === '/ministries/add' && method === 'GET') {
+        if (!hasPermission(currentUser, 'pages_edit')) return new Response('Access denied.', { status: 403 });
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`, await pageBadges())}
 <div class="tlc-wrap">
@@ -10581,214 +10590,115 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
 
       // ── Create ministry (POST) ──
       if (path === '/ministries/create' && method === 'POST') {
+        if (!hasPermission(currentUser, 'pages_edit')) return new Response('Access denied.', { status: 403 });
         const form = await request.formData();
         const slug = (form.get('slug') || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
         const title = form.get('title') || '';
         const has_posts = form.get('has_posts') === '1' ? 1 : 0;
         if (!slug || !title) return new Response('', { status: 302, headers: { Location: '/ministries/add' } });
-        // A new page starts from three sensible blocks rather than a blank
-        // canvas — an empty page is intimidating, three blocks are not — and
-        // opens straight into the editor.
+        const pathSlug = '/' + slug;
+        const existingMinistry = await env.DB.prepare('SELECT slug FROM youth_pages WHERE slug = ?').bind(slug).first();
+        const existingPage = await env.DB.prepare('SELECT id FROM pages WHERE id = ? OR slug = ?').bind(slug, pathSlug).first();
+        if (existingMinistry || existingPage) {
+          return new Response('', { status: 302, headers: { Location: '/ministries/add?msg=exists' } });
+        }
+        // Create the canonical page and its ministry metadata together. The
+        // page starts as a draft outside the menu; the youth_pages row carries
+        // only reporting/posts data and no longer owns a public body.
         const starter = JSON.stringify(starterBlocks(title));
-        await env.DB.prepare(
-          "INSERT OR IGNORE INTO youth_pages (slug, title, content, has_posts, updated_at, blocks, published_blocks, page_status, change_log) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', '[]')"
-        ).bind(slug, title, '', has_posts, new Date().toISOString(), starter, '[]').run();
-        await logAudit(env.DB, currentUser, 'create', 'ministry_page', slug, title, null, { blocks: parseBlocks(starter).length });
-        return new Response('', { status: 302, headers: { Location: '/ministries/editor/' + encodeURIComponent(slug) } });
+        const now = new Date().toISOString();
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) VALUES (?, ?, '', ?, 'ministries', 999, 'standard', 'draft', 0, '', ?, ?, ?)"
+          ).bind(slug, title, pathSlug, starter, now, currentUser?.username || ''),
+          env.DB.prepare(
+            "INSERT INTO youth_pages (slug, title, content, has_posts, updated_at, blocks, published_blocks, page_status, change_log) VALUES (?, ?, '', ?, ?, '[]', '[]', 'retired', '[]')"
+          ).bind(slug, title, has_posts, now),
+        ]);
+        await logAudit(env.DB, currentUser, 'create', 'page', slug, title, null, { slug: pathSlug, ministry_metadata: true });
+        return new Response('', { status: 302, headers: { Location: `/pages/${encodeURIComponent(slug)}/edit?tab=page` } });
       }
 
-      // ── Edit ministry page (GET) ──
-      if (path.startsWith('/ministries/edit/') && method === 'GET') {
-        const slug = path.slice('/ministries/edit/'.length);
-        const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
-        if (!page) return new Response('Not found', { status: 404 });
-        const videoSectionHtml = slug === 'music' ? `
-<div class="card" style="margin-top:24px;">
-  <div class="card-title">Video highlights <span class="tag">Music page only</span></div>
-  <div class="card-sub" style="font-size:13px;color:var(--gray);margin-bottom:16px;">Paste YouTube video URLs for up to 3 highlight clips shown on the Music page. Use the full URL (e.g. https://youtu.be/ABC123 or https://www.youtube.com/watch?v=ABC123).</div>
-  ${[1,2,3].map(i => `
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
-    <div class="form-group" style="margin:0;">
-      <label>Video ${i} — YouTube URL</label>
-      <input type="text" name="vid_${i}_url" value="${escapeHtml(page['vid_' + i + '_url'] || '')}" placeholder="https://youtu.be/...">
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label>Label</label>
-      <input type="text" name="vid_${i}_title" value="${escapeHtml(page['vid_' + i + '_title'] || '')}" placeholder="e.g. Handbell Choir">
-    </div>
-  </div>`).join('')}
-</div>` : '';
+      // Metadata that is still genuinely read outside the canonical page
+      // body: the core-value report and whether this ministry owns a posts
+      // feed. All visual copy, images, buttons, menu placement and publishing
+      // now belong to pages, so they are intentionally absent here.
+      if (path.startsWith('/ministries/meta/') && method === 'GET') {
+        const slug = decodeURIComponent(path.slice('/ministries/meta/'.length));
+        const ministry = await env.DB.prepare('SELECT slug, title, value, has_posts FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!ministry) return new Response('Not found', { status: 404 });
+        const canonical = await canonicalPageFor(slug);
+        const title = canonical?.title || ministry.title || slug;
+        const editorLink = canEditCanonical(canonical)
+          ? `<a class="btn btn-sm btn-secondary" href="/pages/${encodeURIComponent(canonical.id)}/edit">Open Site Editor</a>`
+          : '';
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`, await pageBadges())}
+${sidebarShell('ministries', currentUser, '<a href="/ministries">← All ministries</a>', await pageBadges())}
 <div class="tlc-wrap">
-  <div class="page-title">${page.title}</div>
-  <div class="page-sub">Banner image, buttons and video slots for this page.</div>
-  <div class="alert alert-info" style="margin-bottom:20px;">
-    <strong>The words and layout of this page are edited in the page editor.</strong>
-    Open <a href="/ministries/editor/${escapeHtml(slug)}">${escapeHtml(page.title)} in the page editor</a> to write copy and arrange blocks.
-    This screen keeps the page banner and a few older settings. The body text below is only used on pages that have not been laid out in blocks yet.
-  </div>
+  <div class="page-title">${escapeHtml(title)}</div>
+  <div class="page-sub">Ministry reporting and posts metadata.</div>
+  <div class="alert alert-info"><strong>Page content is managed in the Site Editor.</strong> This screen changes only the two ministry-specific settings below. Retired body, image, video and button fields remain preserved in the database but cannot be edited here.</div>
   <div class="card">
-    <form method="POST" action="/ministries/update/${slug}">
+    <form method="POST" action="/ministries/update/${encodeURIComponent(slug)}">
       <div class="form-group">
-        <label>Page title</label>
-        <input type="text" name="title" value="${(page.title || '').replace(/"/g, '&quot;')}" required>
+        <label>Core value <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used by the values report and public values page</span></label>
+        ${valueChips('value', ministry.value)}
       </div>
       <div class="form-group">
-        <label>Core value <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— which of the church's four values this ministry carries</span></label>
-        ${valueChips('value', page.value)}
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Used by the values report on the dashboard and by the public values page. Leave blank if it genuinely does not belong to one.</div>
-      </div>
-      <div class="form-group">
-        <input type="hidden" name="in_menu" value="0">
+        <input type="hidden" name="has_posts" value="0">
         <div class="checkbox-row">
-          <input type="checkbox" name="in_menu" value="1" id="in_menu" ${(page.in_menu === null || page.in_menu === undefined || page.in_menu) ? 'checked' : ''}>
-          <span><label for="in_menu" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">List this ministry in the website menu</label></span>
-        </div>
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Unticking this only removes it from the menu. The page stays live at /${escapeHtml(slug)} and every link to it keeps working.</div>
-      </div>
-      ${tinymceYouthSection(page.content || '')}
-      <div class="card" style="margin-top:24px;">
-  <div class="card-title">Ministry Images</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
-    <div class="form-group" style="margin:0;">
-      <label>Hero banner image <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— shown at top of page (1200×500px ideal)</span></label>
-      <input type="hidden" name="hero_image_url" id="hero_image_url_val" value="${escapeHtml(page.hero_image_url || '')}">
-      <div id="hero-img-preview" style="${page.hero_image_url ? '' : 'display:none;'}margin-bottom:8px;">
-        ${page.hero_image_url ? `<img src="${escapeHtml(page.hero_image_url)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">` : ''}
-      </div>
-      <input type="file" id="hero_image_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
-      <div id="hero-upload-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
-      ${page.hero_image_url ? `<button type="button" onclick="document.getElementById('hero_image_url_val').value='';document.getElementById('hero-img-preview').style.display='none';this.style.display='none';" class="btn btn-sm btn-danger" style="margin-top:8px;font-size:11px;padding:5px 12px;">Remove image</button>` : ''}
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label>Ministry photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— shown in the content area (800×600px ideal)</span></label>
-      <input type="hidden" name="ministry_image_url" id="ministry_image_url_val" value="${escapeHtml(page.ministry_image_url || '')}">
-      <div id="ministry-img-preview" style="${page.ministry_image_url ? '' : 'display:none;'}margin-bottom:8px;">
-        ${page.ministry_image_url ? `<img src="${escapeHtml(page.ministry_image_url)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">` : ''}
-      </div>
-      <input type="file" id="ministry_image_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
-      <div id="ministry-upload-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
-      ${page.ministry_image_url ? `<button type="button" onclick="document.getElementById('ministry_image_url_val').value='';document.getElementById('ministry-img-preview').style.display='none';this.style.display='none';" class="btn btn-sm btn-danger" style="margin-top:8px;font-size:11px;padding:5px 12px;">Remove image</button>` : ''}
-    </div>
-  </div>
-</div>
-      ${videoSectionHtml}
-      <div class="card" style="margin-top:24px;background:var(--mist);border:1px solid var(--ice);">
-        <div class="card-title">CTA Buttons <span class="tag">Optional</span></div>
-        <div class="card-sub">Add up to two call-to-action buttons at the bottom of this page. When any button is set here, it <strong>replaces</strong> the default button bar. Leave both rows blank to keep the default buttons.</div>
-        <div style="margin-top:16px;">
-          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Primary button (navy/gold)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div class="form-group" style="margin:0;">
-              <label>Button label</label>
-              <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label>Button URL</label>
-              <input type="text" name="cta_url" value="${(page.cta_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
-            </div>
-          </div>
-        </div>
-        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Secondary button (outline/ghost)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div class="form-group" style="margin:0;">
-              <label>Button label</label>
-              <input type="text" name="cta_label_2" value="${(page.cta_label_2 || '').replace(/"/g, '&quot;')}" placeholder="e.g. Email the office">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label>Button URL</label>
-              <input type="text" name="cta_url_2" value="${(page.cta_url_2 || '').replace(/"/g, '&quot;')}" placeholder="https://... or mailto:...">
-            </div>
-          </div>
+          <input type="checkbox" name="has_posts" value="1" id="has_posts" ${ministry.has_posts ? 'checked' : ''}>
+          <span><label for="has_posts" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">This ministry has a posts feed</label></span>
         </div>
       </div>
-      <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Save metadata</button>
+        ${editorLink}
         <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
   </div>
-<script>
-(function() {
-  function wireUpload(fileInputId, hiddenId, previewId, statusId) {
-    document.getElementById(fileInputId).addEventListener('change', async function() {
-      var file = this.files[0];
-      if (!file) return;
-      var status = document.getElementById(statusId);
-      status.textContent = 'Uploading…';
-      var fd = new FormData();
-      fd.append('file', file);
-      try {
-        var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
-        var j = await r.json();
-        if (j.url) {
-          document.getElementById(hiddenId).value = j.url;
-          var prev = document.getElementById(previewId);
-          prev.innerHTML = '<img src="' + j.url + '" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">';
-          prev.style.display = '';
-          status.textContent = '✓ Uploaded';
-          status.style.color = 'var(--sage)';
-        } else {
-          status.textContent = j.error || 'Upload failed';
-          status.style.color = '#B85C3A';
-        }
-      } catch(e) {
-        status.textContent = 'Upload failed — try again';
-        status.style.color = '#B85C3A';
+</div>`, `Ministry metadata — ${title}`);
       }
-    });
-  }
-  wireUpload('hero_image_file', 'hero_image_url_val', 'hero-img-preview', 'hero-upload-status');
-  wireUpload('ministry_image_file', 'ministry_image_url_val', 'ministry-img-preview', 'ministry-upload-status');
-})();
-</script>
-</div>`, `Edit — ${page.title}`, TINYMCE_HEAD);
+
+      // Keep old bookmarks working, but never serve the orphaned TinyMCE form.
+      if (path.startsWith('/ministries/edit/') && method === 'GET') {
+        const slug = decodeURIComponent(path.slice('/ministries/edit/'.length));
+        return new Response('', { status: 302, headers: { Location: `/ministries/meta/${encodeURIComponent(slug)}` } });
       }
 
       // ── Save ministry page (POST) ──
       if (path.startsWith('/ministries/update/') && method === 'POST') {
-        const slug = path.slice('/ministries/update/'.length);
+        const slug = decodeURIComponent(path.slice('/ministries/update/'.length));
         const form = await request.formData();
-        const title = form.get('title') || '';
-        const content = sanitizeClassicRich(form.get('content') || '');   // FX-04
-        const ctaLabel = form.get('cta_label') || '';
-        const ctaUrl = form.get('cta_url') || '';
-        const ctaLabel2 = form.get('cta_label_2') || '';
-        const ctaUrl2 = form.get('cta_url_2') || '';
-        const heroImageUrl = form.get('hero_image_url') || '';
-        const ministryImageUrl = form.get('ministry_image_url') || '';
-        const vid1Url = form.get('vid_1_url') || '';
-        const vid1Title = form.get('vid_1_title') || '';
-        const vid2Url = form.get('vid_2_url') || '';
-        const vid2Title = form.get('vid_2_title') || '';
-        const vid3Url = form.get('vid_3_url') || '';
-        const vid3Title = form.get('vid_3_title') || '';
         // normalizeValue() is the guard on the write path: a stale tab or a
         // hand-rolled POST cannot put 'Grow' in the column where every reader
         // expects 'education'.
         const value = normalizeValue(form.get('value'));
-        const inMenu = form.get('in_menu') === '1' ? 1 : 0;
+        const hasPosts = form.get('has_posts') === '1' ? 1 : 0;
         const now = new Date().toISOString();
-        const beforePage = await env.DB.prepare('SELECT title, content, cta_label, cta_url, value, in_menu FROM youth_pages WHERE slug = ?').bind(slug).first();
+        const beforePage = await env.DB.prepare('SELECT title, value, has_posts FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!beforePage) return new Response('Not found', { status: 404 });
         await env.DB.prepare(
-          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, hero_image_url = ?, ministry_image_url = ?, vid_1_url = ?, vid_1_title = ?, vid_2_url = ?, vid_2_title = ?, vid_3_url = ?, vid_3_title = ?, value = ?, in_menu = ?, updated_at = ? WHERE slug = ?'
-        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, heroImageUrl, ministryImageUrl, vid1Url, vid1Title, vid2Url, vid2Title, vid3Url, vid3Title, value, inMenu, now, slug).run();
-        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl, value, in_menu: inMenu });
-        return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
+          'UPDATE youth_pages SET value = ?, has_posts = ?, updated_at = ? WHERE slug = ?'
+        ).bind(value, hasPosts, now, slug).run();
+        await logAudit(env.DB, currentUser, 'update', 'ministry_metadata', slug, beforePage.title || slug,
+          { value: beforePage.value, has_posts: beforePage.has_posts }, { value, has_posts: hasPosts });
+        return new Response('', { status: 302, headers: { Location: '/ministries?msg=metasaved' } });
       }
 
-      // Taking a ministry out of the menu leaves the page live at its address —
-      // it just stops being listed. Posted from the switch in the list, so
-      // there is no Save step for something that reads as instant.
+      // Menu placement belongs to the canonical page and therefore requires
+      // the full website-pages permission, same as the Menu screen itself.
       if (path.startsWith('/ministries/toggle-menu/') && method === 'POST') {
+        if (!hasPermission(currentUser, 'pages_edit')) return new Response('Access denied.', { status: 403 });
         const slug = decodeURIComponent(path.slice('/ministries/toggle-menu/'.length));
         const form = await request.formData();
         const next = form.get('value') === '1' ? 1 : 0;
-        const before = await env.DB.prepare('SELECT title, in_menu FROM youth_pages WHERE slug = ?').bind(slug).first();
-        await env.DB.prepare('UPDATE youth_pages SET in_menu = ? WHERE slug = ?').bind(next, slug).run();
-        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, before?.title || slug,
+        const before = await canonicalPageFor(slug);
+        if (!before) return new Response('No canonical site page.', { status: 404 });
+        await env.DB.prepare('UPDATE pages SET in_menu = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+          .bind(next, new Date().toISOString(), currentUser?.username || '', before.id).run();
+        await logAudit(env.DB, currentUser, 'update', 'page', before.id, before.title || slug,
           { in_menu: before?.in_menu }, { in_menu: next });
         return new Response('', { status: 302, headers: { Location: '/ministries' } });
       }
@@ -10799,11 +10709,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         if (CORE_SLUGS.includes(slug)) {
           return new Response('Cannot delete a built-in ministry page.', { status: 403 });
         }
-        const delPage = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
-        await env.DB.prepare('DELETE FROM ministry_posts WHERE ministry_slug = ?').bind(slug).run();
-        await env.DB.prepare('DELETE FROM youth_pages WHERE slug = ?').bind(slug).run();
-        await logAudit(env.DB, currentUser, 'delete', 'ministry_page', slug, delPage ? delPage.title : slug, delPage, null);
-        return new Response('', { status: 302, headers: { Location: '/ministries?msg=deleted' } });
+        return new Response('Delete the canonical page from the Site Editor. Ministry metadata is preserved until its page lifecycle is consolidated.', { status: 409 });
       }
 
       // ── Posts list ──
@@ -10866,7 +10772,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         });
 
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a> <a href="/ministries/edit/${encodeURIComponent(slug)}">Edit the ${escapeHtml(page.title)} page</a>`, await pageBadges())}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a> <a href="/ministries/meta/${encodeURIComponent(slug)}">${escapeHtml(page.title)} metadata</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${msg === 'postsaved' ? `<div class="alert alert-success">Post saved — it is on the ${escapeHtml(page.title)} page now.</div>` : ''}
   ${msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : ''}
