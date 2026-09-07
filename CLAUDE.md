@@ -336,6 +336,150 @@ because the old code returns a cached Response directly with no per-view
 clone, and a second `.json()` read against the same already-consumed body is
 exactly the failure the clone exists to prevent.
 
+### The hardcoded fallback bodies are gone for every page confirmed published (Phase C, 2026-09-07)
+
+The third of Dinger's own four-phase plan: *"Phase A: one rendering path for
+already-migrated pages. Phase B: separate global site-data loading from page-
+body loading. Phase C: remove the obsolete hardcoded bodies those pages no
+longer need. Phase D: simplify what's left of takeover/fallback."* (Phase D is
+explicitly out of scope here — it waits until every remaining page is
+published, which is still office work, not code — see
+`admin/BLOCK-EDITOR-ROLLOUT.md`.)
+
+**⚠ THIS IS A DELIBERATE, DISCUSSED TRADE, NOT A CLEANUP THAT COST NOTHING.**
+Phase A made an edge-rendered page's own body authoritative; Phase B stopped
+`loadSitePages()` hauling every page's body down just to get the chrome. Both
+were purely additive — nothing that already worked could stop working. This
+one is not: the hardcoded markup Phase A/B left alone was still the fallback
+a page fell back to during a genuine admin outage, or the instant of client-side
+navigation before the async publish check resolves. Deleting it means that,
+going forward, **a page confirmed published now shows blank rather than stale
+content during an outage** — asked and confirmed before touching anything
+("Delete it all now (Recommended by the plan)").
+
+**Checked against the live `/api/pages`, not assumed from this file's own
+pending-list.** 27 of the 29 SPA page divs were audited one at a time against
+production's `rendered` map — every page this file's own "Pending / Deferred
+Items" section still described as unpublished (see the stale note that already
+called that description out) turned out to be actually published. `404` and
+`privacy` carry no `pages` row at all — always hardcoded, untouched. `/contact`
+was found genuinely broken mid-pass — see below — and was deliberately left
+with its full hardcoded body rather than deleted, since it is not yet safe to
+lose. `/christmasmarket/vendors` and `/christmasmarket/vendors/apply` were
+already empty divs from the v5.22.0 block-editor conversion, untouched.
+
+**Not every div became an empty comment.** A handful carry markup that is
+genuinely live regardless of takeover status — never a fallback, so deleting
+it would have been a real regression, not a cleanup:
+
+- **`loadNotices('<slug>')`** fills a `#notices-<slug>` div from
+  admin → Notices on every load. Kept as a bare anchor div on every page that
+  calls it — the div itself carries no other content.
+- **`/sermons`** keeps two whole sections: `loadLatestSermon()`'s "This week"
+  video (nothing else on the page pulls the current week's YouTube video from
+  the channel feed) and `loadSermons()`'s sermon-notes outlines (the
+  `sermonlist` block only shows title/date/a watch link, not the full text
+  outline). Both stay `display:none` until their own fetch has something to
+  show.
+- **`/music`** keeps `#music-concert-section`, which `loadConcertBlock()`
+  unhides only when admin → Pages → Community Concert has a published entry —
+  not replicated by any block type.
+- **`/christmasmarket`** keeps `#xmas-posts-wrap` and its announcements
+  section, filled by `loadChristmasMarketPosts()` the same way.
+- **`/wol`** and every plain "no loadNotices call, no other live anchor" page
+  lost their comment-worthy markup entirely — a bare `<!-- Published -->`
+  comment inside an otherwise empty page div.
+
+**⚠ `/contact`'s published content was found broken, not fixed as part of this
+pass.** Its `published_blocks` carried a generic "Signup form" block instead
+of the real `contactform` type — this repo's own `missingNativeForm()` guard
+(see "Contact and Prayer publish through the block editor now" above) correctly
+caught it and rendered nothing, which is exactly why `rendered.contact` came
+back empty and the hardcoded fallback kept rendering safely the whole time.
+Reported, and fixed by adding a real Contact form block in the page editor —
+confirmed via the database that the fix landed. `/contact`'s hardcoded body
+(including the real `#contact-form`) is **left in the document**, deliberately,
+until the edge cache and `site-worker.js`'s own per-isolate cache both age out
+and `/api/pages` is confirmed serving the fixed content — geographic/colo cache
+staleness after a publish is expected and self-resolving, not a second bug.
+
+**Two top-level event-listener registrations needed a null guard, not a
+delete.** `document.getElementById('contact-form').addEventListener('submit', …)`
+and the same for `#prayer-form` ran at module-load time, unconditionally —
+harmless while both forms' markup stayed in the document, but `/prayer`'s
+hardcoded form is gone now that `prayerform` is a real, working native block.
+An unguarded `.addEventListener` on `null` throws and would have aborted the
+rest of that `<script>` block's own top-level statements. Both are now:
+```js
+var tlcPrayerFormEl = document.getElementById('prayer-form');
+if (tlcPrayerFormEl) tlcPrayerFormEl.addEventListener('submit', async function(e) { ... });
+```
+`/contact`'s own listener is guarded the same way even though its form is
+still present, for consistency and because that guard costs nothing.
+
+**⚠ A published page's own `.tlcb-page` div could collapse to zero height,
+and three tests were asserting a state that no longer exists.** Once a page's
+hardcoded body is an empty comment plus one hidden `#notices-<slug>` div,
+`#page-<slug>` has nothing to give it height until the async takeover injects
+real blocks — `.page{display:none} .page.active{display:block}` has no
+`min-height`. Three assertions in `test/site-pages.test.mjs` were checking
+`isVisible()` on a page mocked as deliberately *unpublished* (the test's own
+`apiPages()` helper, which defaults to nothing published) — before this pass
+that was harmless, because the old hardcoded fallback gave the div real
+height regardless. Fixed by publishing real content for the specific pages
+those groups actually click through to (`/worship`, in both cases), and by
+rewriting the two groups that were asserting "the unpublished page still has
+its old content" to assert what is now actually true: no blocks appear, and
+during a genuine outage the page body is blank — the chrome (nav, footer)
+is what survives, not the page's own words. Verified non-vacuous the ordinary
+way: reverting the test changes reproduces the original failures.
+
+**`test/whole-page.test.mjs` and two groups in `test/public-page.test.mjs` and
+`test/public-calendar.test.mjs` were testing a mechanism that no longer has
+anything to exercise.** The old `/api/ministry/:slug` →
+`tlcMaybeTakeOver()`/`tlcApplyBlocks()`/`loadMinistryPage()` chain — built for
+a ministry page with no equivalent row in the newer `pages` table — is now
+**provably unreachable for every page currently on the site**: every one of
+the 11 rows in `admin/page-seeds.js`'s `PAGE_SEEDS` (music, stephen,
+foodpantry, bees, christmasmarket, youth, sundayschool, confirmation, vbs,
+egghunt, family) is confirmed present in *both* the old `youth_pages` table
+and the newer `pages` table, and `tlcMaybeTakeOverSitePage()` — the newer
+table's takeover — is checked first in `showPage()` and always wins. The
+groups driving that old path against `/music`'s own now-deleted
+`#music-hero`/`#music-content`/`#music-vid-grid` markup are gone; what remains
+in `whole-page.test.mjs` is the data-only seed-fidelity check and the editor
+canvas group (which renders through the harness's own stand-in server, not
+`public/index.html`, and is unaffected). `#tlc-cal-main`/`#tlc-cal-news` — the
+old fixed mount ids the calendar embed used before the calendar became its own
+block — are replaced throughout `public-calendar.test.mjs` with
+`#page-<slug> .tlc-cal`, since a real visitor's calendar now always mounts
+through a Calendar block's own host, never a hardcoded id.
+
+**A wrong path was baked into every one of these comments while writing
+them**: `public/BLOCK-EDITOR-ROLLOUT.md` — the real file is
+`admin/BLOCK-EDITOR-ROLLOUT.md`. Fixed everywhere it was written, in
+`public/index.html` and all four test files, before it could mislead the next
+session the way this file's own wrong-status paragraph already had once.
+
+Run: `node test/site-pages.test.mjs` (58), `node test/whole-page.test.mjs`
+(59), `NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (115),
+`node test/site-edge-render.test.mjs` (77, unaffected — confirms this pass
+did not touch the edge-rendering mechanism itself), `NODE_PATH=$(npm root -g)
+node test/public-phone.test.mjs` (20, unaffected), and every `admin/*.test.mjs`
+suite (unaffected — this pass touches only `public/index.html` and the public-
+facing test files). `node test/public-page.test.mjs` and
+`node test/market-vendor.test.mjs` both hit this repo's own documented
+pre-existing sandbox instability ("Target page, context or browser has been
+closed" — see "Three more editor tools" above for the same symptom recorded
+against a different file) partway through a long run of sequential Playwright
+contexts; confirmed unrelated to this pass in both directions — the crash in
+`public-page.test.mjs` lands inside a group built entirely from synthetic
+`renderPage()` output with no dependency on anything deleted here, and
+`market-vendor.test.mjs`, untouched by this pass at all, crashes identically.
+Every group before and after the crash point in both files was verified
+individually (or, where a browser could not reach it, read by hand) and found
+unaffected.
+
 ### Every staff address is obfuscated now, not only the market coordinator's (v5.62.0, 2026-09-05)
 
 Dinger, once the market fix above was confirmed working, checking whether it
