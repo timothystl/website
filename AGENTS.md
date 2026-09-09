@@ -82,9 +82,10 @@ path and would fail on the regression.
 - Target products are Church Website, Connect, Finance, and myMDO.
 - Preparation 1 is closed by Andrew's acceptance of the remaining stabilization uncertainty.
 - Preparation 2's seven-day baseline is waived and closed.
-- Preparation 3 backup/recovery is in progress. A CHMS Git bundle is stored on SharePoint and
-  Andrew's hard drive; checksum verification and restore from the retained copy remain.
-- Preparation 6 documentation reset is underway. Finance extraction remains blocked until
+- The CHMS retained-backup packet and Preparations 4–5 are closed with explicit owner decisions;
+  broader Website/myMDO recovery limitations remain recorded rather than called passed tests.
+- Preparation 6 documentation reset is underway; current path dispositions are recorded in the
+  private architecture repository. Finance extraction remains blocked until
   Preparation 6 is signed off and Preparation 7 gives the formal go/no-go.
 - No repository rename, shared-auth rollout, payroll move, or Finance data extraction is
   authorized by this checkpoint.
