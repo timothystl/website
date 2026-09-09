@@ -180,29 +180,66 @@ export async function heldCount(env) {
 // The ChMS hand-off, shared by the live contact/prayer routes and by releasing
 // a held message later. Fire-and-forget: ChMS being down must not fail the
 // visitor's submission.
-export function forwardToChms(env, ctx, kind, payload) {
+const CHMS_MAX_ATTEMPTS = 8;
+const CHMS_TIMEOUT_MS = 4000;
+
+async function deliverChmsRow(env, row) {
+  const payload = JSON.parse(row.payload_json);
+  const kind = row.kind;
   const url = kind === 'prayer'
     ? 'https://serve.timothystl.org/api/intake/prayer'
     : 'https://serve.timothystl.org/api/intake/connect-card';
   const body = kind === 'prayer'
     ? { ...payload, source: 'website-prayer', is_urgent: 0 }
     : { ...payload, source: 'website-contact' };
-  const job = (async () => {
+  const req = new Request(url, {
+    method: 'POST',
+    headers: {
+      'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
+      'X-Idempotency-Key': row.delivery_key,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(CHMS_TIMEOUT_MS),
+  });
+  const res = env.VOLUNTEER_WORKER ? await env.VOLUNTEER_WORKER.fetch(req) : await fetch(req);
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+}
+
+export async function retryChmsForwards(env) {
+  const result = { delivered: 0, newlyTerminal: 0 };
+  const rows = await env.DB.prepare(
+    `SELECT * FROM chms_forward_outbox
+     WHERE attempts < ? AND next_attempt_at <= datetime('now')
+     ORDER BY created_at LIMIT 25`
+  ).bind(CHMS_MAX_ATTEMPTS).all();
+  for (const row of rows.results || []) {
     try {
-      const req = new Request(url, {
-        method: 'POST',
-        headers: { 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '', 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const res = env.VOLUNTEER_WORKER ? await env.VOLUNTEER_WORKER.fetch(req) : await fetch(req);
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error(`ChMS intake forward failed (${kind}): HTTP ${res.status} — ${text}`);
-      }
+      await deliverChmsRow(env, row);
+      await env.DB.prepare('DELETE FROM chms_forward_outbox WHERE id=?').bind(row.id).run();
+      result.delivered += 1;
     } catch (e) {
-      console.error(`ChMS intake forward failed (${kind}):`, e?.message);
+      const attempts = Number(row.attempts || 0) + 1;
+      const delayMinutes = Math.min(360, 2 ** Math.min(attempts, 8));
+      await env.DB.prepare(
+        `UPDATE chms_forward_outbox SET attempts=?, last_status=?, last_error=?,
+         next_attempt_at=datetime('now', ?), updated_at=datetime('now') WHERE id=?`
+      ).bind(attempts, e?.status || null, String(e?.message || 'delivery failed').slice(0, 160), `+${delayMinutes} minutes`, row.id).run();
+      if (attempts === CHMS_MAX_ATTEMPTS) result.newlyTerminal += 1;
+      console.error(`ChMS intake delivery pending (${row.kind}, attempt ${attempts}, key ${row.delivery_key})`);
     }
-  })();
+  }
+  return result;
+}
+
+export function forwardToChms(env, ctx, kind, payload, deliveryKey = crypto.randomUUID()) {
+  const job = (async () => {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO chms_forward_outbox (delivery_key, kind, payload_json)
+       VALUES (?, ?, ?)`
+    ).bind(deliveryKey, kind, JSON.stringify(payload)).run();
+    await retryChmsForwards(env);
+  })().catch((e) => console.error('Could not queue secondary ChMS delivery:', e?.message));
   if (ctx?.waitUntil) ctx.waitUntil(job); else return job;
 }
 
@@ -245,6 +282,12 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     const deliveredRow = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM form_submissions WHERE status='delivered' AND created_at >= datetime('now','-30 days')"
     ).first();
+    const chmsRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS pending,
+              SUM(CASE WHEN attempts >= ? THEN 1 ELSE 0 END) AS failed,
+              MAX(updated_at) AS last_attempt
+       FROM chms_forward_outbox`
+    ).bind(CHMS_MAX_ATTEMPTS).first().catch(() => ({ pending: 0, failed: 0, last_attempt: null }));
 
     const held = rows.results.filter(r => r.status === 'held');
     const released = rows.results.filter(r => r.status === 'released');
@@ -269,6 +312,7 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
       : msg === 'turnstile-saved' ? `<div class="alert alert-success">Saved. The forms will start using it right away.</div>`
       : msg === 'deleted' ? `<div class="alert alert-success">Message deleted.</div>`
       : msg === 'release-failed' ? `<div class="alert alert-error">Could not send that message — check the Brevo key and try again.</div>`
+      : msg === 'chms-retried' ? `<div class="alert alert-success">Connect delivery retry completed. The status below is current.</div>`
       : '';
 
     const listRows = rows.results.map((r) => {
@@ -326,6 +370,11 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
 ${sidebarShell('filtered', currentUser, '', badges)}
 <div class="tlc-wrap">
   ${notice ? `<div class="tlc-section" style="padding-bottom:0;">${notice}</div>` : ''}
+  <div class="tlc-section">
+    <h2>Connect delivery</h2>
+    <p>${Number(chmsRow.pending || 0)} pending; ${Number(chmsRow.failed || 0)} reached the retry limit.${chmsRow.last_attempt ? ` Last attempt ${escapeHtml(chmsRow.last_attempt)}.` : ''}</p>
+    <form method="POST" action="/filtered/retry-chms"><button type="submit" class="btn btn-sm btn-primary">Retry pending copies now</button></form>
+  </div>
   ${renderListSection({
     key: 'filtered',
     title: sectionCfg('filtered').title,
@@ -358,6 +407,14 @@ ${sidebarShell('filtered', currentUser, '', badges)}
     <p class="tlc-note"><span class="tlc-note-mark">◆</span><span>Held messages stay here until you release or delete them. Released ones are cleared after 90 days, and the record of delivered messages after 30 — the email in your inbox is the copy that keeps. ${deliveredRow?.n || 0} delivered in the last 30 days.</span></p>
   </div>
 </div>`, 'Filtered Mail');
+  }
+
+  if (path === '/filtered/retry-chms' && method === 'POST') {
+    await env.DB.prepare(
+      "UPDATE chms_forward_outbox SET attempts=0, next_attempt_at=datetime('now'), updated_at=datetime('now')"
+    ).run();
+    await retryChmsForwards(env);
+    return new Response('', { status: 302, headers: { Location: '/filtered?msg=chms-retried' } });
   }
 
   if (path === '/filtered/release' && method === 'POST') {

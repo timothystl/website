@@ -314,6 +314,25 @@ export const DB_INIT_FORM_SUBMISSIONS = `CREATE TABLE IF NOT EXISTS form_submiss
   released_by TEXT
 )`;
 
+// Durable, short-lived delivery queue for the secondary Connect copy of
+// contact/prayer submissions. Rows are deleted immediately after a confirmed
+// 2xx response and abandoned after eight bounded attempts. The public request
+// never waits for this secondary delivery.
+export const DB_INIT_CHMS_FORWARD_OUTBOX = `CREATE TABLE IF NOT EXISTS chms_forward_outbox (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  delivery_key    TEXT NOT NULL UNIQUE,
+  kind            TEXT NOT NULL CHECK (kind IN ('contact','prayer')),
+  payload_json    TEXT NOT NULL,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_status     INTEGER,
+  last_error      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+)`;
+export const DB_INIT_CHMS_FORWARD_OUTBOX_INDEX =
+  `CREATE INDEX IF NOT EXISTS idx_chms_forward_due ON chms_forward_outbox (attempts, next_attempt_at)`;
+
 // ── CHRISTMAS MARKET VENDOR APPLICATIONS ─────────────────────
 // One row per application, replacing the Google Form + spreadsheet the market
 // ran on through 2024. The first block is what the vendor typed; the second is

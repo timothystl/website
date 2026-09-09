@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_PUSH_LOG, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_CHMS_FORWARD_OUTBOX, DB_INIT_CHMS_FORWARD_OUTBOX_INDEX, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_PUSH_LOG, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
          DB_INIT_CALENDAR_CATEGORIES, DB_INIT_CALENDAR_CATEGORIES_COLOR,
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
@@ -200,7 +200,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
          prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
          NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict as newsletterHasConflict } from './admin/newsletter.js';
-import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
+import { screenSubmission, formConfig, forwardToChms, retryChmsForwards, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { SUSPECT_SUBJECT_PREFIX } from './admin/spam.js';
 import { stripImageMetadata } from './admin/exif.js';
@@ -1122,7 +1122,8 @@ async function getChmsFundSuggestions(env) {
   if (!key) return [];
   try {
     const res = await fetch('https://serve.timothystl.org/api/intake/funds', {
-      headers: { 'X-Intake-Key': key }
+      headers: { 'X-Intake-Key': key },
+      signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -1715,6 +1716,18 @@ async function promoteScheduledPages(env) {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(promoteScheduledPages(env));
+    ctx.waitUntil((async () => {
+      await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX).run();
+      await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX_INDEX).run();
+      const result = await retryChmsForwards(env);
+      if (result.newlyTerminal) {
+        await pushToAllSubscribers(env, {
+          title: 'Connect delivery needs attention',
+          body: `${result.newlyTerminal} website form copy reached its retry limit. Open Website Admin to follow the recovery runbook.`,
+          tag: 'chms-forward-failed', url: '/filtered',
+        });
+      }
+    })());
   },
 
   async fetch(request, env, ctx) {
@@ -2851,6 +2864,8 @@ export default {
 
     // Public form intake + spam screening (see admin/forms.js)
     try { await env.DB.prepare(DB_INIT_FORM_SUBMISSIONS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX_INDEX).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PUSH_SUBSCRIPTIONS).run(); } catch (_) {}
