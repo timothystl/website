@@ -79,15 +79,14 @@ path and would fail on the regression.
 
 ## Timothy Digital overhaul checkpoint
 
-- Target products are Church Website, Connect, Finance, and myMDO.
-- Preparation 1 is closed by Andrew's acceptance of the remaining stabilization uncertainty.
-- Preparation 2's seven-day baseline is waived and closed.
-- Preparation 3 backup/recovery is in progress. A CHMS Git bundle is stored on SharePoint and
-  Andrew's hard drive; checksum verification and restore from the retained copy remain.
-- Preparation 6 documentation reset is underway. Finance extraction remains blocked until
-  Preparation 6 is signed off and Preparation 7 gives the formal go/no-go.
-- No repository rename, shared-auth rollout, payroll move, or Finance data extraction is
-  authorized by this checkpoint.
+Andrew retired the old preparation-gate/implementation-phase ceremony on September 9, 2026. The
+current plan is a plain task list in the private `digital-architecture` repository's
+`architecture/11-overhaul-readiness-and-execution-plan.md` — read it before starting overhaul work
+here. In short: Finance becomes its own application (out of `chms`); shared staff login across
+Website/Connect/Finance/myMDO; code normalized and legacy-named resources renamed to match current
+scope; real developer documentation; and better observability. None of these are gated behind each
+other. Website does not yet have backup/restore-verification tooling for `tlc-newsletter-db` or
+`tlc-news-images` comparable to what CHMS has — build one before any real data move touches them.
 
 ## Documentation discipline
 
