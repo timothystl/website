@@ -6,8 +6,8 @@
 // module against a real SQLite database (node:sqlite behind a small D1-shaped
 // shim) with fetch stubbed, so nothing here talks to Brevo or ChMS.
 import { DatabaseSync } from 'node:sqlite';
-import { screenSubmission, formConfig, handleFilteredRoutes, heldCount, pruneSubmissions } from './forms.js';
-import { DB_INIT_FORM_SUBMISSIONS, DB_INIT_SITE_SETTINGS, DB_INIT_AUDIT_LOG, DB_INIT_SUBSCRIBERS } from './db.js';
+import { screenSubmission, formConfig, forwardToChms, retryChmsForwards, handleFilteredRoutes, heldCount, pruneSubmissions } from './forms.js';
+import { DB_INIT_FORM_SUBMISSIONS, DB_INIT_CHMS_FORWARD_OUTBOX, DB_INIT_SITE_SETTINGS, DB_INIT_AUDIT_LOG, DB_INIT_SUBSCRIBERS } from './db.js';
 import { verifyFormToken, signFormToken } from './spam.js';
 
 let pass = 0, fail = 0;
@@ -31,7 +31,7 @@ function d1(db) {
 
 function freshEnv() {
   const db = new DatabaseSync(':memory:');
-  for (const sql of [DB_INIT_FORM_SUBMISSIONS, DB_INIT_SITE_SETTINGS, DB_INIT_AUDIT_LOG, DB_INIT_SUBSCRIBERS]) {
+  for (const sql of [DB_INIT_FORM_SUBMISSIONS, DB_INIT_CHMS_FORWARD_OUTBOX, DB_INIT_SITE_SETTINGS, DB_INIT_AUDIT_LOG, DB_INIT_SUBSCRIBERS]) {
     db.prepare(sql).run();
   }
   return { raw: db, env: { DB: d1(db), BREVO_API_KEY: 'test-key', CHMS_INTAKE_API_KEY: 'test-intake' } };
@@ -40,6 +40,7 @@ function freshEnv() {
 // Every outbound call the module can make, captured instead of sent.
 let sentEmails = [];
 let chmsPosts = [];
+let chmsStatus = 200;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input.url;
   // The ChMS hand-off passes a Request object; Brevo gets url + init.
@@ -50,10 +51,27 @@ globalThis.fetch = async (input, init) => {
   }
   if (url.includes('serve.timothystl.org')) {
     chmsPosts.push({ url, body });
-    return new Response('{}', { status: 200 });
+    return new Response('{}', { status: chmsStatus });
   }
   throw new Error('unexpected fetch to ' + url);
 };
+
+group('failed ChMS copies are durable and replayable without failing the website request');
+{
+  const { env } = freshEnv();
+  chmsPosts = []; chmsStatus = 503;
+  await forwardToChms(env, null, 'contact', { name: 'Test', email: 'test@example.com', message: 'Hello' }, 'delivery-test-1');
+  const pending = await env.DB.prepare('SELECT * FROM chms_forward_outbox WHERE delivery_key=?').bind('delivery-test-1').first();
+  eq(pending.attempts, 1, 'a transient failure remains queued with an attempt count');
+  ok(!pending.last_error.includes('Hello'), 'operational failure detail contains no form content');
+
+  await env.DB.prepare("UPDATE chms_forward_outbox SET next_attempt_at=datetime('now') WHERE id=?").bind(pending.id).run();
+  chmsStatus = 200;
+  await retryChmsForwards(env);
+  eq(await env.DB.prepare('SELECT COUNT(*) AS n FROM chms_forward_outbox').first().then(r => r.n), 0,
+    'a later successful replay removes the sensitive queued payload');
+  eq(chmsPosts.length, 2, 'the same delivery was attempted once initially and once during replay');
+}
 
 const req = (opts = {}) => new Request('https://admin.timothystl.org/api/contact', {
   method: 'POST',
