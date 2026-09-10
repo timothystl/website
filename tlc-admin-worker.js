@@ -38,6 +38,7 @@ import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/s
 import { dayKey, monthKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
+import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
@@ -1775,7 +1776,13 @@ export default {
           'Access-Control-Max-Age': '86400',
         }});
       }
-      const sbUser = await getSession(env.DB, request).catch(() => null);
+      // A signed-in admin session covers a browser hitting this directly from
+      // admin/payroll.html. Finance's app (once it hosts its own payroll screen)
+      // has no such cookie -- it relays the bookkeeper's Cloudflare-Access-
+      // verified identity instead, checked against this same users table and
+      // the same payroll_manage permission below. See payroll-contract-auth.js.
+      let sbUser = await getSession(env.DB, request).catch(() => null);
+      if (!sbUser) sbUser = await resolvePayrollContractCaller(request, env).catch(() => null);
       if (!sbUser || !hasPermission(sbUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Not authenticated.', code: 'UNAUTHENTICATED' }), {
           status: 401,
@@ -2269,7 +2276,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-03-1'; // bumped: site_event_registrations.square_fee_cents — what Square's own webhook reports it actually kept
+    const SCHEMA_VERSION = '2026-09-10-1'; // bumped: users.email — needed to map a Cloudflare-Access-verified identity onto an admin account (see payroll-contract-auth.js)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2294,6 +2301,11 @@ export default {
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_date TEXT').run(); } catch (_) {}
     // Migrate: add pinned to ministry_posts
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch (_) {}
+    // Migrate: add email to users, so a Cloudflare-Access-verified identity (Finance's app
+    // relaying a bookkeeper) can be matched to an existing admin account. Blank until someone
+    // fills it in per-account in the Users drawer -- nothing reads this column until an admin
+    // has a real value in it, so a blank default is not itself a new exposure.
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT \'\'').run(); } catch (_) {}
     // Migrate: add event_date and expire_date to ministry_posts
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN event_date TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN expire_date TEXT').run(); } catch (_) {}

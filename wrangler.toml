@@ -2,6 +2,15 @@ name = "tlc-newsletter-admin"
 main = "tlc-admin-worker.js"
 compatibility_date = "2024-01-01"
 
+# Used only to verify the Cf-Access-Jwt-Assertion header Finance's app forwards on a
+# payroll-proxy call (see admin/payroll-contract-auth.js) -- proves WHO Finance says is
+# acting, not whether the call itself is authorized (that's FINANCE_PAYROLL_CONTRACT_KEY,
+# a real secret, set via the dashboard). Neither value below is a secret: they identify
+# which Cloudflare Access application's public keys to check against.
+[vars]
+FINANCE_ACCESS_TEAM_DOMAIN = "timothystl.cloudflareaccess.com"
+FINANCE_ACCESS_AUD = "bb8fd2d550bee50a2c49c9fa42d212b4f51aff89e2eae17db9c3088b672274de"
+
 [[services]]
 binding = "VOLUNTEER_WORKER"
 service = "tlc-chms"

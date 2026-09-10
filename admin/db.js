@@ -718,7 +718,8 @@ export const DB_INIT_USERS = `CREATE TABLE IF NOT EXISTS users (
   permissions TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   last_login TEXT,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  email TEXT NOT NULL DEFAULT ''
 )`;
 
 export const DB_INIT_PASSWORD_RESETS = `CREATE TABLE IF NOT EXISTS password_resets (
