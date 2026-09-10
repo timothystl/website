@@ -467,7 +467,7 @@ export const BLOCK_DEFS = {
     label: 'News feed', glyph: '☰',
     align: true,
     defaults: { title: 'Announcements & events', spaceAbove: 24, spaceBelow: 24, count: 4, cols: 2, photos: true },
-    auto: 'newsfeed', autoCount: true,
+    auto: 'newsfeed',
     choices: [
       { key: 'cols', label: 'Cards per row', def: 2, options: [{ key: 1, label: '1' }, { key: 2, label: '2' }],
         note: 'Two reads as a feed you scan; one reads as a list you work through. Both stack on a phone.' },
