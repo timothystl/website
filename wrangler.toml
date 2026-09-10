@@ -8,7 +8,7 @@ compatibility_date = "2024-01-01"
 # a real secret, set via the dashboard). Neither value below is a secret: they identify
 # which Cloudflare Access application's public keys to check against.
 [vars]
-FINANCE_ACCESS_TEAM_DOMAIN = "timothy-digital.cloudflareaccess.com"
+FINANCE_ACCESS_TEAM_DOMAIN = "timothystl.cloudflareaccess.com"
 FINANCE_ACCESS_AUD = "bb8fd2d550bee50a2c49c9fa42d212b4f51aff89e2eae17db9c3088b672274de"
 
 [[services]]
