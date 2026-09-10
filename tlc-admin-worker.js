@@ -2118,24 +2118,38 @@ export default {
     // itself (Origin header set by the browser). The three /api/* form
     // endpoints below are intentionally cross-origin (called from
     // timothystl.org), so they're allowed through.
+    //
+    // /payroll/email is a fourth, narrower exception: Finance's app relays a
+    // "send the report" action here the same way it relays payroll_* RPCs
+    // through /sb/* (see resolvePayrollContractCaller above and PR #586's fix
+    // to the same check on that proxy) -- a server-to-server service-binding
+    // call that never carries a matching Origin/Referer header. Resolved once
+    // here into payrollEmailRelayUser so the /payroll/email handler below
+    // doesn't have to verify the same Access JWT a second time.
+    let payrollEmailRelayUser = null;
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !PUBLIC_CROSS_ORIGIN_POSTS.has(path)) {
-      const origin = request.headers.get('Origin') || '';
-      const referer = request.headers.get('Referer') || '';
-      // ⚠ A renter portal form posts from the PORTAL's origin, not the
-      // admin's. Without this the whole booking flow 403s the moment the
-      // portal moves — a hold request, a release, a confirmation, all of it,
-      // and it would read as "the portal is broken" with nothing to go on.
-      // The property that matters is kept: a request must come from the page
-      // it belongs to. The portal origin is accepted for portal paths only.
-      const allowed = [ADMIN_ORIGIN];
-      if (isPortalPath(path)) {
-        const po = await portalOrigin(env);
-        if (po) allowed.push(po);
+      if (path === '/payroll/email') {
+        payrollEmailRelayUser = await resolvePayrollContractCaller(request, env).catch(() => null);
       }
-      const ok = allowed.includes(origin)
-        || (!origin && allowed.some((a) => referer.startsWith(a + '/')));
-      if (!ok) {
-        return new Response('Cross-origin request blocked.', { status: 403 });
+      if (!payrollEmailRelayUser) {
+        const origin = request.headers.get('Origin') || '';
+        const referer = request.headers.get('Referer') || '';
+        // ⚠ A renter portal form posts from the PORTAL's origin, not the
+        // admin's. Without this the whole booking flow 403s the moment the
+        // portal moves — a hold request, a release, a confirmation, all of it,
+        // and it would read as "the portal is broken" with nothing to go on.
+        // The property that matters is kept: a request must come from the page
+        // it belongs to. The portal origin is accepted for portal paths only.
+        const allowed = [ADMIN_ORIGIN];
+        if (isPortalPath(path)) {
+          const po = await portalOrigin(env);
+          if (po) allowed.push(po);
+        }
+        const ok = allowed.includes(origin)
+          || (!origin && allowed.some((a) => referer.startsWith(a + '/')));
+        if (!ok) {
+          return new Response('Cross-origin request blocked.', { status: 403 });
+        }
       }
     }
 
@@ -5255,7 +5269,11 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       SETUP_DONE.set(env.DB, true);
     }
     const currentUser = await getSession(env.DB, request);
-    if (!currentUser) {
+    // /payroll/email is the one route reachable with no browser session at all --
+    // Finance's contract-relay identity (payrollEmailRelayUser, resolved above at
+    // the CSRF gate) stands in for it, the same way /sb/*'s own handler already
+    // accepts either a session or resolvePayrollContractCaller.
+    if (!currentUser && !(path === '/payroll/email' && payrollEmailRelayUser)) {
       if (path === '/login') return loginPage();
       return loginPage();
     }
@@ -7194,7 +7212,13 @@ ${PAYROLL_HTML}`, 'Payroll');
     // escaped — a staff name must not be able to become markup in something
     // that lands in an outside inbox.
     if (path === '/payroll/email' && method === 'POST') {
-      if (!hasPermission(currentUser, 'payroll_manage')) {
+      // A signed-in admin session covers a browser hitting this directly from
+      // admin/payroll.html. Finance's app relays the bookkeeper's Cloudflare-
+      // Access-verified identity instead (payrollEmailRelayUser, resolved
+      // above at the CSRF gate) -- same shape as the /sb/* proxy's own
+      // getSession-or-resolvePayrollContractCaller fallback.
+      const emailUser = currentUser || payrollEmailRelayUser;
+      if (!hasPermission(emailUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
       const to = (await env.DB.prepare("SELECT value FROM site_settings WHERE key='payroll_bookkeeper_email'").first().catch(() => null))?.value || '';
@@ -7258,7 +7282,7 @@ ${PAYROLL_HTML}`, 'Payroll');
         <p style="margin:0;font:400 14px/1.6 Arial,sans-serif;color:#3A3A4A;">Payroll for ${escapeHtml(label)} is attached (CSV and PDF).</p>
         <p style="margin:6px 0 0;font:400 13px/1.5 Arial,sans-serif;color:${body.approved ? '#3B4C2E' : '#7A5B18'};">${stateLine}</p>
         ${warn}
-        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(currentUser?.username || 'the office')}.</p>
+        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(emailUser?.username || 'the office')}.</p>
       </div>`;
 
       // sendTransactionalEmail RETURNS {error}, it does not throw — a bare
@@ -7318,7 +7342,7 @@ ${PAYROLL_HTML}`, 'Payroll');
           status: 502, headers: { 'Content-Type': 'application/json' },
         });
       }
-      await logAudit(env.DB, currentUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to: recipients.join(', '), total: body.total });
+      await logAudit(env.DB, emailUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to: recipients.join(', '), total: body.total });
       return new Response(JSON.stringify({ ok: true, to: recipients.join(', ') }), { headers: { 'Content-Type': 'application/json' } });
     }
 
