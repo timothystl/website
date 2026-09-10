@@ -1,0 +1,31 @@
+{
+  "contract": "website.facilities-submission.v1",
+  "dataClassification": "restricted-personal",
+  "sourceProduct": "website",
+  "consumerProduct": "connect",
+  "submissionId": "fac_SYNTHETIC_20260909_001",
+  "idempotencyKey": "SYNTHETIC-FACILITIES-REQUEST-20260909-001",
+  "submittedAt": "2026-09-09T15:00:00Z",
+  "request": {
+    "requestType": "rental",
+    "contact": {
+      "name": "Synthetic Requester",
+      "email": "synthetic.requester@example.invalid",
+      "phone": "+1-555-010-0200",
+      "organization": "Synthetic Community Group"
+    },
+    "requestedWindows": [
+      {
+        "startAt": "2026-10-10T18:00:00Z",
+        "endAt": "2026-10-10T20:00:00Z"
+      }
+    ],
+    "spaceRef": "synthetic-gym",
+    "locationNotes": "Synthetic example only; no real reservation.",
+    "description": "Synthetic facility rental request for contract validation.",
+    "consent": {
+      "privacyAcknowledged": true,
+      "contactAllowed": true
+    }
+  }
+}
