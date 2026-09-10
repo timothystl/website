@@ -1782,7 +1782,11 @@ export default {
       // verified identity instead, checked against this same users table and
       // the same payroll_manage permission below. See payroll-contract-auth.js.
       let sbUser = await getSession(env.DB, request).catch(() => null);
-      if (!sbUser) sbUser = await resolvePayrollContractCaller(request, env).catch(() => null);
+      let viaContractRelay = false;
+      if (!sbUser) {
+        sbUser = await resolvePayrollContractCaller(request, env).catch(() => null);
+        if (sbUser) viaContractRelay = true;
+      }
       if (!sbUser || !hasPermission(sbUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Not authenticated.', code: 'UNAUTHENTICATED' }), {
           status: 401,
@@ -1813,11 +1817,19 @@ export default {
         });
       }
       if (method !== 'GET' && method !== 'HEAD') {
-        const origin = request.headers.get('Origin') || '';
-        const referer = request.headers.get('Referer') || '';
-        const originOk = origin === ADMIN_ORIGIN || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
-        if (!originOk) {
-          return new Response('Cross-origin request blocked.', { status: 403 });
+        // The contract-relay path is a server-to-server Cloudflare service-binding call from
+        // Finance's Worker, never a browser request, so it never carries a matching Origin/
+        // Referer header. It isn't CSRF-vulnerable in the first place: the caller already
+        // proved itself with the X-Contract-Key secret plus a Website-verified Access JWT
+        // (see resolvePayrollContractCaller above), which a forged cross-site request can't
+        // produce. Only the browser-session path needs this Origin/Referer check.
+        if (!viaContractRelay) {
+          const origin = request.headers.get('Origin') || '';
+          const referer = request.headers.get('Referer') || '';
+          const originOk = origin === ADMIN_ORIGIN || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
+          if (!originOk) {
+            return new Response('Cross-origin request blocked.', { status: 403 });
+          }
         }
         const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
         if (contentLength > 25 * 1024 * 1024) {
