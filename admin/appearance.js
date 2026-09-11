@@ -261,6 +261,41 @@ export function parseAppearance(json) {
   }
 }
 
+// ── THE STORED RECORD, DRAFT AND LIVE ────────────────────────
+// Two settings rows, the same split a page has between `blocks` and
+// `published_blocks`. The draft is what the Menu screen's Appearance tab
+// draws; the published row is the only thing /api/pages ever sends to a
+// visitor. Moved out of tlc-admin-worker.js's Menu block (which is the only
+// place that writes either row) so admin/menu.js's own route handler has
+// somewhere to import them from — reading/writing the appearance record
+// belongs with the rest of this file's appearance logic, not scattered
+// across whichever screen happens to touch it.
+export const CHROME_DRAFT_KEY = 'site_appearance_draft';
+export const CHROME_LIVE_KEY = 'site_appearance';
+
+export async function readChrome(env, key) {
+  const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(key).first().catch(() => null);
+  return parseAppearance(row && row.value);
+}
+
+// Both rows at once, because every screen that shows one wants to say how it
+// differs from the other.
+export async function readChromePair(env) {
+  const [draft, live] = await Promise.all([readChrome(env, CHROME_DRAFT_KEY), readChrome(env, CHROME_LIVE_KEY)]);
+  return { draft, live, dirty: isDirty(draft, live) };
+}
+
+export async function writeChrome(env, key, value) {
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)'
+  ).bind(
+    key, JSON.stringify(sanitizeAppearance(value)),
+    key === CHROME_LIVE_KEY ? 'Header and newsletter band (live)' : 'Header and newsletter band (draft)',
+    key === CHROME_LIVE_KEY ? 'What visitors see. Written only by Publish on the Appearance screen.'
+      : 'What the Appearance screen shows. Never reaches the site until it is published.'
+  ).run();
+}
+
 // ── FROM THE FORM ────────────────────────────────────────────
 // ⚠ A toggle posts a hidden `0` ahead of its checkbox, so `form.get(name)` is
 // the `0` whether or not the box is ticked and reads as truthy either way.
