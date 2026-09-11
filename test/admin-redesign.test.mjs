@@ -4585,15 +4585,12 @@ group('a vendor row edits in place');
   // ── The fifth tile, once there is something for it to say ──
   has(pageWithEstimate, 'tlc-tiles--5', 'a card payment landing grows the fifth tile');
   has(pageWithEstimate, 'Net deposited', 'named for what it answers — what actually lands in the bank');
-  has(pageWithEstimate, '0 of 1 confirmed by Square, the rest estimated',
-    'and it says plainly that this is a guess, not a Square-confirmed figure');
+  has(pageWithEstimate, 'in card fees', 'and names the total held back, plainly, with no commentary');
 
   db.prepare('UPDATE site_event_registrations SET square_fee_cents = 136 WHERE id = ?').run(id);
   const pageWithRealFee = await (await call(env, '/market', { cookie })).text();
   has(pageWithRealFee, 'Square kept $1.36', 'once Square actually reports a fee, the real figure is shown');
   lacks(pageWithRealFee, 'Card fee, estimated', 'and the estimate steps aside for it — never both at once');
-  has(pageWithRealFee, '1 of 1 confirmed by Square', 'the tile counts the confirmed one');
-  lacks(pageWithRealFee, 'the rest estimated', 'and drops the caveat once nothing left is a guess');
   db.prepare('UPDATE site_event_registrations SET square_fee_cents = NULL WHERE id = ?').run(id);
   await cell('payment_status', 'unpaid');
 
