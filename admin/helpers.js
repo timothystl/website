@@ -642,6 +642,15 @@ export const ADMIN_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline';
   + "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
   + "connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+// A JSON admin API response — never cached, never indexed. Sibling of html()
+// above for the same reason: every admin route needs one or the other.
+export function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
+  });
+}
+
 export function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
