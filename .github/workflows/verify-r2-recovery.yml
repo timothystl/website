@@ -1,0 +1,94 @@
+name: Verify R2 backup and recovery
+
+# No tested precedent to model this on — chms's own backup/restore tooling
+# covers D1 only. See scripts/verify-r2-recovery.sh's own header for the
+# design and the two separate Cloudflare credentials it needs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full main commit SHA approved for the recovery exercise
+        required: true
+        type: string
+      reason:
+        description: Reason for this recovery exercise
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-recovery-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Copy, restore, and reconcile the news-images bucket
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
+      R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_RECOVERY_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_RECOVERY_SECRET_ACCESS_KEY }}
+      SOURCE_BUCKET: tlc-news-images
+      RESULT_FILE: /tmp/r2-recovery-result.json
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verify the approved commit is on main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No package.json in this repo — installed globally, same as deploy.yml.
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      # Bucket lifecycle goes through wrangler; object-level list/copy/delete
+      # goes through the AWS CLI against R2's S3-compatible endpoint — see
+      # the script's own header for why both are needed. ubuntu-latest ships
+      # the AWS CLI already; this only fills the gap if a runner image ever
+      # doesn't.
+      - name: Ensure the AWS CLI is available
+        run: command -v aws >/dev/null || (curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip && unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install)
+
+      - name: Copy, restore, reconcile, and clean up
+        run: bash scripts/verify-r2-recovery.sh
+
+      - name: Record recovery summary
+        shell: bash
+        env:
+          RECOVERY_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## R2 recovery verification'
+            echo
+            echo "- Approved commit: \`${GITHUB_SHA}\`"
+            echo "- Reason: ${RECOVERY_REASON}"
+            jq -r '
+              "- Source bucket: `" + .source_bucket + "` — " + (.source_objects | tostring) + " objects, " + (.source_bytes | tostring) + " bytes; manifest SHA-256 `" + .source_manifest_sha256 + "`",
+              "- Restored copy: " + (.restore_objects_matched | tostring) + " objects matched by key, ETag, and size; manifest SHA-256 `" + .restore_manifest_sha256 + "`",
+              "- Disposal: disposable bucket `" + .disposable_bucket + "` and every object in it were deleted",
+              "- Object keys (filenames) were not printed or retained as artifacts"
+            ' "$RESULT_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
