@@ -11,6 +11,7 @@ import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
          MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
+import { wrapEnvForDbAttribution, logDbAttribution } from './admin/db-attribution.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -31,7 +32,7 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { churchDate, churchDatePlus, partOfDay, churchFormat } from './admin/when.js';
-import { VERSION, html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
+import { VERSION, html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
@@ -44,6 +45,7 @@ import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js
 import { buildMonospacePdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
+import { handleSermonsRoutes } from './admin/sermons.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
          DEFAULT_CATEGORIES, NEUTRAL_CATEGORY, normalizeClock,
@@ -190,9 +192,7 @@ function votersSeedBlocks(row) {
 
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
-import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
-         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth,
-         COLUMN_SOURCES, normalizeSource, footerColumns, publicFooter, renumberColumns } from './admin/menu.js';
+import { publicMenu, publicFooter, handleMenuRoutes } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, normalizeAudience, subjectAdvice, preheaderAdvice,
@@ -216,41 +216,16 @@ import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
-         renderHeaderPreview, renderNewsletterPreview, TYPEFACES, TEXT_SIZES } from './admin/appearance.js';
+         renderHeaderPreview, renderNewsletterPreview, TYPEFACES, TEXT_SIZES,
+         CHROME_LIVE_KEY } from './admin/appearance.js';
 
 // The market's own pages, published from their seeds by the one-time marker
 // below rather than left as drafts — see MARKET_PUBLISH_MARKER.
 const MARKET_SEEDED_PAGES = [MARKET_VENDORS_PAGE, MARKET_APPLY_PAGE];
 
-// ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
-// Two settings rows, the same split a page has between `blocks` and
-// `published_blocks`. The draft is what the admin screen draws; the published
-// row is the only thing /api/pages ever sends to a visitor.
-const CHROME_DRAFT_KEY = 'site_appearance_draft';
-const CHROME_LIVE_KEY = 'site_appearance';
-
-async function readChrome(env, key) {
-  const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(key).first().catch(() => null);
-  return parseAppearance(row && row.value);
-}
-
-// Both rows at once, because every screen that shows one wants to say how it
-// differs from the other.
-async function readChromePair(env) {
-  const [draft, live] = await Promise.all([readChrome(env, CHROME_DRAFT_KEY), readChrome(env, CHROME_LIVE_KEY)]);
-  return { draft, live, dirty: chromeDirty(draft, live) };
-}
-
-async function writeChrome(env, key, value) {
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)'
-  ).bind(
-    key, JSON.stringify(sanitizeAppearance(value)),
-    key === CHROME_LIVE_KEY ? 'Header and newsletter band (live)' : 'Header and newsletter band (draft)',
-    key === CHROME_LIVE_KEY ? 'What visitors see. Written only by Publish on the Appearance screen.'
-      : 'What the Appearance screen shows. Never reaches the site until it is published.'
-  ).run();
-}
+// CHROME_DRAFT_KEY / CHROME_LIVE_KEY / readChrome / readChromePair / writeChrome moved into
+// admin/appearance.js (imported below) so admin/menu.js's own route handler — the only place
+// that writes either row — has somewhere to import them from.
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -1732,8 +1707,14 @@ export default {
   },
 
   async fetch(request, env, ctx) {
+    // Attributes every D1 query this request makes to its path, and logs it if notable —
+    // see admin/db-attribution.js for why this is the single chokepoint for that (this repo
+    // has no central route dispatcher the way Connect's handleAdminApi does).
+    const path = new URL(request.url).pathname;
+    const { env: attributedEnv, counter } = wrapEnvForDbAttribution(env);
+    const dbQueriesAtStart = counter.queries;
     try {
-      return await this._fetch(request, env, ctx);
+      return await this._fetch(request, attributedEnv, ctx);
     } catch (e) {
       const detail = e && (e.stack || e.message) ? (e.stack || e.message) : String(e);
       // AW-1: this used to return the full stack to EVERY caller. The comment
@@ -1752,6 +1733,8 @@ export default {
         + 'Reference: ' + ref + '\n',
         { status: 500, headers: { 'Content-Type': 'text/plain' } }
       );
+    } finally {
+      logDbAttribution(path, request.method, counter, dbQueriesAtStart);
     }
   },
 
@@ -1782,7 +1765,11 @@ export default {
       // verified identity instead, checked against this same users table and
       // the same payroll_manage permission below. See payroll-contract-auth.js.
       let sbUser = await getSession(env.DB, request).catch(() => null);
-      if (!sbUser) sbUser = await resolvePayrollContractCaller(request, env).catch(() => null);
+      let viaContractRelay = false;
+      if (!sbUser) {
+        sbUser = await resolvePayrollContractCaller(request, env).catch(() => null);
+        if (sbUser) viaContractRelay = true;
+      }
       if (!sbUser || !hasPermission(sbUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Not authenticated.', code: 'UNAUTHENTICATED' }), {
           status: 401,
@@ -1813,11 +1800,19 @@ export default {
         });
       }
       if (method !== 'GET' && method !== 'HEAD') {
-        const origin = request.headers.get('Origin') || '';
-        const referer = request.headers.get('Referer') || '';
-        const originOk = origin === ADMIN_ORIGIN || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
-        if (!originOk) {
-          return new Response('Cross-origin request blocked.', { status: 403 });
+        // The contract-relay path is a server-to-server Cloudflare service-binding call from
+        // Finance's Worker, never a browser request, so it never carries a matching Origin/
+        // Referer header. It isn't CSRF-vulnerable in the first place: the caller already
+        // proved itself with the X-Contract-Key secret plus a Website-verified Access JWT
+        // (see resolvePayrollContractCaller above), which a forged cross-site request can't
+        // produce. Only the browser-session path needs this Origin/Referer check.
+        if (!viaContractRelay) {
+          const origin = request.headers.get('Origin') || '';
+          const referer = request.headers.get('Referer') || '';
+          const originOk = origin === ADMIN_ORIGIN || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
+          if (!originOk) {
+            return new Response('Cross-origin request blocked.', { status: 403 });
+          }
         }
         const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
         if (contentLength > 25 * 1024 * 1024) {
@@ -2106,24 +2101,38 @@ export default {
     // itself (Origin header set by the browser). The three /api/* form
     // endpoints below are intentionally cross-origin (called from
     // timothystl.org), so they're allowed through.
+    //
+    // /payroll/email is a fourth, narrower exception: Finance's app relays a
+    // "send the report" action here the same way it relays payroll_* RPCs
+    // through /sb/* (see resolvePayrollContractCaller above and PR #586's fix
+    // to the same check on that proxy) -- a server-to-server service-binding
+    // call that never carries a matching Origin/Referer header. Resolved once
+    // here into payrollEmailRelayUser so the /payroll/email handler below
+    // doesn't have to verify the same Access JWT a second time.
+    let payrollEmailRelayUser = null;
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !PUBLIC_CROSS_ORIGIN_POSTS.has(path)) {
-      const origin = request.headers.get('Origin') || '';
-      const referer = request.headers.get('Referer') || '';
-      // ⚠ A renter portal form posts from the PORTAL's origin, not the
-      // admin's. Without this the whole booking flow 403s the moment the
-      // portal moves — a hold request, a release, a confirmation, all of it,
-      // and it would read as "the portal is broken" with nothing to go on.
-      // The property that matters is kept: a request must come from the page
-      // it belongs to. The portal origin is accepted for portal paths only.
-      const allowed = [ADMIN_ORIGIN];
-      if (isPortalPath(path)) {
-        const po = await portalOrigin(env);
-        if (po) allowed.push(po);
+      if (path === '/payroll/email') {
+        payrollEmailRelayUser = await resolvePayrollContractCaller(request, env).catch(() => null);
       }
-      const ok = allowed.includes(origin)
-        || (!origin && allowed.some((a) => referer.startsWith(a + '/')));
-      if (!ok) {
-        return new Response('Cross-origin request blocked.', { status: 403 });
+      if (!payrollEmailRelayUser) {
+        const origin = request.headers.get('Origin') || '';
+        const referer = request.headers.get('Referer') || '';
+        // ⚠ A renter portal form posts from the PORTAL's origin, not the
+        // admin's. Without this the whole booking flow 403s the moment the
+        // portal moves — a hold request, a release, a confirmation, all of it,
+        // and it would read as "the portal is broken" with nothing to go on.
+        // The property that matters is kept: a request must come from the page
+        // it belongs to. The portal origin is accepted for portal paths only.
+        const allowed = [ADMIN_ORIGIN];
+        if (isPortalPath(path)) {
+          const po = await portalOrigin(env);
+          if (po) allowed.push(po);
+        }
+        const ok = allowed.includes(origin)
+          || (!origin && allowed.some((a) => referer.startsWith(a + '/')));
+        if (!ok) {
+          return new Response('Cross-origin request blocked.', { status: 403 });
+        }
       }
     }
 
@@ -5243,7 +5252,11 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       SETUP_DONE.set(env.DB, true);
     }
     const currentUser = await getSession(env.DB, request);
-    if (!currentUser) {
+    // /payroll/email is the one route reachable with no browser session at all --
+    // Finance's contract-relay identity (payrollEmailRelayUser, resolved above at
+    // the CSRF gate) stands in for it, the same way /sb/*'s own handler already
+    // accepts either a session or resolvePayrollContractCaller.
+    if (!currentUser && !(path === '/payroll/email' && payrollEmailRelayUser)) {
       if (path === '/login') return loginPage();
       return loginPage();
     }
@@ -5985,570 +5998,15 @@ ${renderFormSection({
         return new Response('', { status: 302, headers: { Location: '/media?msg=deleted' } });
       }
     }
-    // ── MENU ───────────────────────────────────────────────────
-    // The second genuinely bespoke screen: a tree with drag-and-drop and a live
-    // preview of the real header. Gated on pages_edit — whoever owns the site's
+    // ── MENU (admin/menu.js owns the routes) ─────────────────────
+    // A tree with drag-and-drop and a live preview of the real header, plus the
+    // Appearance tab (header/newsletter band chrome) and footer columns. Gated
+    // on pages_edit inside handleMenuRoutes itself — whoever owns the site's
     // structure owns its navigation.
-    if (path === '/menu' || path.startsWith('/menu/')) {
-      if (!hasPermission(currentUser, 'pages_edit')) {
-        return new Response('Access denied.', { status: 403 });
-      }
-
-      const loadMenu = async () => {
-        const [items, pages] = await Promise.all([
-          env.DB.prepare('SELECT * FROM menu_items ORDER BY menu, sort_order, id').all().catch(() => ({ results: [] })),
-          env.DB.prepare('SELECT id, title, menu_label, slug, status FROM pages ORDER BY title').all().catch(() => ({ results: [] })),
-        ]);
-        const list = items.results || [];
-        const pageRows = pages.results || [];
-        return { list, pageRows, byId: new Map(pageRows.map((p) => [p.id, p])) };
-      };
-
-
-      // ── FOOTER COLUMNS ───────────────────────────────────────
-      // A column is a heading and an order. Which links sit under it is the
-      // links' business (menu_items.column_id), so nothing here ever writes
-      // a list of items — a column and its contents cannot fall out of step
-      // because only one of them records the relationship.
-      if (path === '/menu/columns/new' || path.startsWith('/menu/columns/')) {
-        const idPart = path.slice('/menu/columns/'.length);
-
-        if (path === '/menu/columns/save' && method === 'POST') {
-          const form = await request.formData();
-          const id = parseInt(form.get('id'), 10);
-          const heading = String(form.get('heading') || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-          const source = normalizeSource(form.get('source'));
-          // ⚠ A toggle posts a hidden 0 ahead of its checkbox, so form.get()
-          // is the 0 either way and always reads as on.
-          const visible = form.getAll('visible').includes('1') ? 1 : 0;
-          if (!heading) return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
-          if (Number.isFinite(id)) {
-            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
-            await env.DB.prepare('UPDATE footer_columns SET heading = ?, source = ?, visible = ? WHERE id = ?')
-              .bind(heading, source, visible, id).run();
-            await logAudit(env.DB, currentUser, 'update', 'footer_column', String(id), heading, before, { heading, source, visible });
-          } else {
-            const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM footer_columns').first().catch(() => ({ m: 0 }));
-            await env.DB.prepare('INSERT INTO footer_columns (heading, source, sort_order, visible) VALUES (?, ?, ?, ?)')
-              .bind(heading, source, ((max && max.m) || 0) + 10, visible).run();
-            await logAudit(env.DB, currentUser, 'create', 'footer_column', heading, heading, null, { heading, source });
-          }
-          return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
-        }
-
-        // Deleting a column never deletes a link. The links fall out of any
-        // column and show up in the "Not in a column" band, still on the site
-        // — losing somebody's footer links because they tidied a heading is
-        // exactly the silent damage this screen should not be able to do.
-        if (path.startsWith('/menu/columns/delete/') && method === 'POST') {
-          const id = parseInt(path.slice('/menu/columns/delete/'.length), 10);
-          if (Number.isFinite(id)) {
-            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
-            await env.DB.prepare('UPDATE menu_items SET column_id = NULL WHERE column_id = ?').bind(id).run().catch(() => {});
-            await env.DB.prepare('DELETE FROM footer_columns WHERE id = ?').bind(id).run();
-            await logAudit(env.DB, currentUser, 'delete', 'footer_column', String(id), before ? before.heading : '', before, null);
-          }
-          return new Response('', { status: 302, headers: { Location: '/menu?msg=column-deleted' } });
-        }
-
-        if (method === 'GET') {
-          const editing = idPart === 'new' ? null
-            : await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(parseInt(idPart, 10)).first().catch(() => null);
-          if (idPart !== 'new' && !editing) return new Response('', { status: 302, headers: { Location: '/menu' } });
-          const inUse = editing
-            ? await env.DB.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE column_id = ?').bind(editing.id).first().catch(() => ({ n: 0 }))
-            : { n: 0 };
-          return html(`
-${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
-<div class="tlc-wrap">
-${renderFormSection({
-  title: editing ? `The ${editing.heading} column` : 'A new footer column',
-  purpose: 'A heading in the footer, and a place to drag links into. Which links sit under it is set by dragging them on the Menu screen.',
-  action: '/menu/columns/save',
-  cancelHref: '/menu',
-  saveLabel: editing ? 'Save column' : 'Add column',
-  deleteAction: editing ? `/menu/columns/delete/${editing.id}` : '',
-  deleteLabel: 'Delete column',
-  deleteConfirm: inUse.n
-    ? `Delete the ${editing.heading} column? The ${inUse.n} link(s) in it stay on the site and move to "Not in a column" so you can put them somewhere else.`
-    : 'Delete this column?',
-  note: 'Deleting a column never deletes the links in it. They come out into "Not in a column" and keep showing on the site.',
-  fields: [
-    ...(editing ? [{ kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` }] : []),
-    { name: 'heading', label: 'Heading', value: editing ? editing.heading : '', required: true,
-      hint: 'The word above the links. Short — it sits in a narrow column.' },
-    { kind: 'chips', name: 'source', label: 'What is in it', value: editing ? editing.source : 'menu',
-      options: [{ value: 'menu', label: 'Links I choose' }, { value: 'partners', label: 'Partner ministries' }] },
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">A partner column fills itself from the partner ministries — one per core value — so there is nothing to drag into it.</p>' },
-    { kind: 'toggle', name: 'visible', label: 'Column shown', value: editing ? !!editing.visible : true, on: 'Showing', off: 'Hidden' },
-  ],
-})}
-</div>`, editing ? editing.heading : 'New footer column');
-        }
-      }
-
-      // ── APPEARANCE ───────────────────────────────────────────
-      // The header bar and the newsletter band. Everything else the Menu
-      // screen writes is live the moment it is saved; this is the one part
-      // that is drafted first, because somebody trying a color or cropping a
-      // logo is experimenting, and an experiment that is instantly on the
-      // front of the church website is not one. See admin/appearance.js.
-      const chromeItems = (list, byId) =>
-        menuTree(list, byId, 'header').filter((i) => i.visible && !i.broken).map((i) => ({ label: i.label, style: i.style }));
-
-      if (path === '/menu/appearance' && method === 'GET') {
-        const [{ list, byId }, chrome] = await Promise.all([loadMenu(), readChromePair(env)]);
-        const items = chromeItems(list, byId);
-        const msg = url.searchParams.get('msg');
-        const a = chrome.draft;
-
-        const swatches = (name, value, keys) => ({
-          kind: 'swatch', name, value,
-          options: CHROME_PALETTE.filter((c) => keys.includes(c.key))
-            .map((c) => ({ value: c.key, label: c.label, color: c.value })),
-        });
-
-        // What differs, named. "You have unpublished changes" tells somebody
-        // that something is waiting without telling them what, which is the
-        // half of the message that would actually let them decide.
-        const changed = chromeChanged(chrome.draft, chrome.live);
-        const changedList = changed.map((k) => CHROME_LABELS[k]).filter(Boolean).join(', ');
-
-        const alertHtml = msg === 'published' ? `<div class="alert alert-success">✓ Published — this is on the site now. It reaches visitors within about two minutes.</div>`
-          : msg === 'saved' ? `<div class="alert alert-info">Draft saved. Nothing has reached the site yet — press Publish when it looks right.</div>`
-          : msg === 'discarded' ? `<div class="alert alert-info">Draft thrown away. The screen is back to what is on the site.</div>` : '';
-
-        // When there is something unpublished, the two bars are shown one
-        // above the other rather than the draft alone. "Is this different from
-        // what people are seeing?" is the question somebody actually has, and
-        // a single bar cannot answer it.
-        const previews = chrome.dirty
-          ? `${panel('On the site now', renderHeaderPreview(chrome.live, items) + renderNewsletterPreview(chrome.live), { right: 'What visitors see' })}
-             ${panel('Your draft', renderHeaderPreview(chrome.draft, items) + renderNewsletterPreview(chrome.draft), { right: 'Not published' })}`
-          : panel('The site', renderHeaderPreview(chrome.draft, items, { note: 'This is what visitors see.' }) + renderNewsletterPreview(chrome.draft), { right: 'Published' });
-
-        const publishBar = chrome.dirty
-          ? `<div class="alert alert-warn" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-               <span>Not published yet${changedList ? ` — ${escapeHtml(changedList)}` : ''}. Visitors still see the bar above.</span>
-               <span style="display:flex;gap:8px;">
-                 <form method="POST" action="/menu/appearance/discard" style="margin:0;" onsubmit="return confirm('Throw away the draft and go back to what is on the site?')"><button type="submit" class="tlc-btn-quiet">Discard draft</button></form>
-                 <form method="POST" action="/menu/appearance/publish" style="margin:0;"><button type="submit" class="tlc-btn-primary">Publish to the site</button></form>
-               </span>
-             </div>`
-          : `<div class="alert alert-info">Everything on this screen is on the site. Changes you make below are saved as a draft first.</div>`;
-
-        return html(`
-${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
-<div class="tlc-wrap">
-${renderFormSection({
-  title: 'Appearance',
-  purpose: 'The header bar and the newsletter band — the two parts of the site that are on every page. Changes are saved as a draft and only reach visitors when you press Publish.',
-  action: '/menu/appearance/save',
-  cancelHref: '/menu',
-  cancelLabel: 'Back to Menu',
-  saveLabel: 'Save draft',
-  extraHead: alertHtml + publishBar + previews,
-  note: 'Colors come from the church palette rather than a color picker: the words in the bar are white and cannot be changed, so a pale color here would be a header nobody can read — on every page at once.',
-  fields: [
-    // ⚠ Sits ABOVE the header fields, and not because it is the most-used
-    // control — it is the widest-reaching one, and putting it under a heading
-    // that says "The header" would tell somebody it only changes the bar.
-    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The whole site</span></div>' },
-    { kind: 'chips', name: 'typeface', label: 'Typeface', value: a.typeface,
-      options: TYPEFACES.map((t) => ({ value: t.key, label: t.label })) },
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
-      + escapeHtml(TYPEFACES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
-    { kind: 'chips', name: 'textSize', label: 'Text size', value: a.textSize,
-      options: TEXT_SIZES.map((t) => ({ value: t.key, label: t.label })) },
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
-      + escapeHtml(TEXT_SIZES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">Text size multiplies every size on the site rather than replacing them, so the proportions stay as they were designed. Headings move less than body copy on purpose \u2014 a hero title scaled as hard as a paragraph pushes the first line of the page off the screen.</p>' },
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">This is the one setting here that is not just the header. It changes every heading and every paragraph on every page, and every block in the page editor — there is deliberately no way to set a font on one page or one block, because that is how a site ends up reading like two sites. Like everything else on this screen it is a draft until you publish.</p>' },
-
-    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The header</span></div>' },
-    { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
-      hint: 'Shown at 44 pixels. A square picture crops best. Leave it empty to show the church name on its own.' },
-    { kind: 'chips', name: 'logo_shape', label: 'Logo shape', value: a.logo_shape,
-      options: [{ value: 'round', label: 'Round' }, { value: 'square', label: 'Square' }] },
-    { name: 'brand_name', label: 'Church name', value: a.brand_name,
-      hint: 'The words beside the logo. This is also the link back to the homepage.' },
-    { name: 'tagline', label: 'Tagline', value: a.tagline,
-      hint: 'The small gold line under the name.' },
-    { kind: 'toggle', name: 'show_tagline', label: 'Tagline shown', value: a.show_tagline, on: 'Showing', off: 'Hidden' },
-    swatches('bar', a.bar, BAR_KEYS),
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The bar color. Gold is not offered here — white text on gold cannot be read.</p>' },
-    swatches('rule', a.rule, CHROME_PALETTE.map((c) => c.key)),
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The line along the bottom of the bar.</p>' },
-    swatches('cta', a.cta, CHROME_PALETTE.map((c) => c.key)),
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The Give button.</p>' },
-
-    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The newsletter band</span><p class="tlc-hint">The sign-up strip above the footer. It is on every page of the site, not just the homepage — which is why it is edited here and not in the page editor.</p></div>' },
-    { kind: 'toggle', name: 'nl_show', label: 'Newsletter band', value: a.nl_show, on: 'On every page', off: 'Off everywhere' },
-    swatches('nl_bg', a.nl_bg, BAR_KEYS),
-    { name: 'nl_eyebrow', label: 'Small line above the heading', value: a.nl_eyebrow },
-    { name: 'nl_heading', label: 'Heading', value: a.nl_heading },
-    { kind: 'textarea', name: 'nl_body', label: 'Wording', value: a.nl_body, rows: 3 },
-    { name: 'nl_button', label: 'Button label', value: a.nl_button },
-  ],
-})}
-</div>
-<script>
-// The logo file picker. The photo field kind in admin/ui.js has never had an
-// uploader of its own — it renders the file input and nothing listens to it —
-// so it is wired here rather than left as a control that looks live and does
-// nothing. (No backticks in this comment: it lives inside a template literal,
-// and one would end the string. See the note in CLAUDE.md.)
-(function(){
-  var input = document.querySelector('.tlc-photo-input');
-  if (!input) return;
-  input.addEventListener('change', async function(){
-    var f = input.files && input.files[0];
-    if (!f) return;
-    var hidden = document.querySelector('input[type=hidden][name="' + input.dataset.target + '"]');
-    var img = document.querySelector('.tlc-photo-preview');
-    var wrap = input.closest('.tlc-photo');
-    if (wrap) wrap.setAttribute('data-busy', '1');
-    try {
-      var fd = new FormData(); fd.append('file', f, f.name);
-      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
-      var d = await r.json();
-      if (!r.ok || !d.location) throw new Error((d && d.error) || 'Upload failed');
-      if (hidden) hidden.value = d.location;
-      if (img) { img.src = d.location; }
-      else if (wrap) { wrap.insertAdjacentHTML('afterbegin', '<img src="' + d.location + '" alt="" class="tlc-photo-preview">'); var e = wrap.querySelector('.tlc-photo-empty'); if (e) e.remove(); }
-      if (window.tlcToast) window.tlcToast('Logo uploaded · save the draft to keep it');
-    } catch (err) {
-      alert('That image could not be uploaded. ' + (err && err.message ? err.message : ''));
-    } finally { if (wrap) wrap.removeAttribute('data-busy'); }
-  });
-})();
-</script>`, 'Appearance');
-      }
-
-      if (path === '/menu/appearance/save' && method === 'POST') {
-        const form = await request.formData();
-        const next = appearanceFromForm(form);
-        const before = await readChrome(env, CHROME_DRAFT_KEY);
-        await writeChrome(env, CHROME_DRAFT_KEY, next);
-        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft)', before, next);
-        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=saved' } });
-      }
-
-      // Publishing is the ONLY thing that writes the live row. It copies the
-      // draft across whole rather than taking fields from the request, so a
-      // crafted POST can only ever publish what is already on the screen —
-      // there is no way to publish something nobody has looked at.
-      if (path === '/menu/appearance/publish' && method === 'POST') {
-        const { draft, live } = await readChromePair(env);
-        await writeChrome(env, CHROME_LIVE_KEY, draft);
-        await logAudit(env.DB, currentUser, 'publish', 'appearance', 'live', 'Header and newsletter band', live, draft);
-        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=published' } });
-      }
-
-      // The other direction: throw the draft away and go back to the site.
-      if (path === '/menu/appearance/discard' && method === 'POST') {
-        const { draft, live } = await readChromePair(env);
-        await writeChrome(env, CHROME_DRAFT_KEY, live);
-        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft discarded)', draft, live);
-        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=discarded' } });
-      }
-
-      if (path === '/menu' && method === 'GET') {
-        const { list, pageRows, byId } = await loadMenu();
-        const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Menu saved.</div>`
-          : msg === 'added' ? `<div class="alert alert-success">✓ Added to the menu.</div>`
-          : msg === 'removed' ? `<div class="alert alert-info">Removed from the menu. The page itself is untouched and still live.</div>` : '';
-
-        const header = menuTree(list, byId, 'header');
-        const footer = menuTree(list, byId, 'footer');
-        const orphans = orphanPages(pageRows, list);
-        const warnings = menuWarnings(list, byId);
-
-        // ⚠ The preview used to be admin navy with a hardcoded "T" badge and
-        // the literal words "Timothy Lutheran", beside a real site that is moss
-        // green with a round photographic logo and a strapline. It was built
-        // from the real menu ITEMS — which was the honest half — but drew them
-        // into a bar that does not exist anywhere. Staff were being shown a
-        // picture of a header the site does not have and asked to arrange it.
-        //
-        // It now draws the published appearance record through the same
-        // renderer the Appearance screen uses. A preview that can disagree
-        // with the site is worse than no preview, because it is believed.
-        const liveChrome = await readChrome(env, CHROME_LIVE_KEY);
-        const previewItems = header.filter((i) => i.visible && !i.broken)
-          .map((i) => ({ label: i.label, style: i.style }));
-
-        const itemHtml = (i) => `<div class="tlc-mi${i.depth ? ' is-child' : ''}${i.broken ? ' tlc-mi-broken' : ''}" draggable="true" data-id="${i.id}" data-depth="${i.depth}">
-    <span class="tlc-mi-grip" aria-hidden="true">⠿</span>
-    <span class="tlc-mi-body">
-      <span class="tlc-mi-label">${escapeHtml(i.label)}</span>
-      <span class="tlc-mi-sub">${i.href ? escapeHtml(i.href) : 'No destination'}</span>
-    </span>
-    <span class="tlc-mi-kind">${escapeHtml(i.kind === 'page' ? 'Page' : i.kind === 'external' ? 'Link' : 'Short')}</span>
-    ${i.style === 'button' ? '<span class="tlc-mi-kind" style="background:#FBF1DC;color:#7A5B18;">Button</span>' : ''}
-    <form method="POST" action="/menu/remove/${i.id}" style="margin:0;" onsubmit="return confirm('Take this out of the menu? The page stays live at its address.')">
-      <button type="submit" class="tlc-mi-x" title="Remove from the menu" aria-label="Remove ${escapeHtml(i.label)} from the menu">✕</button>
-    </form>
-  </div>${i.broken ? `<div class="tlc-mi-warn">▲ ${escapeHtml(i.brokenReason)}</div>` : ''}`;
-
-        const listHtml = (tree, menu) => tree.length === 0
-          ? `<div class="tlc-menu-empty">Nothing in the ${menu} yet — add a page from the panel on the right.</div>`
-          : tree.map((i) => itemHtml(i) + i.children.map(itemHtml).join('')).join('');
-
-        const orphanHtml = orphans.length === 0
-          ? `<div class="tlc-menu-empty">Every live page is in a menu.</div>`
-          : orphans.map((p) => `<div class="tlc-orphan">
-    <span class="tlc-orphan-body">
-      <span class="tlc-mi-label">${escapeHtml(p.menu_label || p.title)}</span>
-      <span class="tlc-mi-sub">${escapeHtml(p.slug)} · live, never added to a menu</span>
-    </span>
-    <form method="POST" action="/menu/add" style="margin:0;display:flex;gap:6px;">
-      <input type="hidden" name="page_id" value="${escapeHtml(p.id)}">
-      <button type="submit" name="menu" value="header" class="tlc-orphan-btn">Header</button>
-      <button type="submit" name="menu" value="footer" class="tlc-orphan-btn">Footer</button>
-    </form>
-  </div>`).join('');
-
-        // ── THE FOOTER, AS COLUMNS ──
-        // One drop target per column. An unassigned link is shown in its own
-        // band rather than quietly folded into a column: the site does put it
-        // under the first heading (it has to appear somewhere), and the band
-        // is what makes that visible instead of mysterious.
-        const colRows = await env.DB.prepare('SELECT * FROM footer_columns ORDER BY sort_order, id').all().catch(() => ({ results: [] }));
-        const { columns: fcols, orphans: fspare } = footerColumns(colRows.results || [], list, byId);
-        const firstMenuCol = fcols.find((c) => c.source === 'menu' && c.visible);
-
-        const columnHtml = fcols.map((c) => `<div class="tlc-fcol">
-    <div class="tlc-fcol-head">
-      <span class="tlc-fcol-name">${escapeHtml(c.heading || 'Untitled column')}${c.visible ? '' : ' <span class="tlc-mi-kind">Hidden</span>'}</span>
-      <a class="tlc-edit" href="/menu/columns/${c.id}">Edit</a>
-    </div>
-    ${c.source === 'partners'
-      ? `<div class="tlc-menu-hint" style="padding:10px 14px;">Filled automatically from the partner ministries — one per core value. Edit them under <a href="/partners" style="color:var(--tlc-blue);">Partners</a>.</div>`
-      : `<div data-menu="footer" data-column="${c.id}" class="tlc-fcol-list">${c.items.length ? c.items.map(itemHtml).join('') : '<div class="tlc-menu-empty">Drag a link here.</div>'}</div>`}
-  </div>`).join('');
-
-        const footerPanelHtml = `<div class="tlc-fcols">${columnHtml}</div>
-    ${fspare.length ? `<div class="tlc-fcol tlc-fcol--spare">
-      <div class="tlc-fcol-head"><span class="tlc-fcol-name">Not in a column</span></div>
-      <div class="tlc-mi-warn">▲ ${fspare.length === 1 ? 'This link is' : `These ${fspare.length} links are`} showing on the site under ${escapeHtml(firstMenuCol ? firstMenuCol.heading : 'the first column')}, because every link has to appear somewhere. Drag ${fspare.length === 1 ? 'it' : 'them'} into the column ${fspare.length === 1 ? 'it belongs' : 'they belong'} in.</div>
-      <div data-menu="footer" class="tlc-fcol-list">${fspare.map(itemHtml).join('')}</div>
-    </div>` : ''}
-    <div class="tlc-menu-hint">Drag a link by its ⠿ handle to move it within a column or into another one. The footer does not nest — a column heading is the only level there is.
-      <a href="/menu/columns/new" style="color:var(--tlc-blue);font-weight:600;">Add a column</a></div>`;
-
-        return html(`
-${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await pageBadges())}
-<div class="tlc-menu-wrap">
-  <div class="tlc-section-head" style="margin-bottom:14px;">
-    <div class="tlc-section-headings">
-      <h1 class="tlc-title">Menu</h1>
-      <p class="tlc-purpose">The order and shape of the header and footer. An item can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.</p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;flex:none;">
-      <a class="tlc-btn-quiet" href="/menu/appearance">Appearance</a>
-      <a class="tlc-action" href="/menu/new">+ Add item</a>
-    </div>
-  </div>
-  ${alertHtml}
-  ${warnings.length ? `<div class="alert alert-error" style="margin:0 0 14px;">${warnings.map(escapeHtml).join('<br>')}</div>` : ''}
-
-  ${renderHeaderPreview(liveChrome, previewItems, { note: 'This is the site — top level only. Colors, the logo and the wording are on the Appearance screen.' })}
-
-  <div class="tlc-menu-cols">
-    <div style="display:flex;flex-direction:column;gap:16px;">
-      ${panel('Header menu', `<div id="menu-header" data-menu="header">${listHtml(header, 'header')}</div>
-        <div class="tlc-menu-hint">Drag a row by its ⠿ handle to reorder it. Drop it <strong>onto another item’s name</strong> to nest it underneath. Two levels is the limit — a third is a menu nobody can use on a phone.</div>`,
-        { right: 'Drag to reorder · drop onto an item to nest', pad: false })}
-      ${panel('Footer columns', footerPanelHtml, { right: 'Drag a link between columns', pad: false })}
-    </div>
-    <div>
-      ${panel('Live pages not in the menu', orphanHtml + `<div class="tlc-menu-hint">Nothing here is broken. These pages are live and reachable by their address — they are simply not listed in a menu, which is right for a thank-you page or a one-off landing page.</div>`, { pad: false })}
-    </div>
-  </div>
-</div>
-<form id="menu-order-form" method="POST" action="/menu/reorder" style="display:none;">
-  <input type="hidden" name="order" id="menu-order-input">
-</form>
-<script>(function(){
-  // Reordering posts the whole resulting order rather than a diff: the server
-  // renumbers from scratch, so a dropped row can never leave the list in a
-  // state where two items claim the same position.
-  var dragged = null;
-  function rows(list){ return Array.prototype.slice.call(list.querySelectorAll('.tlc-mi')); }
-  function save(){
-    var out = [];
-    // Every drop target, not two fixed ids: the footer is one list per column
-    // now, so a column is simply another container. Dragging a link from one
-    // column to another is then the same gesture as reordering within one,
-    // and it records where it landed.
-    Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), function(list){
-      var col = list.dataset.column ? parseInt(list.dataset.column, 10) : null;
-      rows(list).forEach(function(r){
-        out.push({ id: parseInt(r.dataset.id,10), menu: list.dataset.menu,
-                   depth: parseInt(r.dataset.depth,10) || 0, column: col });
-      });
-    });
-    document.getElementById('menu-order-input').value = JSON.stringify(out);
-    document.getElementById('menu-order-form').submit();
-  }
-  function wire(list){
-    list.addEventListener('dragstart', function(e){
-      var row = e.target.closest('.tlc-mi'); if (!row) return;
-      dragged = row; row.classList.add('is-drag');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch(_){}
-    });
-    list.addEventListener('dragend', function(){
-      if (dragged) dragged.classList.remove('is-drag');
-      rows(document).forEach(function(r){ r.classList.remove('is-over','is-nest'); });
-      dragged = null;
-    });
-    list.addEventListener('dragover', function(e){
-      if (!dragged) return;
-      e.preventDefault();
-      var row = e.target.closest('.tlc-mi');
-      rows(document).forEach(function(r){ r.classList.remove('is-over','is-nest'); });
-      if (!row || row === dragged) return;
-      // Dropping onto the NAME nests; dropping anywhere else on the row
-      // reorders. Nesting is header-only and never onto another child.
-      var onName = !!e.target.closest('.tlc-mi-label');
-      var canNest = list.dataset.menu === 'header' && onName && row.dataset.depth === '0';
-      row.classList.add(canNest ? 'is-nest' : 'is-over');
-    });
-    list.addEventListener('drop', function(e){
-      if (!dragged) return;
-      e.preventDefault();
-      var row = e.target.closest('.tlc-mi');
-      var onName = !!e.target.closest('.tlc-mi-label');
-      var canNest = list.dataset.menu === 'header' && onName && row && row.dataset.depth === '0';
-      if (row && row !== dragged) {
-        if (canNest) {
-          dragged.dataset.depth = '1';
-          row.parentNode.insertBefore(dragged, row.nextSibling);
-        } else {
-          dragged.dataset.depth = list.dataset.menu === 'header' ? dragged.dataset.depth : '0';
-          row.parentNode.insertBefore(dragged, row);
-        }
-      } else if (!row) {
-        list.appendChild(dragged);
-      }
-      save();
-    });
-  }
-  Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), wire);
-})();</script>`, 'Menu');
-      }
-
-      // ── Reorder (POST) ──
-      if (path === '/menu/reorder' && method === 'POST') {
-        const form = await request.formData();
-        let order = [];
-        try { order = JSON.parse(form.get('order') || '[]'); } catch (_) { order = []; }
-        // Which column a footer row landed in travels with the drag, so
-        // moving a link between columns and reordering within one are the
-        // same posted order rather than two mechanisms that can disagree.
-        const columnOf = new Map(order.map((o) => [o.id, Number.isFinite(Number(o.column)) && o.column != null ? Number(o.column) : null]));
-        for (const menu of MENUS) {
-          const inMenu = order.filter((o) => normalizeMenu(o.menu) === menu);
-          for (const row of renumber(inMenu, menu)) {
-            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ?, column_id = ? WHERE id = ?')
-              .bind(row.menu, row.sort_order, row.depth, menu === 'footer' ? (columnOf.get(row.id) ?? null) : null, row.id).run().catch(() => {});
-          }
-        }
-        await logAudit(env.DB, currentUser, 'update', 'menu', 'order', 'Menu order', null, { count: order.length });
-        return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
-      }
-
-      // ── Add a live page to a menu (POST) ──
-      if (path === '/menu/add' && method === 'POST') {
-        const form = await request.formData();
-        const pageId = String(form.get('page_id') || '');
-        const menu = normalizeMenu(form.get('menu'));
-        const page = await env.DB.prepare('SELECT id, title, menu_label FROM pages WHERE id = ?').bind(pageId).first();
-        if (!page) return new Response('', { status: 302, headers: { Location: '/menu' } });
-        const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM menu_items WHERE menu = ?').bind(menu).first();
-        await env.DB.prepare(
-          "INSERT INTO menu_items (menu, label, kind, page_id, style, depth, sort_order, visible) VALUES (?, ?, 'page', ?, 'link', 0, ?, 1)"
-        ).bind(menu, page.menu_label || page.title, pageId, ((max && max.m) || 0) + 10).run();
-        await logAudit(env.DB, currentUser, 'create', 'menu_item', pageId, page.title, null, { menu });
-        return new Response('', { status: 302, headers: { Location: '/menu?msg=added' } });
-      }
-
-      // ── Remove an item (POST) ──
-      // The page is untouched — it stays live at its address and reappears in
-      // the orphan panel. Nothing is ever lost by tidying the menu.
-      if (path.startsWith('/menu/remove/') && method === 'POST') {
-        const id = path.slice('/menu/remove/'.length);
-        const before = await env.DB.prepare('SELECT * FROM menu_items WHERE id = ?').bind(id).first();
-        await env.DB.prepare('DELETE FROM menu_items WHERE id = ?').bind(id).run();
-        if (before) await logAudit(env.DB, currentUser, 'delete', 'menu_item', String(id), before.label || '', before, null);
-        return new Response('', { status: 302, headers: { Location: '/menu?msg=removed' } });
-      }
-
-      // ── New item (GET form) ──
-      if (path === '/menu/new' && method === 'GET') {
-        const { pageRows } = await loadMenu();
-        return html(`
-${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
-<div class="tlc-wrap">
-  <div class="page-title">Add a menu item</div>
-  <div class="page-sub">A menu item can point at one of your pages, at an outside site, or at a short link.</div>
-  <div class="card">
-    <form method="POST" action="/menu/create">
-      <div class="form-group">
-        <label>Which menu</label>
-        <select name="menu"><option value="header">Header</option><option value="footer">Footer</option></select>
-      </div>
-      <div class="form-group">
-        <label>Label <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— what appears in the bar; can be shorter than the page name</span></label>
-        <input type="text" name="label" placeholder="e.g. Visit">
-      </div>
-      <div class="form-group">
-        <label>Point at a page</label>
-        <select name="page_id">
-          <option value="">— Not a page —</option>
-          ${pageRows.filter((p) => p.status === 'published').map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.menu_label || p.title)} (${escapeHtml(p.slug)})</option>`).join('')}
-        </select>
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">The address is always read from the page, so renaming it moves this item too. Leave blank if you are linking somewhere else.</div>
-      </div>
-      <div class="form-group">
-        <label>…or a web address</label>
-        <input type="text" name="target" placeholder="https://wordoflifeschool.net, or /zoom">
-      </div>
-      <div class="form-group">
-        <div class="checkbox-row">
-          <input type="checkbox" name="style" value="button" id="mi-btn">
-          <span><label for="mi-btn" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">Show as a button</label></span>
-        </div>
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">One item should be a button — Give is it. A second stops the first standing out.</div>
-      </div>
-      <div class="btn-row" style="margin-top:20px;">
-        <button type="submit" class="btn btn-primary">Add to menu</button>
-        <a href="/menu" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-      </div>
-    </form>
-  </div>
-</div>`, 'Add a menu item');
-      }
-
-      if (path === '/menu/create' && method === 'POST') {
-        const form = await request.formData();
-        const menu = normalizeMenu(form.get('menu'));
-        const pageId = String(form.get('page_id') || '').trim();
-        const target = String(form.get('target') || '').trim();
-        const label = String(form.get('label') || '').trim();
-        if (!pageId && !target) return new Response('', { status: 302, headers: { Location: '/menu/new' } });
-        const kind = pageId ? 'page' : (target.startsWith('/') ? 'short' : 'external');
-        const style = normalizeStyle(form.get('style'));
-        const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM menu_items WHERE menu = ?').bind(menu).first();
-        await env.DB.prepare(
-          'INSERT INTO menu_items (menu, label, kind, page_id, target, style, depth, sort_order, visible) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1)'
-        ).bind(menu, label || null, kind, pageId || null, pageId ? null : target, style, ((max && max.m) || 0) + 10).run();
-        await logAudit(env.DB, currentUser, 'create', 'menu_item', pageId || target, label, null, { menu, kind });
-        return new Response('', { status: 302, headers: { Location: '/menu?msg=added' } });
-      }
+    {
+      const r = await handleMenuRoutes(request, env, path, method, currentUser, url,
+        (path === '/menu' || path.startsWith('/menu/')) ? await pageBadges() : {});
+      if (r) return r;
     }
     // ── PARTNERS ───────────────────────────────────────────────
     // Four partner ministries, one per core value. The pairing is what the
@@ -7182,7 +6640,13 @@ ${PAYROLL_HTML}`, 'Payroll');
     // escaped — a staff name must not be able to become markup in something
     // that lands in an outside inbox.
     if (path === '/payroll/email' && method === 'POST') {
-      if (!hasPermission(currentUser, 'payroll_manage')) {
+      // A signed-in admin session covers a browser hitting this directly from
+      // admin/payroll.html. Finance's app relays the bookkeeper's Cloudflare-
+      // Access-verified identity instead (payrollEmailRelayUser, resolved
+      // above at the CSRF gate) -- same shape as the /sb/* proxy's own
+      // getSession-or-resolvePayrollContractCaller fallback.
+      const emailUser = currentUser || payrollEmailRelayUser;
+      if (!hasPermission(emailUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
       const to = (await env.DB.prepare("SELECT value FROM site_settings WHERE key='payroll_bookkeeper_email'").first().catch(() => null))?.value || '';
@@ -7246,7 +6710,7 @@ ${PAYROLL_HTML}`, 'Payroll');
         <p style="margin:0;font:400 14px/1.6 Arial,sans-serif;color:#3A3A4A;">Payroll for ${escapeHtml(label)} is attached (CSV and PDF).</p>
         <p style="margin:6px 0 0;font:400 13px/1.5 Arial,sans-serif;color:${body.approved ? '#3B4C2E' : '#7A5B18'};">${stateLine}</p>
         ${warn}
-        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(currentUser?.username || 'the office')}.</p>
+        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(emailUser?.username || 'the office')}.</p>
       </div>`;
 
       // sendTransactionalEmail RETURNS {error}, it does not throw — a bare
@@ -7306,7 +6770,7 @@ ${PAYROLL_HTML}`, 'Payroll');
           status: 502, headers: { 'Content-Type': 'application/json' },
         });
       }
-      await logAudit(env.DB, currentUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to: recipients.join(', '), total: body.total });
+      await logAudit(env.DB, emailUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to: recipients.join(', '), total: body.total });
       return new Response(JSON.stringify({ ok: true, to: recipients.join(', ') }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -7481,293 +6945,14 @@ ${PAYROLL_HTML}`, 'Payroll');
     // in place — deliberately not written to any more, a frozen snapshot of
     // what the page carried before this change.
 
-    // ── SERMONS ADMIN ──
-    if (path.startsWith('/sermons') && !hasPermission(currentUser, 'sermons_edit')) {
-      return new Response('Access denied.', { status: 403 });
+    // ── SERMONS ADMIN (admin/sermons.js owns the routes) ─────────
+    // The sermon series/notes CRUD screen. Gated on sermons_edit inside
+    // handleSermonsRoutes itself.
+    {
+      const r = await handleSermonsRoutes(request, env, path, method, currentUser, url,
+        path.startsWith('/sermons') ? await pageBadges() : {});
+      if (r) return r;
     }
-    if (path === '/sermons' && method === 'GET') {
-      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">✓ Saved.</div>` : '';
-      const [series, notes] = await Promise.all([
-        env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all(),
-        env.DB.prepare('SELECT * FROM sermon_notes ORDER BY COALESCE(date, \'\') DESC, id DESC').all(),
-      ]);
-      const bySeries = {};
-      const standalone = [];
-      for (const n of notes.results) {
-        if (n.series_id) (bySeries[n.series_id] = bySeries[n.series_id] || []).push(n);
-        else standalone.push(n);
-      }
-
-      // The library has no recordings attached yet, and the site is built to
-      // cope: a sermon with a link gets a play thumbnail, one without gets a
-      // text-only card. Nothing here needs a setting — the row reports which
-      // state each sermon is in so it is obvious what is missing.
-      // The design's three words: YouTube / Audio / Text only. "Text only" is
-      // deliberately not a warning — a sermon with no recording is a perfectly
-      // good text card on the site, and adding a link later upgrades it with
-      // no other edit. Calling it "No recording" in amber made a normal state
-      // look like a fault.
-      const mediaCell = (n) => {
-        const kinds = [];
-        if (n.youtube_url) kinds.push('YouTube');
-        if (n.audio_url) kinds.push('Audio');
-        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('plain', 'Text only');
-      };
-
-      const rows = [];
-      for (const s of series.results) {
-        const kids = bySeries[s.id] || [];
-        const withMedia = kids.filter((n) => n.youtube_url || n.audio_url).length;
-        rows.push({
-          href: `/sermons/edit-series/${s.id}`,
-          filter: ['series', s.active ? 'active-series' : ''].filter(Boolean),
-          search: `${s.title} ${s.date_range || ''}`.toLowerCase(),
-          cells: [
-            primaryCell(s.title, s.date_range || pluralise(kids.length, 'sermon')),
-            escapeHtml(s.date_range || '—'),
-            '',
-            s.active ? statusPill('good', 'Active series') : (s.playlist_url ? statusPill('plain', 'Playlist') : statusPill('plain', pluralise(kids.length, 'sermon'))),
-          ],
-          actions: `<a class="tlc-edit" href="/sermons/new-note?series_id=${s.id}">+ Sermon</a><a class="tlc-edit" href="/sermons/edit-series/${s.id}">Edit</a>`,
-        });
-        for (const n of kids) {
-          rows.push({
-            child: true,
-            href: `/sermons/edit-note/${n.id}`,
-            filter: (n.youtube_url || n.audio_url) ? [] : ['missing-media'],
-            search: `${n.title || ''} ${n.scripture || ''} ${s.title}`.toLowerCase(),
-            cells: [
-              primaryCell(n.title || '(untitled)', s.title),
-              escapeHtml(n.date || '—'),
-              escapeHtml(n.scripture || '—'),
-              mediaCell(n),
-            ],
-          });
-        }
-      }
-      for (const n of standalone) {
-        rows.push({
-          href: `/sermons/edit-note/${n.id}`,
-          filter: (n.youtube_url || n.audio_url) ? [] : ['missing-media'],
-          search: `${n.title || ''} ${n.scripture || ''}`.toLowerCase(),
-          cells: [
-            primaryCell(n.title || '(untitled)', 'Not part of a series'),
-            escapeHtml(n.date || '—'),
-            escapeHtml(n.scripture || '—'),
-            mediaCell(n),
-          ],
-        });
-      }
-
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await pageBadges())}
-<div class="tlc-wrap">
-  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
-  ${renderListSection({
-    key: 'sermons',
-    title: sectionCfg('sermons').title,
-    purpose: sectionCfg('sermons').purpose,
-    action: { label: sectionCfg('sermons').action, href: '/sermons/new-series' },
-    // Beside the primary button rather than up in the topbar. A sermon with no
-    // series is a real thing to add, and putting it next to the sign-out link
-    // made it look like part of the chrome rather than part of this screen.
-    altActions: [{ label: '+ Standalone sermon', href: '/sermons/new-note' }],
-    search: sectionCfg('sermons').search,
-    filters: filtersOf('sermons'),
-    columns: columnsOf('sermons'),
-    rows,
-    noun: 'entry', nounPlural: 'entries',
-    empty: 'No series or sermons yet.',
-    note: sectionCfg('sermons').note,
-  })}
-</div>`, 'Sermons Admin');
-    }
-
-    // ── SERMONS: THE TWO FORMS, ONCE EACH ──
-    // Series and sermons each had a New and an Edit that were the same fields
-    // twice, on the old chrome. One builder apiece, through the shared renderer.
-    const seriesFormHtml = (r = null) => renderFormSection({
-      title: r ? (r.title || 'Edit series') : 'New series',
-      purpose: r
-        ? 'The series and its date range, as they read on the sermons page.'
-        : 'A run of sermons under one heading. Add the sermons themselves once it exists.',
-      action: r ? `/sermons/edit-series/${r.id}` : '/sermons/new-series',
-      cancelHref: '/sermons',
-      saveLabel: r ? 'Save changes' : 'Create series',
-      deleteAction: r ? `/sermons/delete-series/${r.id}` : '',
-      deleteConfirm: r ? `Delete “${r.title}” and every sermon in it? This cannot be undone.` : '',
-      deleteLabel: 'Delete series',
-      fields: [
-        { name: 'title', label: 'Series title', value: r ? r.title : '', required: true, placeholder: 'The Shepherd’s Way' },
-        { kind: 'textarea', name: 'description', label: 'Description', rows: 3, value: r ? (r.description || '') : '',
-          placeholder: 'What the series is about.' },
-        { name: 'date_range', label: 'Date range', value: r ? (r.date_range || '') : '', placeholder: 'Lent 2026 · March–April',
-          hint: 'Free text — it is read, not sorted on.' },
-        { name: 'playlist_url', type: 'url', label: 'YouTube playlist', value: r ? (r.playlist_url || '') : '',
-          placeholder: 'https://www.youtube.com/playlist?list=…', hint: 'Optional.' },
-        { kind: 'toggle', name: 'active', label: 'The current series', value: r ? !!r.active : false,
-          on: 'Current', off: 'Past series',
-          hint: 'One series at a time is the current one. Turning this on turns it off everywhere else.' },
-      ],
-    });
-
-    const noteFormHtml = (n, seriesRows, presetSeries = '') => {
-      const isNew = !n;
-      const back = (n && n.series_id) || presetSeries ? `/sermons/notes/${(n && n.series_id) || presetSeries}` : '/sermons';
-      return renderFormSection({
-        title: isNew ? 'New sermon' : n.title || 'Edit sermon',
-        purpose: 'A sermon with no recording is a good text card on the site. Adding a link later upgrades it with no other edit.',
-        action: isNew ? '/sermons/new-note' : `/sermons/edit-note/${n.id}`,
-        cancelHref: back,
-        saveLabel: isNew ? 'Add sermon' : 'Save changes',
-        deleteAction: isNew ? '' : `/sermons/delete-note/${n.id}`,
-        deleteConfirm: `Delete “${(n && n.title) || 'this sermon'}”?`,
-        deleteLabel: 'Delete sermon',
-        wide: true,
-        fields: [
-          { kind: 'choice', name: 'series_id', label: 'Series',
-            value: String((n && n.series_id) || presetSeries || ''),
-            options: [{ value: '', label: '— Standalone sermon —' }]
-              .concat(seriesRows.map((x) => ({ value: String(x.id), label: x.title }))),
-            hint: 'A standalone sermon stands on its own on the sermons page.' },
-          { kind: 'date', name: 'date', label: 'Date', value: n ? (n.date || '') : '' },
-          { name: 'title', label: 'Sermon title', value: n ? n.title : '', required: true, placeholder: 'You prepare a table before me' },
-          { name: 'scripture', label: 'Scripture', value: n ? (n.scripture || '') : '', placeholder: 'Psalm 23:5' },
-          { kind: 'html', html: tinymceSermonSection(n ? n.outline : '') },
-          { name: 'youtube_url', type: 'url', label: 'YouTube link', value: n ? (n.youtube_url || '') : '',
-            placeholder: 'https://…', hint: 'Optional. With one, the card gains a play button.' },
-        ],
-      });
-    };
-
-    if (path === '/sermons/new-series' && method === 'GET') {
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`, await pageBadges())}
-<div class="tlc-wrap">${seriesFormHtml()}</div>`, 'New series — TLC Admin');
-    }
-
-    if (path === '/sermons/new-series' && method === 'POST') {
-      const form = await request.formData();
-      const title = (form.get('title') || '').trim();
-      if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
-      const active = form.getAll('active').includes('1') ? 1 : 0;
-      if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
-      await env.DB.prepare('INSERT INTO sermon_series (title, description, date_range, playlist_url, active) VALUES (?, ?, ?, ?, ?)')
-        .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active).run();
-      return new Response('', { status: 302, headers: { Location: '/sermons?saved=1' } });
-    }
-
-    if (path.startsWith('/sermons/edit-series/') && method === 'GET') {
-      const id = path.split('/').pop();
-      const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
-      if (!s) return new Response('Not found', { status: 404 });
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`, await pageBadges())}
-<div class="tlc-wrap">${seriesFormHtml(s)}</div>`, 'Edit series — TLC Admin');
-    }
-
-    if (path.startsWith('/sermons/edit-series/') && method === 'POST') {
-      const id = path.split('/').pop();
-      const form = await request.formData();
-      const title = (form.get('title') || '').trim();
-      const active = form.getAll('active').includes('1') ? 1 : 0;
-      if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
-      await env.DB.prepare('UPDATE sermon_series SET title=?, description=?, date_range=?, playlist_url=?, active=? WHERE id=?')
-        .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active, id).run();
-      return new Response('', { status: 302, headers: { Location: '/sermons?saved=1' } });
-    }
-
-    if (path.startsWith('/sermons/delete-series/') && method === 'POST') {
-      const id = path.split('/').pop();
-      await env.DB.prepare('DELETE FROM sermon_notes WHERE series_id = ?').bind(id).run();
-      await env.DB.prepare('DELETE FROM sermon_series WHERE id = ?').bind(id).run();
-      return new Response('', { status: 302, headers: { Location: '/sermons' } });
-    }
-
-    if (path.startsWith('/sermons/notes/') && method === 'GET') {
-      const seriesId = path.split('/').pop();
-      const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(seriesId).first();
-      if (!s) return new Response('Not found', { status: 404 });
-      const notes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id = ? ORDER BY date DESC, id DESC').bind(seriesId).all();
-      const notesHtml = notes.results.length === 0
-        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No sermons in this series yet.</div>`
-        : notes.results.map(n => `
-<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-  <div style="flex:1;">
-    ${n.date ? `<div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.06em;">${n.date}</div>` : ''}
-    <div style="font-family:var(--serif);font-size:16px;color:var(--steel);">${n.title}</div>
-    ${n.scripture ? `<div style="font-size:12px;color:var(--gray);">${n.scripture}</div>` : ''}
-  </div>
-  <div style="display:flex;gap:8px;">
-    <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this sermon?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`).join('');
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`, await pageBadges())}
-<div class="tlc-wrap">
-  <div class="page-title">${s.title}</div>
-  <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
-  <div class="btn-row" style="margin-bottom:20px;">
-    <a href="/sermons/new-note?series_id=${seriesId}" class="btn btn-primary">+ Add sermon</a>
-    <a href="/sermons/edit-series/${seriesId}" class="btn btn-secondary">Edit series</a>
-  </div>
-  <div class="card"><div class="card-title">Sermons in this series</div>${notesHtml}</div>
-</div>`, 'Sermon Series');
-    }
-
-    if (path === '/sermons/new-note' && method === 'GET') {
-      const seriesId = url.searchParams.get('series_id') || '';
-      const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`, await pageBadges())}
-<div class="tlc-wrap">${noteFormHtml(null, allSeries.results, seriesId)}</div>`, 'New sermon — TLC Admin', TINYMCE_HEAD);
-    }
-
-    if (path === '/sermons/new-note' && method === 'POST') {
-      const form = await request.formData();
-      const title = (form.get('title') || '').trim();
-      if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
-      const seriesId = form.get('series_id') || null;
-      await env.DB.prepare('INSERT INTO sermon_notes (series_id, date, title, scripture, outline, youtube_url) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '',
-              sanitizeClassicRich(form.get('outline') || ''), form.get('youtube_url') || '').run();   // FX-04
-      const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
-      return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
-    }
-
-    if (path.startsWith('/sermons/edit-note/') && method === 'GET') {
-      const id = path.split('/').pop();
-      const n = await env.DB.prepare('SELECT * FROM sermon_notes WHERE id = ?').bind(id).first();
-      if (!n) return new Response('Not found', { status: 404 });
-      const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
-      return html(`
-${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`, await pageBadges())}
-<div class="tlc-wrap">${noteFormHtml(n, allSeries.results)}</div>`, 'Edit sermon — TLC Admin', TINYMCE_HEAD);
-    }
-
-    if (path.startsWith('/sermons/edit-note/') && method === 'POST') {
-      const id = path.split('/').pop();
-      const form = await request.formData();
-      const title = (form.get('title') || '').trim();
-      const seriesId = form.get('series_id') || null;
-      await env.DB.prepare('UPDATE sermon_notes SET series_id=?, date=?, title=?, scripture=?, outline=?, youtube_url=? WHERE id=?')
-        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '',
-              sanitizeClassicRich(form.get('outline') || ''), form.get('youtube_url') || '', id).run();   // FX-04
-      const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
-      return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
-    }
-
-    if (path.startsWith('/sermons/delete-note/') && method === 'POST') {
-      const id = path.split('/').pop();
-      const n = await env.DB.prepare('SELECT series_id FROM sermon_notes WHERE id = ?').bind(id).first();
-      await env.DB.prepare('DELETE FROM sermon_notes WHERE id = ?').bind(id).run();
-      const redir = n && n.series_id ? `/sermons/notes/${n.series_id}` : '/sermons';
-      return new Response('', { status: 302, headers: { Location: redir } });
-    }
-
     // ── NEWSLETTER + NEWS PERMISSION GUARD ──
     // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission
     const isNewsletterRoute = ['/new', '/publish', '/newsletter/preview'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/') || path.startsWith('/newsletter/hide/') || path.startsWith('/newsletter/unhide/');
