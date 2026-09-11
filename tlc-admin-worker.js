@@ -11,6 +11,7 @@ import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
          MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
+import { wrapEnvForDbAttribution, logDbAttribution } from './admin/db-attribution.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -1732,8 +1733,14 @@ export default {
   },
 
   async fetch(request, env, ctx) {
+    // Attributes every D1 query this request makes to its path, and logs it if notable —
+    // see admin/db-attribution.js for why this is the single chokepoint for that (this repo
+    // has no central route dispatcher the way Connect's handleAdminApi does).
+    const path = new URL(request.url).pathname;
+    const { env: attributedEnv, counter } = wrapEnvForDbAttribution(env);
+    const dbQueriesAtStart = counter.queries;
     try {
-      return await this._fetch(request, env, ctx);
+      return await this._fetch(request, attributedEnv, ctx);
     } catch (e) {
       const detail = e && (e.stack || e.message) ? (e.stack || e.message) : String(e);
       // AW-1: this used to return the full stack to EVERY caller. The comment
@@ -1752,6 +1759,8 @@ export default {
         + 'Reference: ' + ref + '\n',
         { status: 500, headers: { 'Content-Type': 'text/plain' } }
       );
+    } finally {
+      logDbAttribution(path, request.method, counter, dbQueriesAtStart);
     }
   },
 
