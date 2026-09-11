@@ -2,6 +2,13 @@ name = "tlc-newsletter-admin"
 main = "tlc-admin-worker.js"
 compatibility_date = "2024-01-01"
 
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 # Used only to verify the Cf-Access-Jwt-Assertion header Finance's app forwards on a
 # payroll-proxy call (see admin/payroll-contract-auth.js) -- proves WHO Finance says is
 # acting, not whether the call itself is authorized (that's FINANCE_PAYROLL_CONTRACT_KEY,
