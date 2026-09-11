@@ -2111,8 +2111,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       // note above the first tile already warns about.
       const feeTile = counts.cardPaidCount ? tile('Net deposited',
         money(counts.collectedCents - counts.cardFeeCents),
-        `${money(counts.cardFeeCents)} in card fees — ${counts.confirmedFeeCount} of ${counts.cardPaidCount} confirmed by Square`
-          + (counts.confirmedFeeCount < counts.cardPaidCount ? ', the rest estimated' : '')) : '';
+        `${money(counts.cardFeeCents)} in card fees`) : '';
 
       const tiles = `<div class="tlc-tiles${feeTile ? ' tlc-tiles--5' : ''}">
         ${tilesFirst}
