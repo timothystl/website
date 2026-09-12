@@ -85,8 +85,12 @@ current plan is a plain task list in the private `digital-architecture` reposito
 here. In short: Finance becomes its own application (out of `chms`); shared staff login across
 Website/Connect/Finance/myMDO; code normalized and legacy-named resources renamed to match current
 scope; real developer documentation; and better observability. None of these are gated behind each
-other. Website does not yet have backup/restore-verification tooling for `tlc-newsletter-db` or
-`tlc-news-images` comparable to what CHMS has — build one before any real data move touches them.
+other. Website now has backup/restore-verification tooling for `tlc-newsletter-db` (ported from
+CHMS's own tested drill) and `tlc-news-images` (new — R2 has no CHMS precedent), documented in
+`docs/OPERATIONS.md` — but neither has actually been dispatched yet, so unlike CHMS's drill (which
+has passed for real), this one is unvalidated in practice. Configure the secrets `docs/
+OPERATIONS.md` lists and run both, with Andrew's approval, before treating them as equivalent to
+CHMS's, and before any real data move touches these two resources.
 
 ## Documentation discipline
 

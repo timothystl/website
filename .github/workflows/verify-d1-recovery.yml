@@ -1,0 +1,79 @@
+name: Verify D1 backup and recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full main commit SHA approved for the recovery exercise
+        required: true
+        type: string
+      reason:
+        description: Reason for this recovery exercise
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-recovery-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Export, restore, and reconcile production D1
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      SOURCE_DB: tlc-newsletter-db
+      SOURCE_DB_ID: 7feda7f2-abf5-4756-9c15-9bb1c9a6c331
+      RESULT_FILE: /tmp/d1-recovery-result.json
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verify the approved commit is on main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Export, restore, reconcile, and clean up
+        run: bash scripts/verify-d1-recovery.sh
+
+      - name: Record recovery summary
+        shell: bash
+        env:
+          RECOVERY_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## D1 recovery verification'
+            echo
+            echo "- Approved commit: \`${GITHUB_SHA}\`"
+            echo "- Reason: ${RECOVERY_REASON}"
+            jq -r '
+              "- Source database UUID verified: `" + .source_db_id_verified + "`",
+              "- Export: " + (.export_bytes | tostring) + " bytes; SHA-256 `" + .export_sha256 + "`",
+              "- Oversized export handling: " + (.oversized_export_statements_rewritten | tostring) + " statement rewritten; " + (.large_cells_length_verified | tostring) + " large value length-verified",
+              "- Schema: " + (.schema_objects_matched | tostring) + " objects matched; control SHA-256 `" + .schema_control_sha256 + "`",
+              "- Integrity: " + .integrity_check + "; foreign-key violations " + (.foreign_key_violations | tostring),
+              "- Rows: " + (.tables_matched | tostring) + " tables matched; control SHA-256 `" + .row_control_sha256 + "`",
+              "- Monetary-keyword controls: " + (.monetary_controls_matched | tostring) + " columns matched; control SHA-256 `" + .monetary_control_sha256 + "`",
+              "- Disposal: plaintext export removed and disposable D1 `" + .disposable_database + "` deleted",
+              "- Sensitive rows and any monetary values were not printed or retained as artifacts"
+            ' "$RESULT_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"

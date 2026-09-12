@@ -1,0 +1,86 @@
+name: Verify R2 backup and recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full main commit SHA approved for the recovery exercise
+        required: true
+        type: string
+      reason:
+        description: Reason for this recovery exercise
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-recovery-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Copy, reconcile, and clean up a disposable R2 restore
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      # Object-level R2 operations (list/copy/delete) only exist on R2's S3-compatible API, which
+      # needs its own R2-scoped Access Key ID/Secret (Object Read & Write) -- NOT the plain
+      # Cloudflare API token CLOUDFLARE_D1_API_TOKEN or CLOUDFLARE_API_TOKEN are. See
+      # scripts/verify-r2-recovery.sh's own header comment for why. CLOUDFLARE_API_TOKEN here is
+      # used only for the disposable bucket's create/delete, via Wrangler.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      SOURCE_BUCKET: tlc-news-images
+      RESULT_FILE: /tmp/r2-recovery-result.json
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verify the approved commit is on main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Confirm the AWS CLI is available (pre-installed on ubuntu-latest runners)
+        run: aws --version
+
+      - name: Copy, reconcile, and clean up
+        run: bash scripts/verify-r2-recovery.sh
+
+      - name: Record recovery summary
+        shell: bash
+        env:
+          RECOVERY_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## R2 recovery verification'
+            echo
+            echo "- Approved commit: \`${GITHUB_SHA}\`"
+            echo "- Reason: ${RECOVERY_REASON}"
+            jq -r '
+              "- Source bucket: `" + .source_bucket + "`",
+              "- Objects matched (key + size): " + (.objects_matched | tostring),
+              "- Manifest control SHA-256: `" + .manifest_control_sha256 + "`",
+              "- Verification kind: " + .verification_kind,
+              "- Disposal: disposable bucket `" + .disposable_bucket + "` and every object in it deleted",
+              "- Object bytes never left R2 (server-side copy, no download/reupload)"
+            ' "$RESULT_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
