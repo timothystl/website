@@ -28,7 +28,7 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { TINYMCE_VERSION } from '../admin/db.js';
 import { newBlock, sanitizeBlocks } from '../admin/blocks.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';

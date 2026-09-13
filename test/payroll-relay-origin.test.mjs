@@ -1,12 +1,12 @@
 // The payroll Supabase proxy's CSRF Origin/Referer check must never block
 // Finance's contract-relay calls (server-to-server, no browser Origin header
 // to carry) while still enforcing it for a real browser session — the whole
-// point of the check. Drives the actual /sb/* handler in tlc-admin-worker.js
+// point of the check. Drives the actual /sb/* handler in website-admin-worker.js
 // end to end, the same way test/media-upload.test.mjs does, but without a
 // browser: this is a header/auth-path question, not a UI one.
 //   node test/payroll-relay-origin.test.mjs
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { resetPayrollContractAuthCacheForTests } from '../admin/payroll-contract-auth.js';
 
 let pass = 0, fail = 0;

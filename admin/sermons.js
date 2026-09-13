@@ -1,5 +1,5 @@
 // ── SERMONS ADMIN ─────────────────────────────────────────────
-// The sermon series/notes CRUD screen (moved out of tlc-admin-worker.js's own
+// The sermon series/notes CRUD screen (moved out of website-admin-worker.js's own
 // if-chain — see handleSermonsRoutes below). This is a different concern from
 // admin/sermons-feed.js, which parses the auto-fetched YouTube "latest worship
 // service" feed for the public /sermons page and has no admin screen of its own.

@@ -1,4 +1,4 @@
-// Integration check for admin/db-attribution.js's wiring into tlc-admin-worker.js's real
+// Integration check for admin/db-attribution.js's wiring into website-admin-worker.js's real
 // fetch() — not just the standalone module. Two things only a real dispatch through the
 // actual worker can prove: (1) the SCHEMA GATE's MARKERS_SEEN/SETUP_DONE identity caches
 // still work across repeated requests once env.DB is wrapped (the whole reason the module
@@ -7,7 +7,7 @@
 // d1_query_attribution log.
 //   node --experimental-loader ./test/html-loader.mjs test/db-attribution-integration.test.mjs
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : (fail++, console.error('  ✗ ' + m)); };

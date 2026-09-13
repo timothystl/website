@@ -1,7 +1,7 @@
 // Ministries admin: the ministry list, the retired old block editor's compat
 // shims, the metadata screen (core value + posts toggle -- everything else
 // moved to the Site Editor), and the per-ministry posts feed. Moved out of
-// tlc-admin-worker.js's own if-chain (September 2026 code-normalization
+// website-admin-worker.js's own if-chain (September 2026 code-normalization
 // survey), the same pattern used for Menu, Sermons, and Site Pages.
 //
 // `editorShared` carries the handful of things this domain shares with Site
@@ -17,7 +17,7 @@
 //
 // ⚠ A request to /ministries or /youth that matches none of the routes
 // below (bare `return null`) falls through to whatever comes after Ministries
-// in tlc-admin-worker.js's own if-chain (Notices, at the time of this
+// in website-admin-worker.js's own if-chain (Notices, at the time of this
 // extraction) -- same as every other extracted domain here.
 import {
   sanitizeBlocks, parseBlocks, renderPage, blocksClientConfig, starterBlocks, sanitizeClassicRich,

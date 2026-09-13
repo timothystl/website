@@ -1,15 +1,15 @@
 // ── Per-request D1 query-count attribution ──────────────────────────────────────
 // Overhaul goal 5 (observability): this repo's D1 usage has no per-route attribution today —
-// `tlc-admin-worker.js` is one flat if-chain with no central dispatcher (unlike Connect's
+// `website-admin-worker.js` is one flat if-chain with no central dispatcher (unlike Connect's
 // `handleAdminApi`), so there's no single place that already knows "which route" the way
 // Connect's admin API segment does. The one place every request DOES pass through is the
-// outer `fetch(request, env, ctx)` in tlc-admin-worker.js, so that's the chokepoint here:
+// outer `fetch(request, env, ctx)` in website-admin-worker.js, so that's the chokepoint here:
 // wrap env.DB there, once, and every handler this Worker reaches — admin screens, the public
 // /api/contact /api/prayer /api/subscribe endpoints, the login page — gets attributed for
 // free. No handler file needs to change.
 //
 // ⚠ UNLIKE chms's src/db-attribution.js (PR #956), this file CANNOT hand back a fresh
-// wrapper on every request. tlc-admin-worker.js has its own isolate-lifetime caches —
+// wrapper on every request. website-admin-worker.js has its own isolate-lifetime caches —
 // MARKERS_SEEN and SETUP_DONE — keyed on `env.DB`'s own object identity, to skip a
 // ~140-statement schema-migration block after the first request in a given isolate (see the
 // "SCHEMA GATE" comment there). A fresh Proxy each request would give env.DB a new identity
@@ -64,7 +64,7 @@ export function wrapEnvForDbAttribution(env) {
 // measure against (unlike chms's apps/finance/query-budget.js). Chosen well above what a
 // normal page render or form submission should need; tune once real logs show actual usage.
 // The one-time ~140-statement schema-migration block (see the SCHEMA GATE comment in
-// tlc-admin-worker.js) will legitimately cross this on its one request per isolate — that's a
+// website-admin-worker.js) will legitimately cross this on its one request per isolate — that's a
 // true, useful signal, not a false alarm, and it only fires once per isolate lifetime.
 export const ADMIN_QUERY_LOG_THRESHOLD = 15;
 

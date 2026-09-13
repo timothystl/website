@@ -1,5 +1,5 @@
 // /api/push/payroll-ready sits behind the SAME global CSRF Origin/Referer gate
-// as every other admin POST route (tlc-admin-worker.js, right before the route
+// as every other admin POST route (website-admin-worker.js, right before the route
 // dispatch below it) -- Finance's contract-relay call never carries a matching
 // Origin header, exactly the problem PR #586 fixed for the /sb/* Supabase proxy
 // and the /payroll/email route already got (see test/payroll-email-relay.test.mjs).
@@ -8,7 +8,7 @@
 // and the per-period dedup still works regardless of which identity triggered it.
 //   node --experimental-loader ./test/html-loader.mjs test/payroll-ready-relay.test.mjs
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { resetPayrollContractAuthCacheForTests } from '../admin/payroll-contract-auth.js';
 
 let pass = 0, fail = 0;

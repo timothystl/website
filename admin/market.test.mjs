@@ -699,7 +699,7 @@ group('the roster as a spreadsheet');
 // capacityDecision() itself lives in admin/events.js, generalized for any
 // event that takes registrations — this pins the exact shape the Christmas
 // Market asks of it: 60 confirmed, then a soft reserve up to 70, then
-// refused outright. See tlc-admin-worker.js's /api/market/apply route for
+// refused outright. See website-admin-worker.js's /api/market/apply route for
 // where the two counts it is handed (confirmed, and confirmed+reserved) are
 // actually computed against the live table.
 group('a table cap pauses confirmed applications, then softly reserves, then refuses');

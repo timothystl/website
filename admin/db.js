@@ -1,10 +1,10 @@
 // ── CONSTANTS & INITIAL DATA ─────────────────────────────────
-// Extracted from tlc-admin-worker.js
+// Extracted from website-admin-worker.js
 
 // TinyMCE rich-text editor — loaded only on the screens that carry an editor.
 //
 // Self-hosted out of admin/vendor/tinymce/ (served by the /assets/tinymce/
-// route in tlc-admin-worker.js), not cdn.tiny.cloud. The cloud build is
+// route in website-admin-worker.js), not cdn.tiny.cloud. The cloud build is
 // metered: Tiny counts an "editor load" per editor and bills overage past the
 // monthly limit, and this admin spends them fast — the page editor creates one
 // inline editor per rich field, and a page carries tens of them. Self-hosting
@@ -110,7 +110,7 @@ export const DB_INIT_EVENT_INTAKE = `CREATE TABLE IF NOT EXISTS event_intake (
   -- (the sidebar badge) can bound itself to "upcoming, roughly" without
   -- re-fetching Google on every page load. The live screen never trusts this
   -- column; it always recomputes from the real source. See badgeCounts() in
-  -- tlc-admin-worker.js.
+  -- website-admin-worker.js.
   event_date    TEXT,
   -- Only ever set for source_kind='local' — a room booking with no Google
   -- event and no News post behind it, typed in directly.
@@ -848,7 +848,7 @@ export const INITIAL_SETTINGS = [
   // They used to seed here as plain site_settings rows; they are columns on
   // the market's own `site_events` row now (see admin/events.js and the
   // one-time EVENTS_MARKET_MIGRATION_MARKER migration in
-  // tlc-admin-worker.js), which is what makes them ONE record instead of a
+  // website-admin-worker.js), which is what makes them ONE record instead of a
   // site_settings row plus an events row saying the same thing twice.
   // ⚠ DO NOT ADD THEM BACK HERE. `INSERT OR IGNORE` re-seeding a key the
   // migration has already deleted would silently resurrect it on every

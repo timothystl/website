@@ -3,7 +3,7 @@
 // cannot be taken back. So the rules that decide whether an issue may still be
 // changed, and who may send it, started here as pure functions rather than as
 // conditions scattered through a route -- and the routes themselves (Newsletter,
-// Christian Education, News & Events) followed, moved out of tlc-admin-worker.js's
+// Christian Education, News & Events) followed, moved out of website-admin-worker.js's
 // own if-chain in the same code-normalization pass as Menu, Sermons, Site Pages,
 // and Ministries. See handleNewsletterRoutes below for that part, and
 // admin/newsletter.test.mjs for the pure functions above it.
@@ -710,7 +710,7 @@ function newsImageUploadScript(existingUrl = '') {
 // Newsletter composing/sending, Christian Education (Bible classes), and
 // News & Events -- three admin screens that grew up together in this file
 // and still share the same weekly-issue plumbing (the news picker, the
-// event picker, the same TinyMCE notes). Moved out of tlc-admin-worker.js's
+// event picker, the same TinyMCE notes). Moved out of website-admin-worker.js's
 // own if-chain (September 2026 code-normalization survey), the last and
 // largest domain to move, following the same pattern as Menu, Sermons,
 // Site Pages, and Ministries.
@@ -728,7 +728,7 @@ function newsImageUploadScript(existingUrl = '') {
 //
 // ⚠ A request that matches none of the routes below (bare `return null`,
 // same as every other domain here) falls through to whatever comes after
-// Newsletter in tlc-admin-worker.js's own if-chain.
+// Newsletter in website-admin-worker.js's own if-chain.
 export async function handleNewsletterRoutes(request, env, path, method, currentUser, url, ctx, badges = {}) {
   // ── NEWSLETTER + NEWS PERMISSION GUARD ──
   // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission

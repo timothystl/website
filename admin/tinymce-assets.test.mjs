@@ -40,7 +40,7 @@ const pluginsIn = (src) => {
 
 group('nothing points at the metered cloud any more');
 {
-  const files = ['./db.js', './helpers.js', './ministry-editor.html', '../tlc-admin-worker.js']
+  const files = ['./db.js', './helpers.js', './ministry-editor.html', '../website-admin-worker.js']
     .map((f) => [f, readFileSync(new URL(f, import.meta.url), 'utf8')]);
   for (const [name, src] of files) {
     // ⚠ Comments are stripped first. Several of them name the old CDN, because
@@ -70,7 +70,7 @@ group('the version lives in the path, not a query string');
   // unversioned base_url would leave a year-old theme against a new core.
   ok(RICH_FIELD_JS.includes("base_url: '" + TINYMCE_BASE + "'"), 'the classic field points at the versioned base');
   ok(editorHtml.includes("base_url: '" + TINYMCE_BASE + "'"), 'and so does the page editor');
-  const worker = readFileSync(new URL('../tlc-admin-worker.js', import.meta.url), 'utf8');
+  const worker = readFileSync(new URL('../website-admin-worker.js', import.meta.url), 'utf8');
   ok(worker.includes("versioned[1] !== TINYMCE_VERSION"), 'the route strips and checks the version segment');
   ok(worker.includes('max-age=31536000, immutable'), 'and serves it immutably');
 }

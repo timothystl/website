@@ -1,7 +1,7 @@
 // ── THE BLOCK EDITOR'S SHARED SCAFFOLDING ───────────────────────────────
 // Everything Site Pages (admin/pages.js) and Ministries (admin/ministries.js)
 // need in common, plus the self-filling-block data bundle every published
-// page is rendered with -- moved out of tlc-admin-worker.js in the same
+// page is rendered with -- moved out of website-admin-worker.js in the same
 // code-normalization pass that extracted those two domains' own routes
 // (September 2026). Both of their own PRs left a design note that this
 // belonged in a real shared module "once Ministries gets the same
@@ -23,7 +23,7 @@
 // from silently being replaced by a generic block.
 //
 // Two things deliberately did NOT move here, and still live in
-// tlc-admin-worker.js, threaded through the `editorShared` parameter bag
+// website-admin-worker.js, threaded through the `editorShared` parameter bag
 // built at each domain's delegation call site instead:
 // `ctx` (the Worker's own ExecutionContext -- request-scoped, not a value
 // this module could own) and `linkTargets` (a per-request-memoized closure

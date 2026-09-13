@@ -6,7 +6,7 @@
 // forms into a generic 'form' block (a Google Form embed with no URL set),
 // which is exactly the failure this repo already hit once: published, that
 // block renders no form at all — see NATIVE_FORM_REQUIRED_TYPE's own comment
-// in tlc-admin-worker.js for the incident.
+// in website-admin-worker.js for the incident.
 //
 // This overrides ONLY the `blocks` array for the two pages the extractor
 // already produced correct title/slug/parent/template/menu data for — the

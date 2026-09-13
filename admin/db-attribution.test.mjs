@@ -1,7 +1,7 @@
 // Node test harness for admin/db-attribution.js — run with: node admin/db-attribution.test.mjs
 //
 // The identity-preservation behavior is the whole point of this file, not an incidental
-// detail: tlc-admin-worker.js's SCHEMA GATE (MARKERS_SEEN, SETUP_DONE) is a WeakMap keyed on
+// detail: website-admin-worker.js's SCHEMA GATE (MARKERS_SEEN, SETUP_DONE) is a WeakMap keyed on
 // env.DB's own object identity, memoizing "has this isolate already run the ~140-statement
 // migration block" across requests. A wrapper that handed back a fresh Proxy every request
 // would silently defeat that cache and re-run the block on every single request — a real cost
@@ -93,7 +93,7 @@ group('wrapEnvForDbAttribution: env.DB keeps the SAME identity across repeated c
   const { env: firstEnv } = wrapEnvForDbAttribution(env);
   const { env: secondEnv } = wrapEnvForDbAttribution(env);
 
-  // This is exactly the check tlc-admin-worker.js's MARKERS_SEEN/SETUP_DONE WeakMaps rely on
+  // This is exactly the check website-admin-worker.js's MARKERS_SEEN/SETUP_DONE WeakMaps rely on
   // (MARKERS_SEEN.get(env.DB)) — if this ever fails, the schema-migration block would silently
   // start re-running on every request instead of once per isolate.
   ok(firstEnv.DB === secondEnv.DB, 'env.DB resolves to the identical object on every call, across separate wrapEnvForDbAttribution invocations for the same real env');
@@ -101,7 +101,7 @@ group('wrapEnvForDbAttribution: env.DB keeps the SAME identity across repeated c
 
 group('wrapEnvForDbAttribution: a request\'s count survives being read via a fresh wrap call mid-isolate');
 {
-  // Simulates what tlc-admin-worker.js's fetch() does on every request: call
+  // Simulates what website-admin-worker.js's fetch() does on every request: call
   // wrapEnvForDbAttribution again (cheap — it just looks up the cache), read the counter
   // before dispatching, then diff after.
   const env = { DB: makeFakeDb() };

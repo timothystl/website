@@ -1,5 +1,5 @@
 // ── Payroll contract auth: lets Finance's app reach this Worker's existing ──
-// Supabase payroll proxy (the /sb/* handler in tlc-admin-worker.js) on behalf
+// Supabase payroll proxy (the /sb/* handler in website-admin-worker.js) on behalf
 // of a real, specific admin -- not as an anonymous trusted server.
 //
 // This is deliberately NOT the ADMIN_PUSH_API_KEY/X-Push-Key shape already used

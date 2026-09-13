@@ -1,5 +1,5 @@
 name = "tlc-newsletter-admin"
-main = "tlc-admin-worker.js"
+main = "website-admin-worker.js"
 compatibility_date = "2024-01-01"
 
 [observability]
@@ -32,7 +32,7 @@ binding = "IMAGES"
 bucket_name = "tlc-news-images"
 
 # Promotes ministry pages whose scheduled publish time has come
-# (see promoteScheduledPages in tlc-admin-worker.js). Quarter-hourly so a page
+# (see promoteScheduledPages in website-admin-worker.js). Quarter-hourly so a page
 # scheduled for "6:00 am" goes live within 15 minutes of that, not an hour.
 [triggers]
 crons = ["*/15 * * * *"]

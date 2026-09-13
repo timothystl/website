@@ -128,7 +128,7 @@ export const screenableText = (v) =>
 // `site_events` now (id 'christmasmarket'), and `eventFeeConfig()` in
 // admin/events.js shapes it into exactly this object — so nothing downstream
 // of `marketSettings()`/`marketConfig()` had to change at all. `pageData()` in
-// tlc-admin-worker.js builds `data.market` the identical way, from the row it
+// website-admin-worker.js builds `data.market` the identical way, from the row it
 // already fetches in its own batched Promise.all.
 export async function marketSettings(env) {
   const [ev, giveRow] = await Promise.all([
@@ -299,7 +299,7 @@ export function checkState(row) {
   };
 }
 
-// Called by the /api/market/apply route in tlc-admin-worker.js after
+// Called by the /api/market/apply route in website-admin-worker.js after
 // sanitizeApplication() has run, to build the arguments insertRegistration()
 // (admin/events.js) needs. Kept here, not there, because it is the one place
 // that knows the market's own field names.

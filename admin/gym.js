@@ -1,5 +1,5 @@
 // ── GYM RENTAL HELPERS & ROUTE HANDLER ──────────────────────
-// Extracted from tlc-admin-worker.js
+// Extracted from website-admin-worker.js
 
 import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
 import { churchDate } from './when.js';

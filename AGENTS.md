@@ -15,7 +15,7 @@ Payroll remains here until a separately approved Finance migration is built and 
 Production is three Cloudflare Workers:
 
 - `timothystl-site` from `site-worker.js` and `public/`;
-- `tlc-newsletter-admin` from `tlc-admin-worker.js`, using D1
+- `tlc-newsletter-admin` from `website-admin-worker.js`, using D1
   `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding
   `CONNECT_WORKER`; and
 - `tlc-links` from `tlc-links-worker.js`.

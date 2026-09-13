@@ -1,5 +1,5 @@
 // ── EMAIL FUNCTIONS ──────────────────────────────────────────
-// Extracted from tlc-admin-worker.js
+// Extracted from website-admin-worker.js
 
 import { formatDate } from './helpers.js';
 // ⚠ Direct from blocks.js, not via helpers.js — helpers.js already imports

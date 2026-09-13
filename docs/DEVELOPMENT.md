@@ -11,7 +11,7 @@ This is the loop that actually exercises the real Workers day to day, and it's h
 every PR. None of it needs a Cloudflare account, a deployed Worker, or network access to
 D1/R2/`CONNECT_WORKER` — `test/html-loader.mjs` makes the Workers importable in plain Node (they
 use Wrangler's `import x from './y.html'` text-module syntax, which Node has no format for), and
-the admin suites drive `tlc-admin-worker.js` against `node:sqlite` as a D1 stand-in.
+the admin suites drive `website-admin-worker.js` against `node:sqlite` as a D1 stand-in.
 
 ```sh
 for f in admin/*.js; do node --check "$f"; done          # syntax

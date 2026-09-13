@@ -16,7 +16,7 @@ import { TINYMCE_HEAD } from './db.js';
 // MINISTRY_EDITOR_HTML is NOT imported directly here (unlike everything else on this page) --
 // admin/*.js files must stay importable under plain `node` with no loader (see the "Import
 // every admin module as ESM" CI step), and a raw .html import needs the wrangler/html-loader
-// build step tlc-admin-worker.js gets but this file does not. It arrives via editorShared
+// build step website-admin-worker.js gets but this file does not. It arrives via editorShared
 // instead, the same way sharedEditorApi/editorPageData/etc. do.
 
 export const PAGE_FILTERS = ['all', 'published', 'drafts'];
@@ -365,7 +365,7 @@ export function pageEditorStatus(row) {
 // The all-pages list, the New/Details drawers, Church details, and the page
 // editor's own API (settings, draft autosave, publish/unpublish, schedule,
 // revisions/restore, the redesigned-layout swap). Moved out of
-// tlc-admin-worker.js's own if-chain (September 2026 code-normalization
+// website-admin-worker.js's own if-chain (September 2026 code-normalization
 // survey).
 //
 // `editorShared` carries the handful of things this domain genuinely shares
@@ -375,15 +375,15 @@ export function pageEditorStatus(row) {
 // NATIVE_FORM_REQUIRED_TYPE, and MINISTRY_EDITOR_HTML (the last one for a
 // second reason too: admin/*.js files must stay importable under plain node
 // with no loader, and a raw .html import needs the build step
-// tlc-admin-worker.js gets but this file does not — see the note above
+// website-admin-worker.js gets but this file does not — see the note above
 // MINISTRY_EDITOR_HTML's one call site below). These stay defined in
-// tlc-admin-worker.js for now rather than moving here, so nothing about
+// website-admin-worker.js for now rather than moving here, so nothing about
 // Ministries or the cron changes in this pass; a genuinely shared module is
 // the right place for them once Ministries gets the same treatment.
 //
 // ⚠ A request to /pages or /pages/* that matches none of the routes below
 // (bare `return null`, same as every other domain here) falls through to
-// tlc-admin-worker.js's own legacy-compat redirect ("old bookmarked /pages
+// website-admin-worker.js's own legacy-compat redirect ("old bookmarked /pages
 // admin URLs redirect to /notices" -- this screen used to live at /pages
 // before that name moved to what is now the Notices tab). That fallback is
 // NOT dead code and is NOT part of this module -- it stays exactly where it

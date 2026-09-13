@@ -57,7 +57,7 @@ let APPROVALS = [];
 
 // Every read and write now goes through a Postgres RPC function
 // (payroll_get_staff, payroll_save_hours, …) instead of a direct table
-// query — see "the payroll_* RPC functions" in tlc-admin-worker.js and the
+// query — see "the payroll_* RPC functions" in website-admin-worker.js and the
 // matching comment in admin/payroll.html. This stub plays both the Worker's
 // `/sb/` proxy and Supabase itself, so it answers the RPC shape the real
 // client sends: one POST per call, body = the named params as JSON, no

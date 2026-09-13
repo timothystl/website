@@ -17,7 +17,7 @@
 // ⚠ THIS IS PUBLISHED NOW (2026-08-18). It used to seed the draft only, with
 // the hardcoded markup in public/index.html rendering the live page until
 // somebody pressed Publish. That markup is deleted: this file IS the page.
-// The one-time, marker-gated publish lives in tlc-admin-worker.js beside the
+// The one-time, marker-gated publish lives in website-admin-worker.js beside the
 // one that put /give on the editor, and it only ever touches a page nobody
 // has edited by hand (`updated_by = 'migration'`). Unlike give.timothystl.org
 // this page is NOT excluded from /api/pages: it is an ordinary SPA page like

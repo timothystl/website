@@ -1,6 +1,6 @@
 // /payroll/email (emailing the gross-pay report to the bookkeeper) sits behind
 // the SAME global CSRF Origin/Referer gate as every other admin POST route
-// (tlc-admin-worker.js, right before the route dispatch below it) -- Finance's
+// (website-admin-worker.js, right before the route dispatch below it) -- Finance's
 // contract-relay call never carries a matching Origin header, exactly the
 // problem PR #586 fixed for the /sb/* Supabase proxy. This proves the same
 // fix applied to that earlier, more central gate: a contract-relay call to
@@ -9,7 +9,7 @@
 // office" (there is no session to read a username from).
 //   node --experimental-loader ./test/html-loader.mjs test/payroll-email-relay.test.mjs
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { resetPayrollContractAuthCacheForTests } from '../admin/payroll-contract-auth.js';
 
 let pass = 0, fail = 0;

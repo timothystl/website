@@ -15,7 +15,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 
 const gr = execSync('npm root -g').toString().trim();
 const { chromium } = createRequire(path.join(gr, 'x.js'))('playwright');

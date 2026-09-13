@@ -3,7 +3,7 @@
 Production has three Cloudflare Workers:
 
 - `timothystl-site` (`site-worker.js` plus `public/`) serves the public site and giving landing.
-- `tlc-newsletter-admin` (`tlc-admin-worker.js`) serves Website Admin, binds D1
+- `tlc-newsletter-admin` (`website-admin-worker.js`) serves Website Admin, binds D1
   `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding `CONNECT_WORKER` to `tlc-chms`,
   and runs scheduled-page promotion every 15 minutes.
 - `tlc-links` (`tlc-links-worker.js`) serves the utility links surface.
@@ -16,20 +16,20 @@ Website Admin forwards bounded contact/prayer and Market operations to Connect. 
 copies use a durable outbox and the recovery procedure in `CHMS_FORWARD_RECOVERY.md`. The public
 Site Worker has no direct Connect binding.
 
-## Routing style — one thing to know before reading `tlc-admin-worker.js`
+## Routing style — one thing to know before reading `website-admin-worker.js`
 
-Unlike `chms`'s per-domain handler-function dispatch, `tlc-admin-worker.js` (~13,600 lines) is a
+Unlike `chms`'s per-domain handler-function dispatch, `website-admin-worker.js` (~13,600 lines) is a
 single flat request handler: routes are matched inline as `if (path === '...' && method === '...')`
 blocks in one long chain, in the same file, with the actual logic factored out into the `admin/*.js`
 modules it imports from at the top. There is no central route table or permission-gate array to
 scan first — the permission check for each route is a `hasPermission(user, '...')` call written
 directly at that route's own `if` block. When tracing a route, search for its exact path string in
-`tlc-admin-worker.js` first, then follow the import to the module that actually does the work.
+`website-admin-worker.js` first, then follow the import to the module that actually does the work.
 
 ## Module map (`admin/*.js`)
 
-Most of these were extracted out of what used to be one enormous `tlc-admin-worker.js`; several
-headers still say "Extracted from tlc-admin-worker.js" for that reason. Every module here has a
+Most of these were extracted out of what used to be one enormous `website-admin-worker.js`; several
+headers still say "Extracted from website-admin-worker.js" for that reason. Every module here has a
 substantial header comment explaining *why* it works the way it does — read the file itself for
 that; this table is only for finding the right one.
 

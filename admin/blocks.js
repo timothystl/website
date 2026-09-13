@@ -880,7 +880,7 @@ export const BLOCK_DEFS = {
   // are fixed: this is one of the two forms on the site that must never be
   // silently swapped for the generic 'form' block's unscreened Google Form
   // embed. That already happened once — see NATIVE_FORM_REQUIRED_TYPE's own
-  // comment in tlc-admin-worker.js for the incident — which is why the
+  // comment in website-admin-worker.js for the incident — which is why the
   // publish route refuses to publish this page without one of these blocks
   // on it, whatever the office does in the editor otherwise. What IS
   // editable: the intro copy above the form.
@@ -3762,7 +3762,7 @@ const cssUrl = (u) => String(u || '').replace(/["'\\()\s<>;{}]/g, '');
 // ⚠ BOTH VALUES GO STRAIGHT INTO A STYLE ATTRIBUTE, so neither is trusted: the
 // position has to match the exact shape the picker writes, and the zoom is a
 // number clamped to the range the slider offers. Anything else is the default
-// framing rather than a guess. `tlc-admin-worker.js` imports these two rather
+// framing rather than a guess. `website-admin-worker.js` imports these two rather
 // than keeping the copies it used to have — one definition, so the admin's own
 // preview and the public page cannot come to disagree about a crop.
 export const isSafeObjectPosition = (v) => typeof v === 'string' && /^\d{1,3}% \d{1,3}%$/.test(v);

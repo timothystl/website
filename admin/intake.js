@@ -47,7 +47,7 @@
 // admin/calendar.js). Rather than invent an eighth, ninth, tenth ad hoc color
 // system for one more screen, every type here reuses the calendar's own
 // contrast-verified swatch keys — the SAME ones `CAL_SEED_PALETTE` in
-// tlc-admin-worker.js already assigns to the matching Google-color category
+// website-admin-worker.js already assigns to the matching Google-color category
 // (worship→navy, learn→teal, facility→stone, youth→amber, wol→slate,
 // mdo→sand, music→plum, meetings→steel, special→gold). Type and category are
 // still two separate ideas — picking a type here never writes
@@ -374,7 +374,7 @@ export function isReady(item) {
 // ── MERGING RAW SOURCE ROWS WITH WHAT THE OFFICE HAS ALREADY DECIDED ────────
 // `raw` is the union of what fetchGoogleEvents()/readNewsEvents() already
 // produce (id, start, end, allDay, title, location, description, source) plus
-// gym's own richer read and any `local` rows — see tlc-admin-worker.js for
+// gym's own richer read and any `local` rows — see website-admin-worker.js for
 // where each is assembled. `rows` is what is already in `event_intake`, keyed
 // by the same id space. A raw item with no matching row is genuinely new —
 // it is still shown, with type unset, rather than waiting on a sync to create
