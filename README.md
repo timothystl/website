@@ -7,6 +7,7 @@ current payroll surface.
 Start with [AGENTS.md](AGENTS.md). Current references:
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Local development](docs/DEVELOPMENT.md)
 - [Data ownership](docs/DATA-OWNERSHIP.md)
 - [Operations](docs/OPERATIONS.md)
 - [Security](docs/SECURITY.md)
