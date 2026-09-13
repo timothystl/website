@@ -4,7 +4,7 @@ Production has three Cloudflare Workers:
 
 - `timothystl-site` (`site-worker.js` plus `public/`) serves the public site and giving landing.
 - `tlc-newsletter-admin` (`tlc-admin-worker.js`) serves Website Admin, binds D1
-  `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding `VOLUNTEER_WORKER` to `tlc-chms`,
+  `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding `CONNECT_WORKER` to `tlc-chms`,
   and runs scheduled-page promotion every 15 minutes.
 - `tlc-links` (`tlc-links-worker.js`) serves the utility links surface.
 
@@ -87,7 +87,7 @@ renter/payment detail) and nothing more.
 Two real integration points reach outside this repo, both worth knowing before touching either:
 
 1. **Website → Connect (`chms`), the forward outbox.** Contact/prayer form submissions and Market
-   operations get forwarded to Connect via the `VOLUNTEER_WORKER` service binding
+   operations get forwarded to Connect via the `CONNECT_WORKER` service binding
    (`forwardToChms`/`retryChmsForwards` in `admin/forms.js`). A failed forward is retried through a
    durable outbox rather than lost — see `docs/CHMS_FORWARD_RECOVERY.md` for the recovery
    procedure. The public Site Worker has no direct Connect binding at all; only Website Admin does.

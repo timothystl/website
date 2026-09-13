@@ -4933,7 +4933,7 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
     let sentKey = null;
     globalThis.fetch = async (u, init) => {
       // ⚠ READ THE HEADER OFF WHICHEVER ARGUMENT CARRIES IT. The call under
-      // test builds a real `Request` and hands it to the VOLUNTEER_WORKER
+      // test builds a real `Request` and hands it to the CONNECT_WORKER
       // service binding, falling back to `fetch(req, { signal })` when no
       // binding is configured — which is this harness. So `init` holds only
       // the abort signal and the header lives on `u`. Reading `init.headers`

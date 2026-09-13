@@ -202,7 +202,7 @@ async function deliverChmsRow(env, row) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(CHMS_TIMEOUT_MS),
   });
-  const res = env.VOLUNTEER_WORKER ? await env.VOLUNTEER_WORKER.fetch(req) : await fetch(req);
+  const res = env.CONNECT_WORKER ? await env.CONNECT_WORKER.fetch(req) : await fetch(req);
   if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
 }
 

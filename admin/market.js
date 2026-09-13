@@ -1345,7 +1345,7 @@ export async function fetchRoster(env) {
     // from off-network never did — and three cache-layer fixes in a row
     // (no-store on Serve's side, cf:{cacheTtl:0} here, then a cache-busting
     // query string that no colo could possibly have seen before) all failed
-    // to shift it, which rules out caching as the cause. `env.VOLUNTEER_WORKER`
+    // to shift it, which rules out caching as the cause. `env.CONNECT_WORKER`
     // (bound to the chms Worker in wrangler.toml — the same binding
     // `forwardToChms()` in `admin/forms.js` already uses) is an in-process
     // call into the deployed chms code with no DNS, no edge routing and no
@@ -1357,8 +1357,8 @@ export async function fetchRoster(env) {
     const req = new Request(
       'https://serve.timothystl.org/api/signups/christmasmarket/summary',
       { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
-    const res = env.VOLUNTEER_WORKER
-      ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+    const res = env.CONNECT_WORKER
+      ? await env.CONNECT_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
       : await fetch(req, { signal: AbortSignal.timeout(4000) });
     if (res.ok) vol = await res.json();
     // ⚠ THE STATUS AND NOTHING ELSE. This used to capture Serve's raw
@@ -1381,7 +1381,7 @@ if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serv
 
 // ── OPENING OR CLOSING SIGN-UPS IN SERVE ─────────────────────────────────────
 // The write twin of fetchRoster() above — same service binding, same shared
-// secret, same reasoning for using `env.VOLUNTEER_WORKER` over a hostname
+// secret, same reasoning for using `env.CONNECT_WORKER` over a hostname
 // fetch. Calls chms's `POST /api/signups/christmasmarket/toggle`, which flips
 // `serve_events.hidden` for the Christmas Market event — the SAME column the
 // Scheduler screen at connect.timothystl.org/#volunteers already writes, and
@@ -1405,8 +1405,8 @@ export async function setSignupsOpen(env, open) {
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Intake-Key': intakeKey },
       body: JSON.stringify({ open: !!open }),
     });
-    const res = env.VOLUNTEER_WORKER
-      ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+    const res = env.CONNECT_WORKER
+      ? await env.CONNECT_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
       : await fetch(req, { signal: AbortSignal.timeout(4000) });
     if (res.ok) return { ok: true };
     if (res.status === 404) return { ok: false, error: 'No Christmas Market event exists yet in Serve to open or close.' };
