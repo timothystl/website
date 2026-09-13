@@ -17,7 +17,7 @@ Production is three Cloudflare Workers:
 - `timothystl-site` from `site-worker.js` and `public/`;
 - `tlc-newsletter-admin` from `tlc-admin-worker.js`, using D1
   `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding
-  `VOLUNTEER_WORKER`; and
+  `CONNECT_WORKER`; and
 - `tlc-links` from `tlc-links-worker.js`.
 
 ## Non-negotiable rules

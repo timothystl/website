@@ -8,7 +8,7 @@ TinyMCE is self-hosted under `admin/vendor/tinymce/`. Do not add a cloud key, pa
 CDN dependency. Credentials belong in GitHub/Cloudflare managed secrets, never source or docs.
 
 Protect subscriber, contact/prayer, renter, vendor, gift, payroll, authentication, and audit data.
-Do not include those values in issues or logs. The `VOLUNTEER_WORKER` binding is an intentional
+Do not include those values in issues or logs. The `CONNECT_WORKER` binding is an intentional
 narrow backend dependency; durable replay and bounded retries prevent silent loss without making
 the Website authoritative for Connect data.
 

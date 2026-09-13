@@ -19,7 +19,7 @@ FINANCE_ACCESS_TEAM_DOMAIN = "timothystl.cloudflareaccess.com"
 FINANCE_ACCESS_AUD = "3c8cae1345ea2e2e15a88e01d7801c27ec7a57bfb73952098bd4b1929ab01717"
 
 [[services]]
-binding = "VOLUNTEER_WORKER"
+binding = "CONNECT_WORKER"
 service = "tlc-chms"
 
 [[d1_databases]]

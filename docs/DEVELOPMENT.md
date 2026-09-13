@@ -9,7 +9,7 @@ means two different loops depending on what you're changing.
 
 This is the loop that actually exercises the real Workers day to day, and it's how CI validates
 every PR. None of it needs a Cloudflare account, a deployed Worker, or network access to
-D1/R2/`VOLUNTEER_WORKER` — `test/html-loader.mjs` makes the Workers importable in plain Node (they
+D1/R2/`CONNECT_WORKER` — `test/html-loader.mjs` makes the Workers importable in plain Node (they
 use Wrangler's `import x from './y.html'` text-module syntax, which Node has no format for), and
 the admin suites drive `tlc-admin-worker.js` against `node:sqlite` as a D1 stand-in.
 
@@ -52,7 +52,7 @@ far this gets you depends on which Worker:
   setup/seed routes yourself, or work against `admin/*.test.mjs`'s fixtures instead of a fresh UI
   for anything that needs existing data.
 
-  The `VOLUNTEER_WORKER` service binding (to `tlc-chms`) has no local target: `wrangler dev` will
+  The `CONNECT_WORKER` service binding (to `tlc-chms`) has no local target: `wrangler dev` will
   either fail to resolve it or (with `--remote`) reach the *real* production `tlc-chms` Worker,
   which you almost never want while iterating. The safe default is to leave it unresolved and
   expect `forwardToChms`/Market-operation calls to fail into the durable outbox
