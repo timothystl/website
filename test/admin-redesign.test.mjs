@@ -14,7 +14,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { churchDate, churchDatePlus } from '../admin/when.js';
 import { openCountOf } from '../admin/intake.js';
-import worker, { PAYROLL_RPC_FNS } from '../tlc-admin-worker.js';
+import worker, { PAYROLL_RPC_FNS } from '../website-admin-worker.js';
 import { pushToAllSubscribers } from '../admin/webpush.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 // ⚠ Read from the record rather than pinned to a literal hex. These assertions
@@ -4135,7 +4135,7 @@ async function applyAsVendor(env, over = {}) {
 // ⚠ THE MARKET IS ONE `site_events` ROW NOW, NOT ELEVEN site_settings KEYS,
 // AND ITS APPLICATIONS ARE `site_event_registrations` ROWS, NOT
 // `market_vendors` ONES — see admin/events.js and the ONE-TIME migration in
-// tlc-admin-worker.js. Every group below still asserts the identical
+// website-admin-worker.js. Every group below still asserts the identical
 // user-facing behavior (the routes, the forms, the redirects, the numbers a
 // vendor is shown); only the SQL a test reads the result back with changed,
 // because the storage genuinely moved.
@@ -5254,7 +5254,7 @@ group('the vendor application page is seeded and PUBLISHED from its seed');
   // ⚠ PUBLISHED, unlike every other seeded page — and it has to be. The
   // hardcoded markup this page used to render is deleted from
   // public/index.html, so an unpublished draft would leave the address
-  // blank. The one-time MARKET_PUBLISH_MARKER in tlc-admin-worker.js is
+  // blank. The one-time MARKET_PUBLISH_MARKER in website-admin-worker.js is
   // what does it, and only ever to a page nobody has edited by hand.
   ok(row.published_blocks, 'and published — the seed IS the live page now');
   eq(row.published_blocks, row.blocks, 'draft and live are the same blocks on the day it ships');
@@ -7018,7 +7018,7 @@ group('Contact and Prayer publish through the block editor now, but never withou
   // fixed block instead of a blanket ban — so these are ordinary editable,
   // publishable pages now, and what has to keep holding is narrower: the
   // required block cannot be missing from what actually goes live. See
-  // NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in tlc-admin-worker.js.
+  // NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in website-admin-worker.js.
   const { db, env } = await boot();
   const { cookie } = signIn(db, ['pages_edit'], 'siteeditor');
 
@@ -7084,7 +7084,7 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   //
   // Simulates a database that already had real content in the OLD bespoke
   // screen before this shipped — the actual case votersSeedBlocks() in
-  // tlc-admin-worker.js exists to carry forward, so nothing already typed
+  // website-admin-worker.js exists to carry forward, so nothing already typed
   // or uploaded there is lost.
   const db = new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE IF NOT EXISTS voters_page (

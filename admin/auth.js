@@ -82,7 +82,7 @@ export const PERMISSION_RENAMES = {
 //
 // The caller must therefore gate it on a one-time marker that is independent
 // of SCHEMA_VERSION (which re-runs the whole migration block on every bump).
-// See PERM_RENAME_MARKER in tlc-admin-worker.js.
+// See PERM_RENAME_MARKER in website-admin-worker.js.
 export function migratePermissionKeys(perms) {
   const list = Array.isArray(perms) ? perms : [];
   const out = [];

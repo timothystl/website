@@ -32,7 +32,7 @@ const FILES = [
   'admin/helpers.js', 'admin/ui.js', 'admin/sections.js', 'admin/market.js',
   'admin/site-pages.js', 'admin/page-seeds.js', 'admin/market-page-seed.js',
   'admin/ministry-editor.html',
-  'tlc-admin-worker.js', 'tlc-links-worker.js', 'give-landing.js', 'site-worker.js',
+  'website-admin-worker.js', 'tlc-links-worker.js', 'give-landing.js', 'site-worker.js',
 ];
 
 // ⚠ admin/scheduler.html is NOT in that list. It is dead code behind the

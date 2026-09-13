@@ -47,7 +47,7 @@ export const FALLBACK_TIERS = [30, 50, 75, 90, 150, 250].map(amount => ({
 }));
 // A single "General Fund" entry with a blank tithelyFundId means "use whatever fundId is
 // already in the base link" — no fund override applied. This is what a fresh/unseeded DB
-// gets too (see the give_funds seed in tlc-admin-worker.js).
+// gets too (see the give_funds seed in website-admin-worker.js).
 export const FALLBACK_FUNDS = [{ id: 0, name: 'General Fund', tithelyFundId: '', isDefault: true }];
 
 // The site as it stands, so an unreachable admin still produces the church's

@@ -66,7 +66,7 @@ const srv = http.createServer((q, r) => {
   if (url.startsWith('/assets/tinymce/')) {
     let rel = url.slice('/assets/tinymce/'.length);
     const v = /^(\d+\.\d+\.\d+)\/(.*)$/.exec(rel);
-    // The route in tlc-admin-worker.js strips the version segment the same way.
+    // The route in website-admin-worker.js strips the version segment the same way.
     if (v) { if (v[1] !== TINYMCE_VERSION) { r.writeHead(404); return r.end('nf'); } rel = v[2]; }
     const f = new URL('./' + rel, vendor);
     if (existsSync(f) && statSync(f).isFile()) {

@@ -4,7 +4,7 @@
 // It calls the SAME functions the Worker calls (admin/blocks.js) for rendering
 // and sanitizing, so the interesting logic is genuinely under test; only the
 // routing and SQL are re-implemented here. Keep the endpoint contracts in step
-// with the `/ministries/api/...` routes in tlc-admin-worker.js.
+// with the `/ministries/api/...` routes in website-admin-worker.js.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,7 @@ import {
 } from '../admin/blocks.js';
 import { slugify, uniqueSlug, pageRename } from '../admin/pages.js';
 import { BLOCK_DEFS } from '../admin/blocks.js';
-// Mirrors NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in tlc-admin-worker.js
+// Mirrors NATIVE_FORM_REQUIRED_TYPE / missingNativeForm in website-admin-worker.js
 // — a second, independent implementation would be a second place for the two
 // to quietly disagree, so this is copied rather than re-derived.
 const NATIVE_FORM_REQUIRED_TYPE = { prayer: 'prayerform', contact: 'contactform' };
@@ -96,7 +96,7 @@ export function createEditorServer(seed = {}) {
   });
   // What goes AROUND the blocks: the page's stored layout, and the pages
   // beneath it that the section layouts list. Mirrors pageLayoutContext() in
-  // tlc-admin-worker.js — the Worker reads both from the database on every
+  // website-admin-worker.js — the Worker reads both from the database on every
   // render path, and a harness that skipped either would let the editor's own
   // canvas drift from the live page without any test noticing.
   //
@@ -150,7 +150,7 @@ export function createEditorServer(seed = {}) {
       // renderInspector() threw ReferenceError for every block type that has
       // one — card grid, button bar, link tiles, partners — and the panel read
       // "Nothing selected" beside a plainly selected block. The Worker does
-      // this replacement (tlc-admin-worker.js); a harness that does not is a
+      // this replacement (website-admin-worker.js); a harness that does not is a
       // harness that cannot see those types at all.
       return res.end(EDITOR_HTML
         .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
@@ -277,7 +277,7 @@ export function createEditorServer(seed = {}) {
         const body = await readBody(req);
         const blocks = sanitizeBlocks(body.blocks || parseBlocks(row.blocks));
         // Mirrors the real /publish route's own refusal — see
-        // missingNativeForm() in tlc-admin-worker.js.
+        // missingNativeForm() in website-admin-worker.js.
         if (missingNativeForm(slug, blocks)) {
           return json(res, { error: 'This page needs its ' + ((BLOCK_DEFS[NATIVE_FORM_REQUIRED_TYPE[slug]] || {}).label || 'form') + ' block before it can publish.' }, 400);
         }
@@ -356,7 +356,7 @@ export function createEditorServer(seed = {}) {
       });
     }
 
-    // Mirrors promoteScheduledPages() in tlc-admin-worker.js, which the cron
+    // Mirrors promoteScheduledPages() in website-admin-worker.js, which the cron
     // trigger calls. Exercised by the tests in place of an actual cron tick.
     if (p === '/__promote-scheduled' && req.method === 'POST') {
       const nowIso = new Date().toISOString();

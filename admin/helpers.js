@@ -1,5 +1,5 @@
 // ── HELPERS, TINYMCE, TOPBAR, LOGIN ─────────────────────────
-// Extracted from tlc-admin-worker.js
+// Extracted from website-admin-worker.js
 
 import { TINYMCE_HEAD, TINYMCE_BASE } from './db.js';
 // The preview a closed rich field shows is stored admin HTML rendered inside
@@ -18,7 +18,7 @@ export const VERSION = 'v5.62.31'; // minor: every staff email on the public sit
 // because the response it rode along on is `private, max-age=10`. It never
 // changes within a deploy, so it does not belong on that response at all:
 // it is served on its own at /assets/admin.css and /assets/admin.js (routed
-// in tlc-admin-worker.js, ahead of the schema gate — a static string needs
+// in website-admin-worker.js, ahead of the schema gate — a static string needs
 // no D1 access), cached `public, max-age=31536000, immutable`, and busted
 // automatically by the `?v=${VERSION}` query string every deploy already
 // bumps. Same-origin, so the existing CSP's 'self' already allows both —
@@ -695,7 +695,7 @@ ${extraHead}
       //
       // ⚠ frame-ancestors DOES NOT INHERIT FROM default-src. Without it stated
       // outright, every admin screen is framable — the page editor sets its own
-      // (EDITOR_HEADERS in tlc-admin-worker.js) and was the only screen that
+      // (EDITOR_HEADERS in website-admin-worker.js) and was the only screen that
       // was not. base-uri is the same shape of omission: a base tag injected
       // into a page would re-point every relative script and stylesheet on it.
       //
@@ -846,7 +846,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     // where "what needs me before Sunday" actually gets answered, across
     // Google, News & Events and confirmed gym rentals at once. The badge is
     // a DB count, not a live Google poll — see the note above the route in
-    // tlc-admin-worker.js for why.
+    // website-admin-worker.js for why.
     hp('intake_manage')
       ? navItem('/event-intake', 'Event Intake', activeTab === 'intake', badge(b.intake, hp('intake_manage'), `${b.intake} item(s) need a decision`)) : '',
     // The index — every event the church runs, not only the market. Gated on

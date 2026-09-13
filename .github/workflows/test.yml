@@ -33,7 +33,7 @@ jobs:
       # since most of them import it and would fail with a less obvious message.
       - name: Syntax-check the workers and admin modules
         run: |
-          node --check tlc-admin-worker.js
+          node --check website-admin-worker.js
           node --check site-worker.js
           node --check tlc-links-worker.js
           node --check give-landing.js

@@ -18,7 +18,7 @@
 // ⚠ THE STATIC LINKS ARE NOT REMOVED. If this fails — no credentials set
 // yet, Square's API unreachable, a bad response — the caller falls back to
 // exactly the link a vendor would have gotten before this file existed. See
-// the try/catch around this module's one caller in tlc-admin-worker.js.
+// the try/catch around this module's one caller in website-admin-worker.js.
 //
 // ⚠ VERIFY THE API VERSION BEFORE GOING LIVE. Square requires a
 // `Square-Version` header naming a dated API release; SQUARE_API_VERSION

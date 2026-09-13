@@ -265,7 +265,7 @@ export function parseAppearance(json) {
 // Two settings rows, the same split a page has between `blocks` and
 // `published_blocks`. The draft is what the Menu screen's Appearance tab
 // draws; the published row is the only thing /api/pages ever sends to a
-// visitor. Moved out of tlc-admin-worker.js's Menu block (which is the only
+// visitor. Moved out of website-admin-worker.js's Menu block (which is the only
 // place that writes either row) so admin/menu.js's own route handler has
 // somewhere to import them from — reading/writing the appearance record
 // belongs with the rest of this file's appearance logic, not scattered

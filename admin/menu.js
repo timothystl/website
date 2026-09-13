@@ -21,7 +21,7 @@
 // tested directly. See admin/menu.test.mjs.
 //
 // handleMenuRoutes, near the bottom of this file, is the exception: it owns the actual HTTP
-// routing/D1 logic for the Menu screen (moved out of tlc-admin-worker.js's own if-chain).
+// routing/D1 logic for the Menu screen (moved out of website-admin-worker.js's own if-chain).
 
 import { hasPermission, logAudit } from './auth.js';
 import { html, sidebarShell, escapeHtml } from './helpers.js';
@@ -272,7 +272,7 @@ export function renumber(order, menu) {
 // ── ROUTES ───────────────────────────────────────────────────
 // The second genuinely bespoke screen: a tree with drag-and-drop and a live
 // preview of the real header. Gated on pages_edit — whoever owns the site's
-// structure owns its navigation. Moved out of tlc-admin-worker.js's own
+// structure owns its navigation. Moved out of website-admin-worker.js's own
 // if-chain; the routing logic used to sit there while this file held only
 // the pure helpers above (see the September 2026 code-normalization survey).
 export async function handleMenuRoutes(request, env, path, method, currentUser, url, badges = {}) {

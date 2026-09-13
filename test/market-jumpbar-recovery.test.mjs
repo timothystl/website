@@ -11,11 +11,11 @@
 //
 // This drives the real worker's startup migration block against a database
 // hand-set to that exact broken shape, then asserts the two new one-time
-// fixes (tlc-admin-worker.js, "THE VENDOR PAGE'S LIVE CONTENT WAS NEVER THE
+// fixes (website-admin-worker.js, "THE VENDOR PAGE'S LIVE CONTENT WAS NEVER THE
 // SEED" and "/christmasmarket'S JUMP BAR") actually correct it — and that the
 // christmasmarket fix touches nothing else on that page.
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { MARKET_VENDORS_PAGE } from '../admin/market-page-seed.js';
 
 let pass = 0, fail = 0;

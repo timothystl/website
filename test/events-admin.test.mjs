@@ -6,7 +6,7 @@
 // a real SQLite database behind a D1-shaped shim, requested the way a
 // browser (or a public visitor's form POST) would.
 import { DatabaseSync } from 'node:sqlite';
-import worker from '../tlc-admin-worker.js';
+import worker from '../website-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 
 let pass = 0, fail = 0;
