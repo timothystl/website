@@ -1293,19 +1293,19 @@ export default {
     // endpoints below are intentionally cross-origin (called from
     // timothystl.org), so they're allowed through.
     //
-    // /payroll/email is a fourth, narrower exception: Finance's app relays a
-    // "send the report" action here the same way it relays payroll_* RPCs
-    // through /sb/* (see resolvePayrollContractCaller above and PR #586's fix
-    // to the same check on that proxy) -- a server-to-server service-binding
+    // /payroll/email and /api/push/payroll-ready are two narrower exceptions:
+    // Finance's app relays these actions here the same way it relays payroll_*
+    // RPCs through /sb/* (see resolvePayrollContractCaller above and PR #586's
+    // fix to the same check on that proxy) -- a server-to-server service-binding
     // call that never carries a matching Origin/Referer header. Resolved once
-    // here into payrollEmailRelayUser so the /payroll/email handler below
-    // doesn't have to verify the same Access JWT a second time.
-    let payrollEmailRelayUser = null;
+    // here into payrollContractRelayUser so the handlers below don't have to
+    // verify the same Access JWT a second time.
+    let payrollContractRelayUser = null;
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !PUBLIC_CROSS_ORIGIN_POSTS.has(path)) {
-      if (path === '/payroll/email') {
-        payrollEmailRelayUser = await resolvePayrollContractCaller(request, env).catch(() => null);
+      if (path === '/payroll/email' || path === '/api/push/payroll-ready') {
+        payrollContractRelayUser = await resolvePayrollContractCaller(request, env).catch(() => null);
       }
-      if (!payrollEmailRelayUser) {
+      if (!payrollContractRelayUser) {
         const origin = request.headers.get('Origin') || '';
         const referer = request.headers.get('Referer') || '';
         // ⚠ A renter portal form posts from the PORTAL's origin, not the
@@ -4443,11 +4443,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       SETUP_DONE.set(env.DB, true);
     }
     const currentUser = await getSession(env.DB, request);
-    // /payroll/email is the one route reachable with no browser session at all --
-    // Finance's contract-relay identity (payrollEmailRelayUser, resolved above at
-    // the CSRF gate) stands in for it, the same way /sb/*'s own handler already
-    // accepts either a session or resolvePayrollContractCaller.
-    if (!currentUser && !(path === '/payroll/email' && payrollEmailRelayUser)) {
+    // /payroll/email and /api/push/payroll-ready are the two routes reachable with
+    // no browser session at all -- Finance's contract-relay identity
+    // (payrollContractRelayUser, resolved above at the CSRF gate) stands in for
+    // them, the same way /sb/*'s own handler already accepts either a session or
+    // resolvePayrollContractCaller.
+    const isPayrollContractRoute = path === '/payroll/email' || path === '/api/push/payroll-ready';
+    if (!currentUser && !(isPayrollContractRoute && payrollContractRelayUser)) {
       if (path === '/login') return loginPage();
       return loginPage();
     }
@@ -5797,9 +5799,14 @@ ${PAYROLL_HTML}`, 'Payroll');
     // held submission or a gym request. admin/payroll.html already computes
     // that client-side (it's what turns the status pill to "Ready to approve"),
     // so it's the one that asks for the push, once per period per page load —
-    // renderPeriodState() in admin/payroll.html is the caller.
+    // renderPeriodState() in admin/payroll.html is the caller. Finance's app can
+    // also trigger this directly once it renders a ready period server-side
+    // (payrollContractRelayUser, resolved above at the CSRF gate) -- same
+    // shape as /payroll/email's own getSession-or-resolvePayrollContractCaller
+    // fallback.
     if (path === '/api/push/payroll-ready' && method === 'POST') {
-      if (!hasPermission(currentUser, 'payroll_manage')) {
+      const readyUser = currentUser || payrollContractRelayUser;
+      if (!hasPermission(readyUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
       let body;
@@ -5833,10 +5840,10 @@ ${PAYROLL_HTML}`, 'Payroll');
     if (path === '/payroll/email' && method === 'POST') {
       // A signed-in admin session covers a browser hitting this directly from
       // admin/payroll.html. Finance's app relays the bookkeeper's Cloudflare-
-      // Access-verified identity instead (payrollEmailRelayUser, resolved
+      // Access-verified identity instead (payrollContractRelayUser, resolved
       // above at the CSRF gate) -- same shape as the /sb/* proxy's own
       // getSession-or-resolvePayrollContractCaller fallback.
-      const emailUser = currentUser || payrollEmailRelayUser;
+      const emailUser = currentUser || payrollContractRelayUser;
       if (!hasPermission(emailUser, 'payroll_manage')) {
         return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
