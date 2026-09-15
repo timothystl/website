@@ -18,9 +18,16 @@ invocation_logs = true
 FINANCE_ACCESS_TEAM_DOMAIN = "timothystl.cloudflareaccess.com"
 FINANCE_ACCESS_AUD = "3c8cae1345ea2e2e15a88e01d7801c27ec7a57bfb73952098bd4b1929ab01717"
 
+# Repointed 2026-09-15: Connect's Worker was renamed tlc-chms -> timothy-connect in place via
+# the Cloudflare dashboard (same underlying script id, confirmed before/after via the Workers
+# API -- routes/bindings/cron on Connect's own side were untouched). This binding targets by
+# name, not id, so it needed its own matching update here -- without it, every contact/prayer
+# form forward (admin/forms.js's deliverChmsRow) and the Christmas Market volunteer-signup
+# toggle (admin/market.js) would silently fail against a name that no longer resolves, retried
+# and failed repeatedly out of chms_forward_outbox rather than erroring visibly to a visitor.
 [[services]]
 binding = "CONNECT_WORKER"
-service = "tlc-chms"
+service = "timothy-connect"
 
 [[d1_databases]]
 binding = "DB"
