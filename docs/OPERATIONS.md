@@ -15,3 +15,17 @@ The production resources are defined in `wrangler-site.toml`, `wrangler.toml`, a
 secret values or private form/payroll/renter/vendor records.
 
 Website-to-Connect replay status and manual retry use [the dedicated runbook](CHMS_FORWARD_RECOVERY.md).
+
+## Recovery and integration checkpoint — September 15, 2026
+
+The [D1 recovery workflow](https://github.com/timothystl/website/actions/runs/34658846953)
+and [R2 recovery workflow](https://github.com/timothystl/website/actions/runs/34659001060)
+both completed successfully September 11. Tooling lives in `scripts/verify-d1-recovery.sh`,
+`scripts/verify-r2-recovery.sh` and their matching workflows. These are completed recovery
+exercises, not proof of a retained backup's current custody or freshness.
+
+The `CONNECT_WORKER` service binding now targets `timothy-connect`; the
+[September 15 release](https://github.com/timothystl/website/actions/runs/35017196124)
+succeeded. Contact/prayer forwarding and Market volunteer integration depend on this target.
+Website still hosts the payroll backend consumed by new Finance's authenticated relay.
+Shared staff login and payroll ownership migration are not completed by that relay.

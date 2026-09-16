@@ -85,8 +85,9 @@ current plan is a plain task list in the private `digital-architecture` reposito
 here. In short: Finance becomes its own application (out of `chms`); shared staff login across
 Website/Connect/Finance/myMDO; code normalized and legacy-named resources renamed to match current
 scope; real developer documentation; and better observability. None of these are gated behind each
-other. Website does not yet have backup/restore-verification tooling for `tlc-newsletter-db` or
-`tlc-news-images` comparable to what CHMS has — build one before any real data move touches them.
+other. Website D1 and R2 recovery tooling exists; both workflows succeeded September 11, 2026.
+See docs/OPERATIONS.md for evidence. A restore drill does not itself prove retained backup custody.
+The CONNECT_WORKER service target is now timothy-connect; its September 15 deployment succeeded.
 
 ## Documentation discipline
 
