@@ -13,6 +13,7 @@ import {
   parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
   NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict,
+  DEFAULT_PASTOR_NOTE_HEADING, PASTOR_NOTE_HEADING_LIMIT, normalizePastorNoteHeading,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -53,6 +54,17 @@ group('what goes in an issue');
   const round = parseBlocks(serializeBlocks(parseBlocks(JSON.stringify({ news: false }))));
   eq(round.news, false, 'round-tripping does not flip a switch');
   eq(round.events, true, 'or turn one on');
+}
+
+// ── pastor's note heading ────────────────────────────────────────────────────
+group('the pastor\'s note heading — sometimes it\'s from the staff instead');
+{
+  eq(DEFAULT_PASTOR_NOTE_HEADING, "Pastor's Note", 'the traditional wording is the fallback');
+  eq(normalizePastorNoteHeading(null), DEFAULT_PASTOR_NOTE_HEADING, 'nothing stored falls back to it');
+  eq(normalizePastorNoteHeading(''), DEFAULT_PASTOR_NOTE_HEADING, 'an empty string falls back to it too');
+  eq(normalizePastorNoteHeading('   '), DEFAULT_PASTOR_NOTE_HEADING, 'and whitespace-only input');
+  eq(normalizePastorNoteHeading('  From the Staff  '), 'From the Staff', 'real text is trimmed, not replaced');
+  eq(normalizePastorNoteHeading('A'.repeat(200)).length, PASTOR_NOTE_HEADING_LIMIT, 'an overlong heading is capped, not rejected');
 }
 
 // ── audience ─────────────────────────────────────────────────────────────────
