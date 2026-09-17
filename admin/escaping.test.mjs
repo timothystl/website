@@ -45,13 +45,15 @@ group('the newsletter email escapes every field the office types as text');
     /* tertiaryCtaUrl */ 'javascript:alert(1)',
     /* bibleClasses   */ [{ date: '2026-08-21', topic: 'Topic ' + X, leader: 'Leader ' + X, location: 'Loc ' + X }],
     /* extraNotes     */ [{ title: 'Note ' + X, body: '<p>Body markup.</p>' }],
+    /* pastorNoteHeading */ 'Heading ' + X,
   );
 
   ok(!/<script>alert\(1\)<\/script>/.test(html), 'no injected script tag survives anywhere in the email');
   ok(html.includes('&lt;script&gt;'), 'they are escaped instead');
-  // Count them: eleven separate slots carried the payload.
-  ok((html.match(/&lt;script&gt;/g) || []).length >= 10,
+  // Count them: twelve separate slots carried the payload.
+  ok((html.match(/&lt;script&gt;/g) || []).length >= 11,
     'every slot that carried it escaped it, not just the first');
+  ok(html.includes('Heading '), 'the pastor\'s note heading (typed, not markup) is printed');
 
   // ⚠ The two CTA hrefs are the ones that matter beyond mail clients.
   ok(!/href="javascript:/i.test(html), 'a javascript: CTA address becomes no address at all');

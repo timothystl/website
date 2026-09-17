@@ -128,7 +128,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = []) {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note") {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -401,7 +401,7 @@ img{max-width:100% !important;height:auto !important;}
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E7DFD1;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#1A1A2A;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read the full letter</a></div>` : ''}
+              ${pastorNote ? `<div style="font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:700;color:#1E2D4A;margin-bottom:8px;">${esc(pastorNoteHeading)}</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#1A1A2A;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read the full letter</a></div>` : ''}
             </td>
             <td class="spacer-col" width="16"></td>
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>

@@ -73,6 +73,7 @@ export const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   subject TEXT NOT NULL,
   pastor_note TEXT,
+  pastor_note_heading TEXT DEFAULT 'Pastor''s Note',
   ministry_content TEXT,
   ministry_type TEXT DEFAULT 'text',
   events TEXT,

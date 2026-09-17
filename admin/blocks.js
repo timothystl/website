@@ -3284,6 +3284,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    as everywhere else in this block. */
 .tlcb-nl-full{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;}
 .tlcb-nl-full-date{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;}
+.tlcb-nl-full-heading{font-family:var(--tlcb-serif);font-size:16px;font-weight:600;color:#1E2D4A;margin-bottom:8px;}
 .tlcb-nl-full-body{font-size:15px;line-height:1.8;color:#1A1A2A;}
 .tlcb-nl-full-events{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
 .tlcb-nl-full-ev{font-size:13px;line-height:1.7;color:#3A3A4A;padding:4px 0;}
@@ -4516,6 +4517,7 @@ const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
       }).then(function (n) {
         panel.setAttribute('data-loaded', '1');
         var html = '<div class="tlcb-nl-full-date">' + esc(fmtDate(n.published_at)) + '</div>' +
+          (n.pastor_note && n.pastor_note_heading ? '<div class="tlcb-nl-full-heading">' + esc(n.pastor_note_heading) + '</div>' : '') +
           '<div class="tlcb-nl-full-body">' + (n.pastor_note || '') + '</div>';
         // Same section order buildEmailHtml() (admin/email.js) uses: secondary
         // note, featured/additional news, events, WOL/LASM, tertiary note +

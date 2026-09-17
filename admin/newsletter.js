@@ -70,6 +70,19 @@ export function blockOn(raw, key) {
   return !!parseBlocks(raw)[key];
 }
 
+// ── THE PASTOR'S NOTE HEADING ────────────────────────────────
+// "Pastor's Note" used to be baked into how everyone talked about this block,
+// but not every week's note is from the pastor — some weeks it's the staff.
+// Free text rather than a pastor/staff toggle, so it can also carry a name
+// ("From the Elders", "A Note from Deaconess Smith") without a code change.
+// Never blank: an issue with nothing typed here still needs a heading, so it
+// falls back to the traditional one rather than shipping empty.
+export const DEFAULT_PASTOR_NOTE_HEADING = "Pastor's Note";
+export const PASTOR_NOTE_HEADING_LIMIT = 60;
+export function normalizePastorNoteHeading(raw) {
+  return String(raw || '').trim().slice(0, PASTOR_NOTE_HEADING_LIMIT) || DEFAULT_PASTOR_NOTE_HEADING;
+}
+
 // ── WHO GETS IT ──────────────────────────────────────────────
 // ── EXTRA NOTES ──────────────────────────────────────────────
 // The pastor's note, a secondary note and a tertiary note were the three
@@ -480,7 +493,7 @@ export function defaultUpcomingEventIds(posts, cutoffDate) {
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
   const row = await env.DB.prepare(
-    'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes FROM newsletters WHERE id = ?'
+    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes FROM newsletters WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
 
@@ -501,7 +514,7 @@ async function buildNewsletterEmailPayload(env, id) {
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
   }
 
-  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes));
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading));
   return { row, emailHtml };
 }
 
@@ -859,6 +872,11 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
   <div id="weekly-fields">
     <div class="card">
       <div class="card-title">Pastor's note</div>
+      <div class="form-group">
+        <label>Heading</label>
+        <input type="text" name="pastor_note_heading" value="${escapeHtml(DEFAULT_PASTOR_NOTE_HEADING)}" maxlength="${PASTOR_NOTE_HEADING_LIMIT}">
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Shown above the note in the email and on the website. Change it on weeks the message is from the staff rather than the pastor.</div>
+      </div>
       ${tinymcePastorSection()}
     </div>
 
@@ -1093,6 +1111,9 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
 
     // Weekly-specific fields
     const pastorNote = cleanRich(form.get('pastor_note') || '');
+    // Quick announcements have no byline of their own — only a weekly issue's
+    // note is ever signed "Pastor's Note" or "From the Staff".
+    const pastorNoteHeading = fmt === 'weekly' ? normalizePastorNoteHeading(form.get('pastor_note_heading')) : null;
     const secondaryNote = fmt === 'weekly' ? cleanRich(form.get('secondary_note') || '') : '';
     const wolContent = fmt === 'weekly' ? cleanRich(form.get('wol_content') || '') : '';
     const lasmContent = fmt === 'weekly' ? cleanRich(form.get('lasm_content') || '') : '';
@@ -1166,8 +1187,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (editId && !conflict) {
       // Update existing newsletter
       await env.DB.prepare(
-        'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, updated_at=?, updated_by=? WHERE id=?'
-      ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '', editId).run();
+        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, updated_at=?, updated_by=? WHERE id=?'
+      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '', editId).run();
       newsletterId = parseInt(editId, 10);
       // Replace events
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
@@ -1181,8 +1202,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       const insertStatus = conflict ? 'draft' : status;
       const insertSubject = conflict ? `Recovered — ${subject}` : subject;
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(insertSubject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '').run();
+        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '').run();
       newsletterId = result.meta.last_row_id;
     }
 
@@ -1232,7 +1253,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       if (!listId && emailSend === 'all') {
         emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
-        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses);
+        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading);
         const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
         emailSuffix = result.success
           ? `&emailed=${emailSend}`
@@ -1534,6 +1555,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
 
     const bodyVal = (fmt === 'quick' ? row.pastor_note : '') || '';
     const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
+    const pastorNoteHeadingVal = normalizePastorNoteHeading(row.pastor_note_heading);
     const copiedNotice = url.searchParams.get('copied') === '1'
       ? `<div class="alert alert-success">✓ Duplicated as a new draft. Update the subject, date, and content, then publish when ready.</div>`
       : '';
@@ -1689,6 +1711,11 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
   <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
     <div class="card">
       <div class="card-title">Pastor's note</div>
+      <div class="form-group">
+        <label>Heading</label>
+        <input type="text" name="pastor_note_heading" value="${escapeHtml(pastorNoteHeadingVal)}" maxlength="${PASTOR_NOTE_HEADING_LIMIT}" ${nlLocked ? 'readonly' : ''}>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Shown above the note in the email and on the website. Change it on weeks the message is from the staff rather than the pastor.</div>
+      </div>
       ${tinymcePastorSection(pastorNoteVal)}
     </div>
     <div class="card">
@@ -2105,7 +2132,8 @@ ${classesJs}
       on('tertiary') ? (f.get('tertiary_cta_label') || '') : '',
       on('tertiary') ? (f.get('tertiary_cta_url') || '') : '',
       classes,
-      extrasFromForm(f)
+      extrasFromForm(f),
+      fmt === 'weekly' ? normalizePastorNoteHeading(f.get('pastor_note_heading')) : ''
     );
     return new Response(emailHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
@@ -2140,9 +2168,9 @@ ${classesJs}
     // original drops out of the public archive; until then it is untouched.
     const supersedesId = isSent(row) ? row.id : null;
     const result = await env.DB.prepare(
-      'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
-      `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
+      `Copy of ${row.subject}`, row.pastor_note, normalizePastorNoteHeading(row.pastor_note_heading), row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
       row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
       row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
       // A copy carries the extra notes too — the whole point of duplicating a

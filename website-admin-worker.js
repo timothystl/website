@@ -175,7 +175,7 @@ import {
 import { publicMenu, publicFooter, handleMenuRoutes } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { isSent as isNewsletterSent, issueStatus, sendSummary, parseSubscriberCsv,
-         parseExtras, MAX_EXTRA_NOTES,
+         parseExtras, MAX_EXTRA_NOTES, normalizePastorNoteHeading,
          NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, handleNewsletterRoutes } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, retryChmsForwards, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
@@ -2210,6 +2210,13 @@ export default {
     // for why. DEFAULT 0 backfills every existing row as still shown, with
     // no migration script needed.
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN hidden_from_site INTEGER DEFAULT 0').run(); } catch (_) {}
+    // A structured byline over the pastor's note — "Pastor's Note" is not always
+    // true; some weeks the note is from the staff instead. Free text rather than
+    // a fixed pastor/staff toggle, so it can also carry a name. See
+    // normalizePastorNoteHeading() in admin/newsletter.js. The column DEFAULT
+    // backfills every already-sent issue with the heading it always implicitly
+    // carried, with no separate migration script needed.
+    try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN pastor_note_heading TEXT DEFAULT 'Pastor''s Note'").run(); } catch (_) {}
     // A real report: type a pastor's note, save, and later find it gone —
     // because a SECOND person had this same issue open in another tab from
     // before the first save, and their own later save (of an unrelated
@@ -3455,7 +3462,7 @@ export default {
       // exactly what loadNewsletters()/loadNewsletterDetail() in
       // public/index.html read, plus the id they link by.
       const row = await env.DB.prepare(
-        `SELECT id, subject, pastor_note, secondary_note, wol_content, lasm_content,
+        `SELECT id, subject, pastor_note, pastor_note_heading, secondary_note, wol_content, lasm_content,
                 tertiary_note, tertiary_cta_label, tertiary_cta_url,
                 ministry_content, ministry_type, published_at, format,
                 cta_url, cta_label, bible_classes, news_item_ids, extra_notes
@@ -3484,6 +3491,7 @@ export default {
       // five straight into `innerHTML` in loadNewsletterDetail().
       const clean = { ...row };
       delete clean.extra_notes;
+      clean.pastor_note_heading = normalizePastorNoteHeading(clean.pastor_note_heading);
       for (const k of ['pastor_note', 'secondary_note', 'wol_content', 'lasm_content', 'tertiary_note']) {
         clean[k] = richOut(clean[k]);
       }
