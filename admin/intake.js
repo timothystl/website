@@ -371,6 +371,20 @@ export function isReady(item) {
   return openCountOf(item.type, item.checks) === 0;
 }
 
+// The actual "Needs a decision" test — NOT the same thing as isReady().
+// isReady() is purely the checklist's own state, which is office paperwork
+// tracking and nothing else (see the file header note on /event-intake/save:
+// Publish is never gated on it). A row the office has already published is a
+// decision that has already been made, whatever state its checklist happens
+// to be in — a rental can be published today and have its certificate of
+// insurance filed next week, and it should not sit in this queue in the
+// meantime just because that one box is still unchecked. So a row leaves
+// "Needs a decision" the moment EITHER it is published OR its checklist is
+// complete, not only once both are true.
+export function needsDecision(item) {
+  return !item.publishedAt && !isReady(item);
+}
+
 // ── MERGING RAW SOURCE ROWS WITH WHAT THE OFFICE HAS ALREADY DECIDED ────────
 // `raw` is the union of what fetchGoogleEvents()/readNewsEvents() already
 // produce (id, start, end, allDay, title, location, description, source) plus
@@ -413,7 +427,7 @@ function safeParse(json, fallback) {
 export const QUEUE_TOP = ['inbox', 'imported', 'ready'];
 
 export function inQueue(item, queue) {
-  if (queue === 'inbox') return !isReady(item);
+  if (queue === 'inbox') return needsDecision(item);
   if (queue === 'imported') return item.sourceKind === 'gcal';
   if (queue === 'ready') return isReady(item);
   return item.type === queue;
@@ -430,7 +444,7 @@ export function queueCounts(items) {
 }
 
 export const QUEUE_TITLES = {
-  inbox: ['Needs a decision', 'Something is missing before this can publish'],
+  inbox: ['Needs a decision', 'Pick a type, finish the checklist, or just publish — nothing here is required'],
   imported: ['Imported from Google', 'Pulled from the office calendars — confirm what the feed can’t know'],
   ready: ['Ready to publish', 'Everything checked off'],
   worship: ['Worship', 'Services, funerals, weddings, rehearsals'],
