@@ -501,8 +501,9 @@ const body = `
     document.getElementById('stxAddr').required = true;
     document.getElementById('stxAddrLabel').textContent = 'Street address';
     document.getElementById('stxCity').required = true;
+    document.getElementById('stxState').required = true;
     document.getElementById('stxZip').required = true;
-    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/ZIP are required — the card processor needs the billing address to verify a real card; phone and state are still optional.';
+    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/state/ZIP are required — the card processor needs the billing address to verify a real card; phone is still optional.';
     populateExpYearOnce();
     var s = document.createElement('script');
     s.src = '${STAXJS_URL}';
@@ -572,11 +573,34 @@ const body = `
       // riding alongside the number/cvv iframes, but the proven production call also always
       // sends these; not including them is a likely reason a tokenize attempt gets rejected.
       //
-      // address_1/address_city/address_zip/address_country are NOT optional to Stax.js itself —
-      // confirmed live: tokenize() rejects with a logic_error/fieldErrors response naming all
-      // four as required before it will even generate a token (this is AVS, standard for real
-      // card processing, not something this mockup can skip). address_country is hardcoded 'US'
+      // address_1/address_city/address_state are conditionally required by Stax.js itself —
+      // confirmed against Stax's own tokenize() field reference
+      // (docs.staxpayments.com/docs/tokenize-a-card-on-your-website), not guessed: each of those
+      // three is documented as "Required if customer_id is not passed into details", and
+      // address_zip is separately required whenever the merchant account has AVS configured to
+      // check the zip code. This is also the confirmed (not speculated) answer to why
+      // childcare-portal's own Stax integration (parent-billing.js's pbStaxTokenizeAndCharge)
+      // never collects or sends any address field and still works fine in production: its
+      // tokenize() call always passes customer_id (every family gets a real Stax Customer
+      // created up front via create-stax-charge's /customer call) plus match_customer: true, and
+      // Stax's docs state that supplying customer_id makes it ignore "certain customer fields,
+      // such as firstname, lastname, phone, all address fields, etc." — not a different Stax
+      // account, and not a sandbox-vs-production difference. This giving mockup tokenizes
+      // anonymously (no persisted Stax customer per donor), so that exemption never applies
+      // here, and the address fields are genuinely required. address_country is hardcoded 'US'
       // since this church only serves US donors and the form never collects a country.
+      //
+      // Confirmed live: leaving address_state unset (it was collected in the form but never
+      // actually sent to Stax.js) makes the validator reject with a fieldErrors entry naming
+      // address_country as invalid length rather than address_state — a confusing but real quirk
+      // in how Stax attributes that specific validation failure, not a real address_country
+      // problem (it's always the valid 2-character 'US' here).
+      //
+      // A cleaner long-term fix would give this mockup its own chms-side Stax customer per donor
+      // (matched/created by email, mirroring create-stax-charge's family-level customer) so
+      // tokenize() could pass customer_id + match_customer and drop the address fields entirely,
+      // matching myMDO's friction. Not done here — that's a real scope decision (new donor
+      // identity/customer-matching logic in chms), not a comment-only fix.
       staxInstance.tokenize({
         firstname: document.getElementById('stxFirst').value,
         lastname: document.getElementById('stxLast').value,
@@ -586,6 +610,7 @@ const body = `
         year: document.getElementById('stxExpYear').value,
         address_1: document.getElementById('stxAddr').value,
         address_city: document.getElementById('stxCity').value,
+        address_state: document.getElementById('stxState').value,
         address_zip: document.getElementById('stxZip').value,
         address_country: 'US',
       }).then(function(res){
