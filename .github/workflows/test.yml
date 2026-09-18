@@ -38,6 +38,7 @@ jobs:
           node --check tlc-links-worker.js
           node --check give-landing.js
           node --check give-link.js
+          node --check give-stax-mockup.js
           node --check market-price.js
           for f in admin/*.js; do node --check "$f"; done
 
@@ -132,6 +133,12 @@ jobs:
       # when the admin is unreachable, and when the admin returns nonsense.
       - name: The giving page still transacts
         run: node test/give-page.test.mjs
+
+      # The Stax giving mockup at give.timothystl.org/stax-mockup — sandbox-only,
+      # clearly labeled, and never allowed to touch or link to the real Tithe.ly
+      # page it sits beside. Browserless: drives site-worker.js directly.
+      - name: The Stax giving mockup stays a labeled sandbox
+        run: node test/give-stax-mockup.test.mjs
 
   # The page-body ownership boundary is browser behavior: initial edge HTML,
   # client-side navigation, promise caching and DOM takeover. A Node-only CI
