@@ -1,3 +1,5 @@
+> Production Food Pantry integration is now documented in [the rollout guide](../../docs/VISUAL-EDITOR.md). This tool remains an isolated local sample; its draft is never copied to production.
+
 # Visual editor pilot
 
 A local, isolated Food Pantry pilot built around the current Website editor and renderer. No production routes, block definitions, database records, or deployment configuration are changed.
