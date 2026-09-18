@@ -189,6 +189,7 @@ const body = `
 
           <div id="stxGifts"></div>
           <button type="button" class="stx-add-gift" id="stxAddGift">+ Add Another Gift</button>
+          <div id="stxMemoStep1Anchor"></div>
 
           <label class="stx-section-label">How often</label>
           <div class="stx-freq-row" id="stxFreqRow"></div>
@@ -210,8 +211,8 @@ const body = `
 
         <div id="stxStep2" hidden>
           <button type="button" class="stx-back" id="stxBackBtn">&larr; Back</button>
-
-          <div class="stx-field"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
+          <div id="stxMemoStep2Anchor"></div>
+          <div class="stx-field" id="stxMemoField"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
 
           <label class="stx-section-label">Contact details</label>
           <div class="stx-row2">
@@ -366,6 +367,23 @@ const body = `
     var t = totalCents();
     document.getElementById('stxContinueBtn').textContent = t > 0 ? ('Continue with ' + money(t)) : 'Continue';
     document.getElementById('stxPayBtn').textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
+    updateMemoPlacement();
+  }
+
+  // A fund named "Other" (staff can add one via the funds admin page, same opt-in curation as
+  // every other fund) means the gift isn't self-explanatory the way "Building Fund" is — move
+  // the memo field up to step 1 so a donor explains what it's for before they even reach
+  // contact/payment, instead of it being one more thing tucked behind Continue.
+  function isOtherFundSelected(){
+    return gifts.some(function(g){
+      var f = funds.filter(function(x){ return String(x.id) === String(g.fundId); })[0];
+      return f && /\\bother\\b/i.test(f.name);
+    });
+  }
+  function updateMemoPlacement(){
+    var memoField = document.getElementById('stxMemoField');
+    var anchor = document.getElementById(isOtherFundSelected() ? 'stxMemoStep1Anchor' : 'stxMemoStep2Anchor');
+    anchor.parentNode.insertBefore(memoField, anchor.nextSibling);
   }
 
   function goToStep(n){
@@ -507,11 +525,29 @@ const body = `
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
+      // firstname/lastname/method/validate mirror childcare-portal's own live tokenize() call
+      // (parent-billing.js's pbStaxTokenizeAndCharge) — Stax.js's sample only shows month/year
+      // riding alongside the number/cvv iframes, but the proven production call also always
+      // sends these; not including them is a likely reason a tokenize attempt gets rejected.
       staxInstance.tokenize({
+        firstname: document.getElementById('stxFirst').value,
+        lastname: document.getElementById('stxLast').value,
+        method: 'card',
+        validate: true,
         month: document.getElementById('stxExpMonth').value,
         year: document.getElementById('stxExpYear').value,
-      }).then(function(res){ submit(res && res.id); })
-        .catch(function(){ reset(); showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false); });
+      }).then(function(res){
+        // Stax.js can RESOLVE without a usable token instead of rejecting — checked explicitly
+        // (matching childcare-portal's own paymentMethodId guard) rather than passing a
+        // possibly-undefined id on to submit(), which chms would just reject anyway but with a
+        // less specific error than this page can give directly.
+        if (!res || !res.id) { reset(); showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false); return; }
+        submit(res.id);
+      }).catch(function(err){
+        console.error('Stax.js tokenize() failed:', err);
+        reset();
+        showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false);
+      });
     } else {
       submit(null);
     }
