@@ -19,3 +19,4 @@ test('overlay save/reopen preserves background and card blocks without duplicati
  const p=cleanPilot({layout:{mode:'overlay',overlap:999,cardColor:'red;position:fixed'}});
  assert.equal(p.layout.overlap,160);assert.equal(p.layout.cardColor,'#ffffff');
 });
+test('card offsets persist and remain bounded',()=>{const p=cleanPilot({layout:{group:'card',mode:'overlay',offsetX:-90,offsetY:40}});assert.equal(p.layout.offsetX,-90);assert.equal(p.layout.offsetY,40);const bounded=cleanPilot({layout:{offsetX:9999,offsetY:-9999}});assert.equal(bounded.layout.offsetX,500);assert.equal(bounded.layout.offsetY,-400)});
