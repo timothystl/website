@@ -484,26 +484,11 @@ const body = `
       document.getElementById('stxExpYear').required = false;
       return;
     }
-    // Stax.js itself requires address_1/city/zip to tokenize a real card here (AVS — see the
-    // tokenize() call's own comment) — confirmed live via a real rejected tokenize() call, not
-    // guessed. Notably childcare-portal's own Stax integration (parent-billing.js) never
-    // collects or sends address fields and works fine, even though it's the exact same Stax
-    // merchant account as this giving mockup — the difference is environment, not account:
-    // myMDO runs on STAX_ENVIRONMENT=production, while this giving mockup deliberately uses
-    // STAX_SANDBOX_API_KEY. Stax's sandbox mode appears to enforce AVS validation regardless of
-    // how AVS is actually configured on the merchant's production settings, so this requirement
-    // may not apply once (or if) this feature moves to a production Stax key. Until/unless that
-    // happens, demo mode never reaches tokenize() at all so these stay genuinely optional there,
-    // but leaving them optional in real (configured) mode would let a donor reach the Give
-    // button and hit an opaque "could not read the card" failure with no indication address was
-    // the reason — so they're made required only once real Stax.js is in play, mirroring the
-    // same configured-only pattern the expiration fields already use in reverse.
-    document.getElementById('stxAddr').required = true;
-    document.getElementById('stxAddrLabel').textContent = 'Street address';
-    document.getElementById('stxCity').required = true;
-    document.getElementById('stxState').required = true;
-    document.getElementById('stxZip').required = true;
-    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/state/ZIP are required — the card processor needs the billing address to verify a real card; phone is still optional.';
+    // Address fields (street/city/state/ZIP) stay genuinely optional here — Stax.js only
+    // requires them for AVS when tokenize() has no customer_id (confirmed against Stax's own
+    // field reference; see the tokenize() call's own comment), and the /stax-customer call made
+    // right before tokenize() always gets one. No required/label overrides needed, matching
+    // demo mode's already-optional markup exactly.
     populateExpYearOnce();
     var s = document.createElement('script');
     s.src = '${STAXJS_URL}';
@@ -568,63 +553,57 @@ const body = `
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
-      // firstname/lastname/method/validate mirror childcare-portal's own live tokenize() call
-      // (parent-billing.js's pbStaxTokenizeAndCharge) — Stax.js's sample only shows month/year
-      // riding alongside the number/cvv iframes, but the proven production call also always
-      // sends these; not including them is a likely reason a tokenize attempt gets rejected.
-      //
-      // address_1/address_city/address_state are conditionally required by Stax.js itself —
-      // confirmed against Stax's own tokenize() field reference
-      // (docs.staxpayments.com/docs/tokenize-a-card-on-your-website), not guessed: each of those
-      // three is documented as "Required if customer_id is not passed into details", and
-      // address_zip is separately required whenever the merchant account has AVS configured to
-      // check the zip code. This is also the confirmed (not speculated) answer to why
-      // childcare-portal's own Stax integration (parent-billing.js's pbStaxTokenizeAndCharge)
-      // never collects or sends any address field and still works fine in production: its
-      // tokenize() call always passes customer_id (every family gets a real Stax Customer
-      // created up front via create-stax-charge's /customer call) plus match_customer: true, and
-      // Stax's docs state that supplying customer_id makes it ignore "certain customer fields,
-      // such as firstname, lastname, phone, all address fields, etc." — not a different Stax
-      // account, and not a sandbox-vs-production difference. This giving mockup tokenizes
-      // anonymously (no persisted Stax customer per donor), so that exemption never applies
-      // here, and the address fields are genuinely required. address_country is hardcoded 'US'
-      // since this church only serves US donors and the form never collects a country.
-      //
-      // Confirmed live: leaving address_state unset (it was collected in the form but never
-      // actually sent to Stax.js) makes the validator reject with a fieldErrors entry naming
-      // address_country as invalid length rather than address_state — a confusing but real quirk
-      // in how Stax attributes that specific validation failure, not a real address_country
-      // problem (it's always the valid 2-character 'US' here).
-      //
-      // A cleaner long-term fix would give this mockup its own chms-side Stax customer per donor
-      // (matched/created by email, mirroring create-stax-charge's family-level customer) so
-      // tokenize() could pass customer_id + match_customer and drop the address fields entirely,
-      // matching myMDO's friction. Not done here — that's a real scope decision (new donor
-      // identity/customer-matching logic in chms), not a comment-only fix.
-      staxInstance.tokenize({
-        firstname: document.getElementById('stxFirst').value,
-        lastname: document.getElementById('stxLast').value,
-        method: 'card',
-        validate: true,
-        month: document.getElementById('stxExpMonth').value,
-        year: document.getElementById('stxExpYear').value,
-        address_1: document.getElementById('stxAddr').value,
-        address_city: document.getElementById('stxCity').value,
-        address_state: document.getElementById('stxState').value,
-        address_zip: document.getElementById('stxZip').value,
-        address_country: 'US',
-      }).then(function(res){
-        // Stax.js can RESOLVE without a usable token instead of rejecting — checked explicitly
-        // (matching childcare-portal's own paymentMethodId guard) rather than passing a
-        // possibly-undefined id on to submit(), which chms would just reject anyway but with a
-        // less specific error than this page can give directly.
-        if (!res || !res.id) { reset(); showMsg(cardErrorMsg(res), false); return; }
-        submit(res.id);
-      }).catch(function(err){
-        console.error('Stax.js tokenize() failed:', err);
-        reset();
-        showMsg(cardErrorMsg(err), false);
-      });
+      // customer_id + match_customer are what exempt tokenize() from Stax's own address/AVS
+      // requirement — confirmed against Stax's own tokenize() field reference
+      // (docs.staxpayments.com/docs/tokenize-a-card-on-your-website): address_1/address_city/
+      // address_state are each documented as "Required if customer_id is not passed into
+      // details". This is also the confirmed (not guessed) answer to why childcare-portal's own
+      // Stax integration (parent-billing.js's pbStaxTokenizeAndCharge) never needs address
+      // fields: every family gets one persistent Stax Customer, reused on every charge.
+      // /stax-customer (chms) mirrors that here — reusing a matched donor's existing customer id
+      // or creating a fresh one — so this call gets the same exemption, and address fields stay
+      // genuinely optional, matching demo mode.
+      fetch(CHMS_API + '/stax-customer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payer_first_name: document.getElementById('stxFirst').value,
+          payer_last_name: document.getElementById('stxLast').value,
+          payer_email: document.getElementById('stxEmail').value,
+          payer_phone: document.getElementById('stxPhone').value,
+        }),
+      }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+        .then(function(custRes){
+          if (!custRes.ok || !custRes.d.customerId) { reset(); showMsg('Could not start payment. Please try again.', false); return; }
+          // Rides through to chms's /checkout or /recurring below so it reuses this SAME Stax
+          // customer at charge time instead of creating a second one.
+          payload.stax_customer_id = custRes.d.customerId;
+          // firstname/lastname/method/validate mirror childcare-portal's own live tokenize()
+          // call (parent-billing.js's pbStaxTokenizeAndCharge) — Stax.js's sample only shows
+          // month/year riding alongside the number/cvv iframes, but the proven production call
+          // also always sends these; not including them is a likely reason a tokenize attempt
+          // gets rejected.
+          staxInstance.tokenize({
+            firstname: document.getElementById('stxFirst').value,
+            lastname: document.getElementById('stxLast').value,
+            method: 'card',
+            validate: true,
+            month: document.getElementById('stxExpMonth').value,
+            year: document.getElementById('stxExpYear').value,
+            customer_id: custRes.d.customerId,
+            match_customer: true,
+          }).then(function(res){
+            // Stax.js can RESOLVE without a usable token instead of rejecting — checked
+            // explicitly (matching childcare-portal's own paymentMethodId guard) rather than
+            // passing a possibly-undefined id on to submit(), which chms would just reject
+            // anyway but with a less specific error than this page can give directly.
+            if (!res || !res.id) { reset(); showMsg(cardErrorMsg(res), false); return; }
+            submit(res.id);
+          }).catch(function(err){
+            console.error('Stax.js tokenize() failed:', err);
+            reset();
+            showMsg(cardErrorMsg(err), false);
+          });
+        }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
     } else {
       submit(null);
     }
