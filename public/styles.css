@@ -492,9 +492,20 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   .footer-inner{grid-template-columns:1fr 1fr;}
   .two-col{grid-template-columns:1fr;}
 }
-@media(max-width:620px){
+/* ⚠ 1024px, not 900px or 620px: measured (not eyeballed) with all nine
+   .nav-links items plus the brand block on screen — the two stop fitting on
+   one line, and the .nav-brand-sub tagline starts wrapping under them and
+   overlapping the row, right around 989px. 1024px keeps a real margin above
+   that measured failure point for scrollbar width and font-metric drift
+   across browsers, while still switching to the hamburger well before the
+   squeeze most people would ever notice. Its own query, separate from the
+   900px block above, because that one is tuned for the page-body grids and
+   happens to share a number with nothing here. */
+@media(max-width:1024px){
   .nav-links{display:none;}
-  .nav-toggle{display:block;}
+  .nav-toggle{display:flex;min-width:44px;min-height:44px;align-items:center;justify-content:center;padding:0;}
+}
+@media(max-width:620px){
   .wrap{padding:0 16px;}
   .section{padding:48px 0;}
   .hero{padding:48px 16px 56px;}
@@ -519,7 +530,6 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
      Type sizes are deliberately NOT changed — this is padding and minimum
      height only, so nothing reflows and no page gets longer than the extra
      tap area costs. */
-  .nav-toggle{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0;}
   .nav-search-btn{min-width:44px;min-height:44px;padding:0;}
   .tlc-search-result{min-height:44px;}
   .nav-mobile button,.nav-mobile a{min-height:44px;display:flex;align-items:center;}
