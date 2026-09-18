@@ -62,7 +62,7 @@ const css = `<style>
   }
   .stx-other-ways:hover { text-decoration: underline; }
   .stx-card {
-    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 26px;
+    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 22px;
     max-width: 440px; width: 100%; flex-shrink: 0; box-shadow: 0 12px 28px -18px rgba(30,45,74,.4);
   }
   .stx-card-title { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1E2D4A; margin-bottom: 12px; }
@@ -92,6 +92,11 @@ const css = `<style>
   .stx-field select:focus-visible, .stx-field input:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
   .stx-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .stx-row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+  /* [hidden] on its own loses to the class rules above (same CSS specificity, and these come
+     later in the cascade) — without this, JS setting .hidden=true on a .stx-row2/.stx-row3
+     element (like stxExpCvvRow in demo mode) would set the DOM property but the element would
+     still render as a grid. */
+  .stx-row2[hidden], .stx-row3[hidden] { display: none; }
   .stx-gift-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
   .stx-gift-row .stx-field { flex: 1; margin-bottom: 0; }
   .stx-gift-remove {
@@ -131,6 +136,8 @@ const css = `<style>
   .stx-wallets { display: flex; gap: 8px; margin-bottom: 14px; }
   .stx-wallet-mount { flex: 1; min-height: 44px; border-radius: 8px; overflow: hidden; }
   .stx-card-field { border: 1px solid #DDE3ED; border-radius: 9px; padding: 0 14px; margin-bottom: 14px; background: #fff; }
+  .stx-exp-row { display: flex; gap: 8px; }
+  .stx-exp-row select { width: auto; flex: 1; }
   .stx-cta {
     width: 100%; margin-top: 8px; background: #C9973A; color: #1E2D4A; font-size: 17px;
     font-weight: 800; padding: 16px; border: none; border-radius: 10px; cursor: pointer;
@@ -153,7 +160,7 @@ const css = `<style>
   #stxStep2 .stx-field select, #stxStep2 .stx-field input { padding: 7px 12px; }
   #stxStep2 .stx-row2, #stxStep2 .stx-row3 { gap: 8px; }
   #stxStep2 .stx-card-field { margin-bottom: 6px; }
-  #stxStep2 .stx-cta { margin-top: 2px; padding: 13px 16px; }
+  #stxStep2 .stx-cta { margin-top: 2px; padding: 11px 16px; }
   @media (max-width: 860px) {
     .stx-hero-inner { flex-direction: column; gap: 36px; }
     .stx-card { max-width: 100%; }
@@ -189,7 +196,7 @@ const body = `
           <div class="stx-fees-row">
             <div>
               <div class="stx-fees-label">Cover the processing fee</div>
-              <div class="stx-fees-amount" id="stxFeeAmount">adds an estimated fee to your total</div>
+              <div class="stx-fees-amount" id="stxFeeAmount">consider giving an extra 2% to cover the processing fee</div>
             </div>
             <div class="stx-yn" id="stxFeeYn">
               <button type="button" data-val="0" class="active">No</button>
@@ -231,9 +238,24 @@ const body = `
             <label>Card number</label>
             <div class="stx-card-field" id="stxCardNumber" style="height:40px;"></div>
           </div>
-          <div class="stx-field" id="stxCardCvvField" style="max-width:140px;">
-            <label>CVV</label>
-            <div class="stx-card-field" id="stxCardCvv" style="height:40px;"></div>
+          <div class="stx-row2" id="stxExpCvvRow">
+            <div class="stx-field">
+              <label for="stxExpMonth">Expiration</label>
+              <div class="stx-exp-row">
+                <select id="stxExpMonth" aria-label="Expiration month" autocomplete="cc-exp-month" required>
+                  <option value="">MM</option>
+                  <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+                  <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+                  <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+                  <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                </select>
+                <select id="stxExpYear" aria-label="Expiration year" autocomplete="cc-exp-year" required><option value="">YYYY</option></select>
+              </div>
+            </div>
+            <div class="stx-field" id="stxCardCvvField">
+              <label>CVV</label>
+              <div class="stx-card-field" id="stxCardCvv" style="height:40px;"></div>
+            </div>
           </div>
 
           <button class="stx-cta" id="stxPayBtn" type="submit">Give</button>
@@ -250,7 +272,7 @@ const body = `
   var funds = [];
   var gifts = [{ fundId: '', amount: '' }];
   var coverFees = false;
-  var feeRate = 0.029, feeFixedCents = 30; // overwritten by /funds — see its own comment in src
+  var feeRate = 0.02; // overwritten by /funds — see its own comment in src (Andrew's flat estimate)
   var FREQS = [
     { key: '', label: 'One Time' },
     { key: 'weekly', label: 'Weekly' },
@@ -270,7 +292,7 @@ const body = `
   function subtotalCents(){
     return gifts.reduce(function(sum, g){ var n = Number(g.amount); return sum + (n > 0 ? Math.round(n * 100) : 0); }, 0);
   }
-  function feeCents(){ return coverFees ? Math.round(subtotalCents() * feeRate) + feeFixedCents : 0; }
+  function feeCents(){ return coverFees ? Math.round(subtotalCents() * feeRate) : 0; }
   function totalCents(){ return subtotalCents() + feeCents(); }
   function money(cents){ return '$' + (cents / 100).toFixed(2); }
 
@@ -299,6 +321,20 @@ const body = `
     });
   }
 
+  // Month/year travel as plain fields, not inside Stax.js's hosted iframes — only card number
+  // and CVV are Stax's own fields. Same split childcare-portal's live Stax integration uses (see
+  // that repo's parent-billing.js pbPopulateStaxExpYearOnce/tokenize call), not a new pattern.
+  function populateExpYearOnce(){
+    var yearEl = document.getElementById('stxExpYear');
+    if (!yearEl || yearEl.options.length > 1) return;
+    var thisYear = new Date().getFullYear();
+    for (var y = thisYear; y <= thisYear + 15; y++) {
+      var opt = document.createElement('option');
+      opt.value = String(y); opt.textContent = String(y);
+      yearEl.appendChild(opt);
+    }
+  }
+
   function fundOptionsHtml(selected){
     var opts = '<option value="">Choose a fund&hellip;</option>';
     funds.forEach(function(f){ opts += '<option value="' + f.id + '"' + (String(f.id) === String(selected) ? ' selected' : '') + '>' + esc(f.name) + '</option>'; });
@@ -325,8 +361,8 @@ const body = `
 
   function updateTotal(){
     document.getElementById('stxFeeAmount').textContent = coverFees
-      ? 'adds ' + money(feeCents()) + ' to your total'
-      : 'adds an estimated fee to your total';
+      ? 'gives ' + money(feeCents()) + ' extra to cover the fee'
+      : 'consider giving an extra ' + Math.round(feeRate * 100) + '% to cover the processing fee';
     var t = totalCents();
     document.getElementById('stxContinueBtn').textContent = t > 0 ? ('Continue with ' + money(t)) : 'Continue';
     document.getElementById('stxPayBtn').textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
@@ -345,6 +381,27 @@ const body = `
     updateTotal();
   });
   document.getElementById('stxBackBtn').addEventListener('click', function(){ goToStep(1); });
+
+  // Format phone as (555) 555-1234 while typing — the same shape chms's own normalizePhone()
+  // produces server-side for donor matching (src/api-utils.js), so what's shown here already
+  // matches what the ledger/review-queue will display, not just a cosmetic difference.
+  document.getElementById('stxPhone').addEventListener('input', function(e){
+    var digits = e.target.value.replace(/\\D/g, '').slice(0, 10);
+    var formatted = digits;
+    if (digits.length > 6) formatted = '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+    else if (digits.length > 3) formatted = '(' + digits.slice(0, 3) + ') ' + digits.slice(3);
+    else if (digits.length > 0) formatted = '(' + digits;
+    e.target.value = formatted;
+  });
+
+  // State is a 2-letter postal abbreviation — force the stored value to uppercase as typed, not
+  // just its on-screen appearance (the field's text-transform CSS only changes how it LOOKS;
+  // without this, typing lowercase would still submit lowercase to chms).
+  document.getElementById('stxState').addEventListener('input', function(e){
+    var upper = e.target.value.toUpperCase();
+    if (upper !== e.target.value) e.target.value = upper;
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll('#stxFeeYn button'), function(btn){
     btn.addEventListener('click', function(){
       coverFees = btn.dataset.val === '1';
@@ -363,7 +420,6 @@ const body = `
     configured = !!d.configured;
     funds = d.funds || [];
     if (typeof d.estimatedFeeRate === 'number') feeRate = d.estimatedFeeRate;
-    if (typeof d.estimatedFeeFixedCents === 'number') feeFixedCents = d.estimatedFeeFixedCents;
     // Default the first gift line to General Fund so a donor who only picks an amount chip still
     // has a valid gift to Continue with — one less required tap, and matches how most donors give.
     if (gifts[0] && !gifts[0].fundId) {
@@ -378,9 +434,16 @@ const body = `
       note.textContent = 'Demo mode: no live Stax sandbox key configured yet, so card fields are skipped and submitting records a simulated gift through the same matching/ledger path a real Stax webhook would use.';
       document.getElementById('stxForm').parentNode.insertBefore(note, document.getElementById('stxForm'));
       document.getElementById('stxCardNumberField').hidden = true;
-      document.getElementById('stxCardCvvField').hidden = true;
+      document.getElementById('stxExpCvvRow').hidden = true;
+      // A required field inside a hidden container can still block native form validation on
+      // submit in some browsers (the exact bug class that broke Continue — see that fix's
+      // comment on stxContinueBtn) — clear required here so demo mode's Give button isn't hit
+      // by the same thing.
+      document.getElementById('stxExpMonth').required = false;
+      document.getElementById('stxExpYear').required = false;
       return;
     }
+    populateExpYearOnce();
     var s = document.createElement('script');
     s.src = '${STAXJS_URL}';
     s.onload = function(){
@@ -406,7 +469,7 @@ const body = `
       return;
     }
 
-    if (!validGifts.length) { showMsg('Choose a fund and an amount for at least one gift.', false); goToStep(1); return; }
+    if (!validGifts.length) { goToStep(1); showMsg('Choose a fund and an amount for at least one gift.', false); return; }
 
     var payBtn = document.getElementById('stxPayBtn');
     var payBtnLabel = payBtn.textContent;
@@ -436,16 +499,19 @@ const body = `
         .then(function(res){
           reset();
           if (!res.ok) { showMsg(res.d.error || 'Something went wrong.', false); return; }
-          showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
           document.getElementById('stxForm').reset();
           gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
           renderGifts(); renderChips(); renderFreqRow(); updateTotal(); goToStep(1);
+          showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
         }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
-      staxInstance.tokenize({}).then(function(res){ submit(res && res.id); })
-        .catch(function(){ reset(); showMsg('Could not read the card. Please check the number and try again.', false); });
+      staxInstance.tokenize({
+        month: document.getElementById('stxExpMonth').value,
+        year: document.getElementById('stxExpYear').value,
+      }).then(function(res){ submit(res && res.id); })
+        .catch(function(){ reset(); showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false); });
     } else {
       submit(null);
     }

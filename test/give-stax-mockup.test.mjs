@@ -121,6 +121,85 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('the cover-the-fees estimate is a flat percentage, framed as an ask not a fee added on');
+{
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'consider giving an extra 2% to cover the processing fee', 'default copy asks for an extra gift, not "a fee is added"');
+  hasNot(html, 'adds an estimated fee to your total', 'old "fee added to your total" framing is gone');
+  hasNot(html, 'to your total', 'no remaining copy frames this as a fee tacked onto the total');
+  has(html, "'gives ' + money(feeCents()) + ' extra to cover the fee'", 'the toggled-on state also uses the "gives extra" framing');
+  has(html, 'var feeRate = 0.02', 'the flat rate is 2%, matching the interchange + $0.12 Andrew described');
+  hasNot(html, 'feeFixedCents', 'no separate fixed-cents component — Andrew asked for a flat percentage only');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('regression: [hidden] must actually hide a .stx-row2/.stx-row3 element');
+{
+  // Real bug, caught before shipping: .stx-row2 { display: grid } and the browser's own
+  // [hidden] { display: none } have equal CSS specificity, and the author rule comes later in
+  // the cascade — so JS setting .hidden = true on a .stx-row2 element (stxExpCvvRow in demo
+  // mode) set the DOM property but the element kept rendering as a grid. Verified against a
+  // real headless Chromium, not just this static-HTML check.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, '.stx-row2[hidden], .stx-row3[hidden] { display: none; }', 'an explicit [hidden] override beats the class rule for row layouts');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('expiration date is collected as plain month/year fields, not inside Stax.js iframes');
+{
+  // Mirrors childcare-portal's own live Stax integration (parent-billing.js /
+  // pbPopulateStaxExpYearOnce + the tokenize({ month, year }) call) — only card number and CVV
+  // are Stax's own hosted fields; month/year travel as plain form fields per Stax's documented
+  // sample, not a new pattern invented here.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'id="stxExpMonth"', 'has an expiration month field');
+  has(html, 'id="stxExpYear"', 'has an expiration year field');
+  const monthField = html.match(/<select id="stxExpMonth"[^>]*>/)[0];
+  const yearField = html.match(/<select id="stxExpYear"[^>]*>/)[0];
+  has(monthField, 'required', 'expiration month is required');
+  has(yearField, 'required', 'expiration year is required');
+  has(html, "month: document.getElementById('stxExpMonth').value", 'month is passed into the Stax.js tokenize() call');
+  has(html, "year: document.getElementById('stxExpYear').value", 'year is passed into the Stax.js tokenize() call');
+  has(html, 'function populateExpYearOnce', 'year options are populated client-side');
+  // Same bug class as the Continue-button fix: a required field inside a hidden container can
+  // block native validation. Demo mode hides the expiration/CVV row, so it must also clear
+  // `required` on both selects or the Give button would silently fail the same way Continue did.
+  has(html, "document.getElementById('stxExpMonth').required = false", 'demo mode clears required on the hidden month field');
+  has(html, "document.getElementById('stxExpYear').required = false", 'demo mode clears required on the hidden year field');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('regression: a successful submission must not wipe its own success message');
+{
+  // Real bug, caught before shipping: showMsg() was called, then goToStep(1) — which
+  // unconditionally clears any message — ran right after, silently erasing the "thank you" or
+  // "simulated gift recorded" text a donor would otherwise see. Fixed by calling goToStep(1)
+  // BEFORE showMsg() on both the successful-submission path and the step-2 fallback validation
+  // path. Verified end-to-end against a real headless Chromium (a static-HTML check can't run
+  // this code path), asserting on the corrected source order here.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  const submitFnStart = html.indexOf('function submit(pmId)');
+  ok(submitFnStart > -1, 'the submit() function is present');
+  const goToStepIdx = html.indexOf('goToStep(1);', submitFnStart);
+  const showMsgIdx = html.indexOf("showMsg(res.d.demo ? 'Simulated gift recorded", submitFnStart);
+  ok(goToStepIdx > -1 && showMsgIdx > -1 && goToStepIdx < showMsgIdx, 'goToStep(1) runs before the success showMsg(), so the message survives');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('phone and state format as the donor types, matching what chms normalizes to anyway');
+{
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, "getElementById('stxPhone').addEventListener('input'", 'phone reformats live as typed');
+  has(html, "digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6)", 'phone formats as (555) 555-1234, matching chms\'s own normalizePhone() shape');
+  has(html, "getElementById('stxState').addEventListener('input'", 'state forces the stored value to uppercase, not just its on-screen look');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('regression: Continue must not be silently blocked by hidden step-2 required fields');
 {
   // Real bug, reported live: clicking Continue did nothing — no error, no advance to step 2.
