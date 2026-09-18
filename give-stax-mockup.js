@@ -37,7 +37,12 @@ const css = `<style>
   .stx-msg { padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13.5px; }
   .stx-msg.err { background: #FBEAE7; color: #A33B26; }
   .stx-msg.ok  { background: #E9F3E4; color: #3A6B2E; }
-  .stx-field { margin-bottom: 18px; }
+  .stx-section-label {
+    display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+    color: #4A5E3A; margin: 26px 0 10px;
+  }
+  .stx-section-label:first-of-type { margin-top: 0; }
+  .stx-field { margin-bottom: 14px; }
   .stx-field label {
     display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
     color: #6b6a5f; margin-bottom: 8px;
@@ -47,18 +52,44 @@ const css = `<style>
     padding: 11px 14px; font-family: 'Source Sans 3', sans-serif; font-size: 15px; color: #1E2D4A;
   }
   .stx-field select:focus-visible, .stx-field input:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
+  .stx-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stx-row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+  .stx-gift-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+  .stx-gift-row .stx-field { flex: 1; margin-bottom: 0; }
+  .stx-gift-remove {
+    flex-shrink: 0; width: 40px; height: 42px; margin-top: 0; border-radius: 9px; border: 1px solid #DDE3ED;
+    background: #fff; color: #A33B26; font-size: 18px; cursor: pointer; line-height: 1;
+  }
+  .stx-gift-remove:hover { background: #FBEAE7; }
+  .stx-add-gift {
+    background: none; border: none; color: #2E7EA6; font-family: 'Source Sans 3', sans-serif;
+    font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 0 18px; text-align: left;
+  }
+  .stx-add-gift:hover { text-decoration: underline; }
   .stx-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
   .stx-chip {
     border-radius: 8px; font-size: 15px; font-weight: 700; text-align: center; padding: 11px 0;
     background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
   }
   .stx-chip.active { background: #1E2D4A; color: #fff; border-color: #1E2D4A; }
-  .stx-toggle-row { display: flex; gap: 8px; margin-bottom: 22px; }
-  .stx-toggle {
-    flex: 1; text-align: center; padding: 10px; border-radius: 8px; font-size: 13.5px; font-weight: 700;
-    background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
+  .stx-freq-row { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .stx-freq {
+    flex: 1; min-width: 78px; text-align: center; padding: 10px 6px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 700; background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
   }
-  .stx-toggle.active { background: #2E7EA6; color: #fff; border-color: #2E7EA6; }
+  .stx-freq.active { background: #2E7EA6; color: #fff; border-color: #2E7EA6; }
+  .stx-fees-row {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px;
+    background: #FBF8F3; border: 1px solid #DDE3ED; border-radius: 9px; padding: 12px 14px;
+  }
+  .stx-fees-label { font-size: 13.5px; color: #1E2D4A; }
+  .stx-fees-amount { color: #6b6a5f; font-size: 12.5px; }
+  .stx-yn { display: flex; gap: 4px; }
+  .stx-yn button {
+    padding: 7px 14px; border-radius: 7px; border: 1px solid #DDE3ED; background: #fff;
+    color: #1E2D4A; font-family: 'Source Sans 3', sans-serif; font-weight: 700; font-size: 12.5px; cursor: pointer;
+  }
+  .stx-yn button.active { background: #2E7EA6; color: #fff; border-color: #2E7EA6; }
   .stx-wallets { display: flex; gap: 8px; margin-bottom: 14px; }
   .stx-wallet-mount { flex: 1; min-height: 44px; border-radius: 8px; overflow: hidden; }
   .stx-card-field { border: 1px solid #DDE3ED; border-radius: 9px; padding: 0 14px; margin-bottom: 14px; background: #fff; }
@@ -84,27 +115,43 @@ const body = `
     <div class="stx-sub">Timothy Lutheran Church &middot; Stax mockup</div>
     <div id="stxMsg"></div>
     <form id="stxForm">
-      <div class="stx-field">
-        <label for="stxFund">Fund</label>
-        <select id="stxFund" required><option value="">Loading funds&hellip;</option></select>
-      </div>
-      <div class="stx-field">
-        <label>Amount</label>
-        <div class="stx-chips" id="stxChips"></div>
-        <input id="stxAmount" type="number" min="1" step="0.01" placeholder="Other amount" required>
-      </div>
-      <div class="stx-toggle-row">
-        <div class="stx-toggle active" data-freq="once">One-time</div>
-        <div class="stx-toggle" data-freq="recurring">Recurring</div>
-      </div>
-      <div class="stx-field" id="stxIntervalField" hidden>
-        <label for="stxInterval">Frequency</label>
-        <select id="stxInterval"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select>
-      </div>
-      <div class="stx-field"><label for="stxName">Name</label><input id="stxName" type="text" required></div>
-      <div class="stx-field"><label for="stxEmail">Email</label><input id="stxEmail" type="email" required></div>
-      <div class="stx-field"><label for="stxPhone">Phone (optional)</label><input id="stxPhone" type="tel"></div>
+      <label class="stx-section-label">Gift</label>
+      <div id="stxGifts"></div>
+      <button type="button" class="stx-add-gift" id="stxAddGift">+ Add Another Gift</button>
 
+      <label class="stx-section-label">How often</label>
+      <div class="stx-freq-row" id="stxFreqRow"></div>
+
+      <div class="stx-fees-row">
+        <div>
+          <div class="stx-fees-label">Cover the processing fee</div>
+          <div class="stx-fees-amount" id="stxFeeAmount">adds an estimated fee to your total</div>
+        </div>
+        <div class="stx-yn" id="stxFeeYn">
+          <button type="button" data-val="0" class="active">No</button>
+          <button type="button" data-val="1">Yes</button>
+        </div>
+      </div>
+
+      <div class="stx-field"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
+
+      <label class="stx-section-label">Contact details</label>
+      <div class="stx-row2">
+        <div class="stx-field"><label for="stxFirst">First name</label><input id="stxFirst" type="text" required></div>
+        <div class="stx-field"><label for="stxLast">Last name</label><input id="stxLast" type="text" required></div>
+      </div>
+      <div class="stx-row2">
+        <div class="stx-field"><label for="stxEmail">Email</label><input id="stxEmail" type="email" required></div>
+        <div class="stx-field"><label for="stxPhone">Phone (optional)</label><input id="stxPhone" type="tel"></div>
+      </div>
+      <div class="stx-field"><label for="stxAddr">Street address (optional)</label><input id="stxAddr" type="text"></div>
+      <div class="stx-row3">
+        <div class="stx-field"><label for="stxCity">City</label><input id="stxCity" type="text"></div>
+        <div class="stx-field"><label for="stxState">State</label><input id="stxState" type="text" maxlength="2" style="text-transform:uppercase;"></div>
+        <div class="stx-field"><label for="stxZip">ZIP</label><input id="stxZip" type="text" maxlength="10"></div>
+      </div>
+
+      <label class="stx-section-label">Payment</label>
       <div class="stx-wallets">
         <div class="stx-wallet-mount" id="stxApplePayMount"></div>
         <div class="stx-wallet-mount" id="stxGooglePayMount"></div>
@@ -120,45 +167,105 @@ const body = `
 
       <button class="stx-cta" id="stxPayBtn" type="submit">Give</button>
     </form>
-    <div class="stx-fine">Apple Pay appears here automatically once this domain is registered with Stax.</div>
+    <div class="stx-fine">Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, and email are required so a gift can be matched to the right giving record; everything else is optional.</div>
   </div>
 </div>
 <script>
 (function(){
   var CHMS_API = '${CHMS_API_BASE}';
-  var freq = 'once', configured = false, staxInstance = null;
-  var chips = [25, 50, 100, 250];
-  var chipsEl = document.getElementById('stxChips');
-  chips.forEach(function(v){
-    var el = document.createElement('div');
-    el.className = 'stx-chip'; el.textContent = '$' + v;
-    el.addEventListener('click', function(){
-      document.getElementById('stxAmount').value = v;
-      Array.prototype.forEach.call(chipsEl.children, function(c){ c.classList.remove('active'); });
-      el.classList.add('active');
-    });
-    chipsEl.appendChild(el);
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('.stx-toggle'), function(t){
-    t.addEventListener('click', function(){
-      Array.prototype.forEach.call(document.querySelectorAll('.stx-toggle'), function(x){ x.classList.remove('active'); });
-      t.classList.add('active');
-      freq = t.dataset.freq;
-      document.getElementById('stxIntervalField').hidden = (freq !== 'recurring');
-    });
-  });
+  var configured = false, staxInstance = null;
+  var funds = [];
+  var gifts = [{ fundId: '', amount: '' }];
+  var coverFees = false;
+  var feeRate = 0.029, feeFixedCents = 30; // overwritten by /funds — see its own comment in src
+  var FREQS = [
+    { key: '', label: 'One Time' },
+    { key: 'weekly', label: 'Weekly' },
+    { key: 'biweekly', label: 'Bi-weekly' },
+    { key: 'twice_monthly', label: '1st & 15th' },
+    { key: 'monthly', label: 'Monthly' },
+  ];
+  var freq = '';
 
   function showMsg(text, ok){
     document.getElementById('stxMsg').innerHTML = '<div class="stx-msg ' + (ok ? 'ok' : 'err') + '">' + text + '</div>';
   }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function subtotalCents(){
+    return gifts.reduce(function(sum, g){ var n = Number(g.amount); return sum + (n > 0 ? Math.round(n * 100) : 0); }, 0);
+  }
+  function feeCents(){ return coverFees ? Math.round(subtotalCents() * feeRate) + feeFixedCents : 0; }
+  function totalCents(){ return subtotalCents() + feeCents(); }
+  function money(cents){ return '$' + (cents / 100).toFixed(2); }
+
+  function renderFreqRow(){
+    var row = document.getElementById('stxFreqRow');
+    row.innerHTML = FREQS.map(function(f){
+      return '<div class="stx-freq' + (f.key === freq ? ' active' : '') + '" data-key="' + f.key + '">' + f.label + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(row.children, function(el){
+      el.addEventListener('click', function(){ freq = el.dataset.key; renderFreqRow(); });
+    });
+  }
+
+  function fundOptionsHtml(selected){
+    var opts = '<option value="">Choose a fund&hellip;</option>';
+    funds.forEach(function(f){ opts += '<option value="' + f.id + '"' + (String(f.id) === String(selected) ? ' selected' : '') + '>' + esc(f.name) + '</option>'; });
+    return opts;
+  }
+
+  function renderGifts(){
+    var wrap = document.getElementById('stxGifts');
+    wrap.innerHTML = gifts.map(function(g, i){
+      return '<div class="stx-gift-row" data-i="' + i + '">' +
+        '<div class="stx-field"><select class="stx-gift-fund">' + fundOptionsHtml(g.fundId) + '</select></div>' +
+        '<div class="stx-field" style="max-width:120px;"><input class="stx-gift-amount" type="number" min="1" step="0.01" placeholder="Amount" value="' + esc(g.amount) + '"></div>' +
+        (gifts.length > 1 ? '<button type="button" class="stx-gift-remove" title="Remove this gift">&times;</button>' : '') +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(wrap.querySelectorAll('.stx-gift-row'), function(row){
+      var i = Number(row.dataset.i);
+      row.querySelector('.stx-gift-fund').addEventListener('change', function(e){ gifts[i].fundId = e.target.value; updateTotal(); });
+      row.querySelector('.stx-gift-amount').addEventListener('input', function(e){ gifts[i].amount = e.target.value; updateTotal(); });
+      var rm = row.querySelector('.stx-gift-remove');
+      if (rm) rm.addEventListener('click', function(){ gifts.splice(i, 1); renderGifts(); updateTotal(); });
+    });
+  }
+
+  function updateTotal(){
+    document.getElementById('stxFeeAmount').textContent = coverFees
+      ? 'adds ' + money(feeCents()) + ' to your total'
+      : 'adds an estimated fee to your total';
+    var btn = document.getElementById('stxPayBtn');
+    var t = totalCents();
+    btn.textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
+  }
+
+  document.getElementById('stxAddGift').addEventListener('click', function(){
+    gifts.push({ fundId: '', amount: '' });
+    renderGifts();
+    updateTotal();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#stxFeeYn button'), function(btn){
+    btn.addEventListener('click', function(){
+      coverFees = btn.dataset.val === '1';
+      Array.prototype.forEach.call(document.querySelectorAll('#stxFeeYn button'), function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      updateTotal();
+    });
+  });
+
+  renderFreqRow();
+  renderGifts();
+  updateTotal();
 
   fetch(CHMS_API + '/funds').then(function(r){ return r.json(); }).then(function(d){
     configured = !!d.configured;
-    var sel = document.getElementById('stxFund');
-    sel.innerHTML = '';
-    (d.funds || []).forEach(function(f){
-      var o = document.createElement('option'); o.value = f.id; o.textContent = f.name; sel.appendChild(o);
-    });
+    funds = d.funds || [];
+    if (typeof d.estimatedFeeRate === 'number') feeRate = d.estimatedFeeRate;
+    if (typeof d.estimatedFeeFixedCents === 'number') feeFixedCents = d.estimatedFeeFixedCents;
+    renderGifts();
+    updateTotal();
     if (!configured) {
       var note = document.createElement('div');
       note.className = 'stx-demo-note';
@@ -185,33 +292,47 @@ const body = `
 
   document.getElementById('stxForm').addEventListener('submit', function(e){
     e.preventDefault();
+    var validGifts = gifts.filter(function(g){ return g.fundId && Number(g.amount) > 0; });
+    if (!validGifts.length) { showMsg('Choose a fund and an amount for at least one gift.', false); return; }
+
     var payBtn = document.getElementById('stxPayBtn');
+    var payBtnLabel = payBtn.textContent;
     payBtn.disabled = true; payBtn.textContent = 'Processing\\u2026';
     var payload = {
-      fund_id: document.getElementById('stxFund').value,
-      amount: document.getElementById('stxAmount').value,
-      payer_name: document.getElementById('stxName').value,
+      gifts: validGifts.map(function(g){ return { fund_id: g.fundId, amount: g.amount }; }),
+      cover_fees: coverFees,
+      memo: document.getElementById('stxMemo').value,
+      payer_first_name: document.getElementById('stxFirst').value,
+      payer_last_name: document.getElementById('stxLast').value,
       payer_email: document.getElementById('stxEmail').value,
       payer_phone: document.getElementById('stxPhone').value,
+      payer_address_line1: document.getElementById('stxAddr').value,
+      payer_city: document.getElementById('stxCity').value,
+      payer_state: document.getElementById('stxState').value,
+      payer_zip: document.getElementById('stxZip').value,
     };
 
+    function reset(){ payBtn.disabled = false; payBtn.textContent = payBtnLabel; }
+
     function submit(pmId){
-      var endpoint = CHMS_API + (freq === 'recurring' ? '/recurring' : '/checkout');
-      if (freq === 'recurring') payload.interval = document.getElementById('stxInterval').value;
+      var endpoint = CHMS_API + (freq ? '/recurring' : '/checkout');
+      if (freq) payload.interval = freq;
       if (pmId) payload.payment_method_id = pmId;
       fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
         .then(function(res){
-          payBtn.disabled = false; payBtn.textContent = 'Give';
+          reset();
           if (!res.ok) { showMsg(res.d.error || 'Something went wrong.', false); return; }
           showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
           document.getElementById('stxForm').reset();
-        }).catch(function(){ payBtn.disabled = false; payBtn.textContent = 'Give'; showMsg('Network error. Please try again.', false); });
+          gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
+          renderGifts(); renderFreqRow(); updateTotal();
+        }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
       staxInstance.tokenize({}).then(function(res){ submit(res && res.id); })
-        .catch(function(){ payBtn.disabled = false; payBtn.textContent = 'Give'; showMsg('Could not read the card. Please check the number and try again.', false); });
+        .catch(function(){ reset(); showMsg('Could not read the card. Please check the number and try again.', false); });
     } else {
       submit(null);
     }
