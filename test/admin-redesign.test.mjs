@@ -6576,11 +6576,11 @@ group("the checklist renders before the type's own fields, and a tick shows with
     form: { key, queue: 'rental', action: 'save', room: 'Gym', check_agreement: '1' } });
 
   const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
-  const checklistAt = page.indexOf('Before it publishes');
+  const checklistAt = page.indexOf('Office paperwork');
   const typeBlockAt = page.indexOf('Rental only');
   ok(checklistAt >= 0 && typeBlockAt >= 0, 'both the checklist and the type-specific block are on the page');
   ok(checklistAt < typeBlockAt,
-    'the checklist ("Before it publishes") renders before the type’s own fields ("Rental only"), so it does not need scrolling past to reach: ' +
+    'the checklist ("Office paperwork") renders before the type’s own fields ("Rental only"), so it does not need scrolling past to reach: ' +
     checklistAt + ' vs ' + typeBlockAt);
 
   // ⚠ THE ROOT CAUSE OF "unable to be ticked": the tick glyph and the fill
@@ -6757,6 +6757,65 @@ group('bulk type assignment sets one type on many events at once, and skips what
   eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
 }
 
+group('bulk publish approves many events at once with nothing filled in, and clears them off "Needs a decision"');
+{
+  // Andrew, looking at 130 imports each demanding a room, a type and a
+  // four-item checklist before "Assign to selected" was the only bulk
+  // action on the screen: "there is no way to quickly and easily approve
+  // events... these should just all be approved." Bulk publish is the
+  // single-item Publish button's own "nothing here is required" rule,
+  // applied to a whole selection in one submit.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['intake_manage'], 'office');
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Maplewood Richmond Heights','Sam Ortiz','sortiz@example.org',1)").run();
+  const d1 = churchDatePlus(15), d2 = churchDatePlus(16), d3 = churchDatePlus(17);
+  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'17:00','20:00','confirmed','')").run(d1);
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Bible Class', 'Weekly study.', churchDate(), d2, '2099-01-01', 'web');
+  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
+    .run('Council Meeting', 'Not part of this batch.', churchDate(), d3, '2099-01-01', 'web');
+  await call(env, '/event-intake', { cookie, fresh: true }); // sync
+
+  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
+  const gymKey = `b:${bookingId}`;
+  const bibleKey = `n:${db.prepare("SELECT id FROM news_items WHERE title='Bible Class'").get().id}`;
+  const councilKey = `n:${db.prepare("SELECT id FROM news_items WHERE title='Council Meeting'").get().id}`;
+
+  // Neither selected item has a type, a room, or a single checklist box
+  // ticked — exactly the state a fresh Google/News/gym import lands in.
+  const res = await call(env, '/event-intake/bulk-publish', { cookie, method: 'POST',
+    form: { queue: 'inbox', keys: [gymKey, bibleKey] } });
+  eq(res.status, 302, 'redirects back to the queue, same shape as bulk-type');
+
+  const gymRow = db.prepare('SELECT published_at, published_by, event_type, room, checks_json FROM event_intake WHERE source_key = ?').get(gymKey);
+  ok(gymRow.published_at, 'the gym rental is published with no type, no room, no checklist item ever ticked');
+  eq(gymRow.published_by, 'office');
+  eq(gymRow.event_type, null, 'bulk publish never assigns a type — that is still what Assign to selected is for');
+  eq(gymRow.room, null, 'and never touches the room either — this row was never saved through /save, so it is still unset');
+  ok(gymRow.checks_json == null || JSON.parse(gymRow.checks_json || '{}').agreement !== true, 'the checklist is untouched, not silently marked done');
+
+  const bibleRow = db.prepare('SELECT published_at FROM event_intake WHERE source_key = ?').get(bibleKey);
+  ok(bibleRow.published_at, 'the second selected item is published too');
+
+  const councilRow = db.prepare('SELECT published_at FROM event_intake WHERE source_key = ?').get(councilKey);
+  eq(councilRow.published_at, null, 'the item never checked is left completely alone');
+
+  // The point of the button: both published rows are off "Needs a decision"
+  // even though neither one has a type or a finished checklist — only the
+  // untouched Council Meeting is still waiting on the office.
+  const page = await (await call(env, '/event-intake?queue=inbox', { cookie, fresh: true })).text();
+  lacks(page, 'Maplewood Richmond Heights', 'the published gym rental left the "Needs a decision" queue');
+  lacks(page, '>Bible Class<', 'so did the published Bible Class item');
+  has(page, 'Council Meeting', 'the one item nobody acted on is still exactly where it was');
+
+  // A bogus/stale key is skipped, the same refusal bulk-type already enforces.
+  const beforeCount = db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE published_at IS NOT NULL").get().n;
+  await call(env, '/event-intake/bulk-publish', { cookie, method: 'POST',
+    form: { queue: 'inbox', keys: ['n:999999'] } });
+  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE published_at IS NOT NULL").get().n, beforeCount,
+    'a key matching no real item in this request’s own merge publishes nothing');
+}
+
 // Three more reports off the same screen: the room list didn't match the
 // church's real spaces, the detail panel's own head (now wrapping eleven
 // type pills across three lines) pushed "Before it publishes" out of view,
@@ -6784,11 +6843,11 @@ group('the room list is the church’s real spaces, the checklist sits above the
     lacks(page, `>${stale}<`, `and no longer offers the old "${stale}"`);
   }
 
-  // The checklist ("Before it publishes") now renders before the type pill
+  // The checklist ("Office paperwork") now renders before the type pill
   // row, which used to sit in the fixed head and, at eleven types, wrapped
   // across three lines pushing everything else down. Reported as wanting the
   // info box "moved up to the top so I can see it for the event."
-  const checklistAt = page.indexOf('Before it publishes');
+  const checklistAt = page.indexOf('Office paperwork');
   const pillrowAt = page.indexOf('class="ei-pillrow"');
   ok(checklistAt >= 0 && pillrowAt >= 0, 'both the checklist and the type picker are on the page');
   ok(checklistAt < pillrowAt, 'the checklist renders before the type picker, not after it');

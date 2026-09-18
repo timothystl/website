@@ -53,7 +53,7 @@ import {
 import { getGCalAccessToken } from './gym.js';
 import {
   TYPES, TYPE_KEYS, TYPE_FIELDS, CHECKLISTS, ROOMS, SOURCE_LABEL, SOURCE_COLOR,
-  intakeKeyFor, sourceKindOfKey, checklistFor, openCountOf, isReady,
+  intakeKeyFor, sourceKindOfKey, checklistFor, openCountOf, isReady, needsDecision,
   mergeIntakeItems, QUEUE_TOP, filterQueue, queueCounts, QUEUE_TITLES,
   deferredFieldsSource, VALUE_LABELS, VALUE_ORDER, typesForValue, typesWithNoValue,
 } from './intake.js';
@@ -554,6 +554,35 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
         return redirectTo(queue, '');
       }
 
+      // ── BULK PUBLISH — the same shape as bulk-type above, for the other
+      // half of Andrew's actual complaint: "there is no way to quickly and
+      // easily approve events... these should just all be approved." A
+      // single event's own Publish button already never required the room,
+      // a type, or the checklist (see the note above `action === 'publish'`
+      // in /event-intake/save) — this is that exact rule applied to many
+      // rows in one submit, so a stack of imported events can be cleared
+      // without opening each one and without anybody filling in paperwork
+      // that may not exist yet. It never touches room, extra_json or
+      // checks_json — publishing is not "finish the form," it is "the
+      // office has decided," and the checklist stays exactly as complete or
+      // incomplete as it was.
+      if (path === '/event-intake/bulk-publish' && method === 'POST') {
+        const form = await request.formData();
+        const queue = String(form.get('queue') || 'inbox');
+        const keys = new Set(form.getAll('keys').map(String));
+        if (keys.size) {
+          const { raw } = await loadIntakeRaw();
+          await syncIntakeRows(raw);
+          const rows = await readIntakeRows(raw);
+          const items = mergeIntakeItems(raw, rows);
+          const targets = items.filter((it) => keys.has(it.key) && it.dbId != null);
+          const publishedAt = new Date().toISOString();
+          await Promise.all(targets.map((it) =>
+            writeIntakePatch(it.dbId, { published_at: publishedAt, published_by: currentUser.username })));
+        }
+        return redirectTo(queue, '');
+      }
+
       if (path === '/event-intake' && method === 'GET') {
         const { raw, gymExtra, googleOk } = await loadIntakeRaw();
         await syncIntakeRows(raw);
@@ -565,7 +594,7 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
         const askedSelected = url.searchParams.get('selected') || '';
         const selected = items.find((it) => it.key === askedSelected) || list[0] || items[0] || null;
         const counts = queueCounts(items);
-        const openTotal = items.filter((it) => !isReady(it)).length;
+        const openTotal = items.filter((it) => needsDecision(it)).length;
 
         return html(
           await renderIntakePage({ items, list, queue, selected, counts, openTotal, gymExtra, googleOk }, currentUser, badges),
@@ -689,17 +718,28 @@ function intakeLeftRail(queue, counts) {
   </div>`;
 }
 
+// The status chip's label and whether it draws in the "done" green — a
+// third state alongside isReady()'s own true/false. A published row reads
+// as done here even with an incomplete checklist, matching needsDecision()
+// in admin/intake.js: Publish is the real decision, the checklist is just
+// the office's own paperwork trail and keeps whatever chips it already had.
+function intakeStatus(item) {
+  const ready = isReady(item);
+  const open = openCountOf(item.type, item.checks);
+  if (ready) return { done: true, label: 'Ready' };
+  if (item.publishedAt) return { done: true, label: 'Published' };
+  return { done: false, label: open == null ? 'Needs a type' : `${open} open` };
+}
+
 function intakeListRow(item, queue, selectedKey) {
   const d = intakeDayLabel(item.start);
   const on = item.key === selectedKey;
   const typeColor = item.type ? TYPES[item.type].color : '#DDE3ED';
-  const ready = isReady(item);
-  const open = openCountOf(item.type, item.checks);
+  const status = intakeStatus(item);
   const openLabels = item.type
     ? checklistFor(item.type, item.checks).filter((c) => !c.done).map((c) => c.label)
     : ['Needs a type'];
   const chips = openLabels.slice(0, 3).map((l) => `<span class="ei-chip">${intakeEsc(l)}</span>`).join('');
-  const statusLabel = ready ? 'Ready' : (open == null ? 'Needs a type' : `${open} open`);
   const href = `/event-intake?queue=${encodeURIComponent(queue)}&selected=${encodeURIComponent(item.key)}`;
   // ⚠ THE CHECKBOX SITS BESIDE THE ROW, NOT INSIDE IT. `.ei-row` is an anchor
   // — the office clicks anywhere on it to open the record — and a checkbox
@@ -715,7 +755,7 @@ function intakeListRow(item, queue, selectedKey) {
         <span class="ei-row-meta"><span class="ei-dot" style="background:${intakeEsc(SOURCE_COLOR[item.sourceKind])}"></span>${intakeEsc(SOURCE_LABEL[item.sourceKind])} · ${intakeEsc(intakeTimeLabel(item.start, item.allDay))}${item.location ? ' · ' + intakeEsc(item.location) : ''}</span>
         ${chips ? `<span class="ei-row-chips">${chips}</span>` : ''}
       </span>
-      <span class="ei-status${ready ? ' ei-status-ready' : ''}">${intakeEsc(statusLabel)}</span>
+      <span class="ei-status${status.done ? ' ei-status-ready' : ''}">${intakeEsc(status.label)}</span>
     </a>
   </div>`;
 }
@@ -729,6 +769,16 @@ function intakeListRow(item, queue, selectedKey) {
 // The submit itself also confirms, naming how many events are about to
 // change — the one bulk action on this screen with the power to silently
 // misfile 135 events at once if clicked with the wrong type selected.
+//
+// ⚠ TWO SUBMIT BUTTONS, ONE FORM, via `formaction`/`formnovalidate` — not
+// two separate forms. Reported directly: "there is no way to quickly and
+// easily approve events... these should just all be approved." "Assign to
+// selected" (bulk-type) already existed for Andrew's other bulk ask
+// ("can we just bulk assign them?"); "Publish selected" is the same
+// selection, posted to /event-intake/bulk-publish instead. It carries
+// `formnovalidate` because the type <select> is `required` for the assign
+// button only — Publish never needed a type any more than the single-item
+// Publish button does (see the note above bulk-publish's own route).
 function intakeMiddle(list, queue, selectedKey) {
   const [title, sub] = QUEUE_TITLES[queue] || QUEUE_TITLES.inbox;
   const rows = list.map((it) => intakeListRow(it, queue, selectedKey)).join('');
@@ -747,7 +797,8 @@ function intakeMiddle(list, queue, selectedKey) {
   const toolbar = list.length ? `<div class="ei-bulkbar">
       <label class="ei-bulkall"><input type="checkbox" onclick="tlcEiSelectAllShown(this)"> Select all shown</label>
       <select name="type" required><option value="">Assign type…</option>${typeOptions}</select>
-      <button type="submit" class="ei-btn ei-btn-ghost">Assign to selected</button>
+      <button type="submit" formaction="/event-intake/bulk-type" class="ei-btn ei-btn-ghost">Assign to selected</button>
+      <button type="submit" formaction="/event-intake/bulk-publish" formnovalidate class="ei-btn ei-btn-gold">Publish selected</button>
     </div>` : '';
   return `<div class="ei-mid">
     <div class="ei-mid-head">
@@ -755,8 +806,7 @@ function intakeMiddle(list, queue, selectedKey) {
       <span class="ei-mid-sub">${intakeEsc(sub)}</span>
     </div>
     ${filterbar}
-    <form method="POST" action="/event-intake/bulk-type" class="ei-mid-list"
-      onsubmit="var n=this.querySelectorAll('.ei-row-check:checked').length; if(!n){alert('Select at least one event first.');return false;} return confirm('Assign this type to '+n+' event'+(n===1?'':'s')+'?');">
+    <form method="POST" action="/event-intake/bulk-type" class="ei-mid-list" onsubmit="return tlcEiBulkSubmit(event)">
       <input type="hidden" name="queue" value="${intakeEsc(queue)}">
       ${toolbar}
       ${rows || '<div class="ei-empty">Nothing waiting here. That’s the goal.</div>'}
@@ -807,7 +857,7 @@ function intakeDeferredPanel(item, gymExtra) {
 
 function intakeChecklistPanel(item) {
   if (!item.type) {
-    return `<p class="ei-note">Pick a type below to see what this needs before it publishes.</p>`;
+    return `<p class="ei-note">Pick a type below to see its office paperwork checklist — or just publish, nothing here is required.</p>`;
   }
   const list = checklistFor(item.type, item.checks);
   const doneCount = list.filter((c) => c.done).length;
@@ -822,7 +872,7 @@ function intakeChecklistPanel(item) {
     <span class="ei-check-text"><span>${intakeEsc(c.label)}</span><span class="ei-check-who">${intakeEsc(c.who)}</span></span>
   </label>`).join('');
   return `<div class="ei-checklist">
-    <div class="ei-checklist-head"><span class="ei-rail-label">Before it publishes</span><span class="ei-mid-sub">${doneCount} of ${list.length}</span></div>
+    <div class="ei-checklist-head"><span class="ei-rail-label">Office paperwork — optional, never required to publish</span><span class="ei-mid-sub">${doneCount} of ${list.length}</span></div>
     ${rows}
   </div>`;
 }
@@ -834,8 +884,7 @@ function intakeDetail(item, gymExtra, queue) {
       <a href="/event-intake/new-form">enter a new event</a> directly.</p>
     </div>`;
   }
-  const ready = isReady(item);
-  const open = openCountOf(item.type, item.checks);
+  const status = intakeStatus(item);
   const d = intakeDayLabel(item.start);
   const kicker = `${intakeEsc(SOURCE_LABEL[item.sourceKind])} · ${intakeEsc(d.month)} ${d.day}`;
   // ⚠ The hidden "queue" field carries the list the office is BROWSING, not
@@ -884,7 +933,7 @@ function intakeDetail(item, gymExtra, queue) {
             <span class="ei-kicker">${kicker}</span>
             <span class="ei-detail-title">${intakeEsc(item.title)}</span>
           </div>
-          <span class="ei-status${ready ? ' ei-status-ready' : ''}">${ready ? 'Ready' : (open == null ? 'Needs a type' : `${open} open`)}</span>
+          <span class="ei-status${status.done ? ' ei-status-ready' : ''}">${intakeEsc(status.label)}</span>
         </div>
       </div>
       <div class="ei-detail-body">
@@ -916,7 +965,7 @@ function intakeDetail(item, gymExtra, queue) {
         </div>` : ''}
         <div class="ei-actions">
           <button type="submit" name="action" value="save" class="ei-btn ei-btn-ghost">Save</button>
-          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">Publish</button>
+          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">${item.publishedAt ? 'Re-publish' : 'Publish'}</button>
         </div>
       </div>
     </form>
@@ -932,7 +981,25 @@ function intakeDetail(item, gymExtra, queue) {
 // and having "shown" mean what it says has no selector-only expression.
 // Delegated function names rather than a bigger inline expression, so the
 // two call sites (the filter input, the select-all checkbox) stay readable.
+// tlcEiBulkSubmit is the third: one bulk form now has two submit buttons
+// (Assign to selected / Publish selected), and the confirm text — and
+// whether an empty selection is even allowed to submit — has to name
+// whichever one was actually clicked. `event.submitter` is how a form
+// finds out which of its buttons fired the submit.
 const EI_SCRIPT = `<script>
+function tlcEiBulkSubmit(ev) {
+  var form = ev.target;
+  var n = form.querySelectorAll('.ei-row-check:checked').length;
+  if (!n) { alert('Select at least one event first.'); return false; }
+  var submitter = ev.submitter;
+  var action = (submitter && submitter.getAttribute('formaction')) || form.getAttribute('action') || '';
+  var isPublish = action.indexOf('bulk-publish') !== -1;
+  var noun = n + ' event' + (n === 1 ? '' : 's');
+  var msg = isPublish
+    ? 'Publish ' + noun + '? This does not require the checklist to be finished.'
+    : 'Assign this type to ' + noun + '?';
+  return confirm(msg);
+}
 function tlcEiFilter(input) {
   var q = input.value.trim().toLowerCase();
   var lines = document.querySelectorAll('.ei-row-line');

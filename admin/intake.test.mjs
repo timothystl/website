@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   TYPES, TYPE_KEYS, UNCLASSIFIED, deferredFieldsSource, ROOMS,
   SOURCE_LABEL, SOURCE_COLOR, intakeKeyFor, sourceKindOfKey,
-  CHECKLISTS, TYPE_FIELDS, checklistFor, openCountOf, isReady,
+  CHECKLISTS, TYPE_FIELDS, checklistFor, openCountOf, isReady, needsDecision,
   isValidTypeField, isValidChecklistKey,
   mergeIntakeItems, QUEUE_TOP, inQueue, filterQueue, queueCounts, QUEUE_TITLES,
   VALUE_LABELS, VALUE_ORDER, TYPE_VALUE, typesForValue, typesWithNoValue,
@@ -85,6 +85,18 @@ group('isReady — unclassified is never ready, and a type with every box checke
   eq(isReady({ type: 'rental', checks: { agreement: true, insurance: true, custodian: true } }), false, 'three of four is still not ready');
 }
 
+group('needsDecision — a published row leaves the queue whatever its checklist says, not only a finished one');
+{
+  eq(needsDecision({ type: null, checks: {}, publishedAt: null }), true, 'unclassified and unpublished still needs a decision');
+  eq(needsDecision({ type: 'rental', checks: {}, publishedAt: null }), true, 'classified but nothing checked, and never published');
+  eq(needsDecision({ type: 'rental', checks: { agreement: true, insurance: true, custodian: true, fee: true }, publishedAt: null }),
+    false, 'a fully-checked but never-published row is done via isReady() alone');
+  eq(needsDecision({ type: 'rental', checks: {}, publishedAt: '2026-09-18T12:00:00.000Z' }),
+    false, 'published with an entirely open checklist — the office already decided; it does not sit here waiting on paperwork');
+  eq(needsDecision({ type: null, checks: {}, publishedAt: '2026-09-18T12:00:00.000Z' }),
+    false, 'published with no type at all either — a plain note the office published needs nothing further from this screen');
+}
+
 group('mergeIntakeItems — a brand-new source row is shown unclassified, not dropped');
 {
   const raw = [
@@ -143,6 +155,20 @@ group('queues — "imported" is every Google item whether or not it is ready');
 
   for (const q of QUEUE_TOP) ok(Array.isArray(QUEUE_TITLES[q]) && QUEUE_TITLES[q].length === 2, `${q} has a title and a subtitle`);
   for (const t of TYPE_KEYS) ok(Array.isArray(QUEUE_TITLES[t]), `${t} has queue titles too`);
+}
+
+group('inQueue — "inbox" drops a published row even with an open checklist, unlike "ready"');
+{
+  const items = [
+    { key: 'b:1', sourceKind: 'gym', type: 'rental', checks: {}, publishedAt: null, start: '2026-09-20T00:00:00' },
+    { key: 'b:2', sourceKind: 'gym', type: 'rental', checks: {}, publishedAt: '2026-09-18T09:00:00.000Z', start: '2026-09-21T00:00:00' },
+    { key: 'g:9', sourceKind: 'gcal', type: 'worship', checks: { readings: true, hymns: true, bulletin: true, altarguild: true }, publishedAt: null, start: '2026-09-22T00:00:00' },
+  ];
+  eq(filterQueue(items, 'inbox').length, 1, 'only the unpublished, unfinished rental — the bulk-published one is off the "Needs a decision" queue');
+  eq(filterQueue(items, 'inbox')[0].key, 'b:1');
+  eq(filterQueue(items, 'ready').length, 1, '"Ready" is still checklist-only — the published-but-open rental is not "ready," it is just no longer undecided');
+  eq(filterQueue(items, 'ready')[0].key, 'g:9');
+  eq(filterQueue(items, 'rental').length, 2, 'a type queue is unaffected by any of this — both rentals are still Rental');
 }
 
 group('field and checklist keys are checked against a list before they are used');

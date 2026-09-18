@@ -417,18 +417,26 @@ async function badgeCounts(env, user) {
   return { gym, pages, newsletter, market, eventPerms, intake };
 }
 
-// The one-line answer badgeCounts() needs: how many synced intake rows are
-// not yet ready. Bounded to roughly "upcoming" by the row's own event_date —
-// a row nobody has looked at in months should age out of the badge, not
-// inflate it forever. Uses the SAME openCountOf() the real screen uses, so
-// the two can never disagree about what "not yet ready" means.
+// The one-line answer badgeCounts() needs: how many synced intake rows still
+// need a decision. Bounded to roughly "upcoming" by the row's own
+// event_date — a row nobody has looked at in months should age out of the
+// badge, not inflate it forever. Uses the SAME openCountOf() the real screen
+// uses, so the two can never disagree about what "not yet ready" means.
+//
+// ⚠ A PUBLISHED ROW NEVER COUNTS, EVEN WITH AN OPEN CHECKLIST — the same
+// needsDecision() rule admin/intake.js applies to the "Needs a decision"
+// queue itself. Publish is the office's own decision that a row needs
+// nothing further from this screen; counting it here anyway would leave the
+// badge (and the dashboard tile it feeds) permanently overstating how much
+// is actually still waiting on staff.
 async function intakeOpenCount(env) {
   try {
     const from = churchDatePlus(-3);
     const rows = (await env.DB.prepare(
-      "SELECT event_type, checks_json FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
+      "SELECT event_type, checks_json, published_at FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
     ).bind(from).all()).results || [];
     return rows.filter((r) => {
+      if (r.published_at) return false;
       const checks = r.checks_json ? (JSON.parse(r.checks_json) || {}) : {};
       return openCountOf(r.event_type, checks) !== 0;
     }).length;
