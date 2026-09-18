@@ -223,7 +223,7 @@ const body = `
             <div class="stx-field"><label for="stxEmail">Email</label><input id="stxEmail" type="email" required></div>
             <div class="stx-field"><label for="stxPhone">Phone (optional)</label><input id="stxPhone" type="tel"></div>
           </div>
-          <div class="stx-field"><label for="stxAddr">Street address (optional)</label><input id="stxAddr" type="text"></div>
+          <div class="stx-field"><label for="stxAddr" id="stxAddrLabel">Street address (optional)</label><input id="stxAddr" type="text"></div>
           <div class="stx-row3">
             <div class="stx-field"><label for="stxCity">City</label><input id="stxCity" type="text"></div>
             <div class="stx-field"><label for="stxState">State</label><input id="stxState" type="text" maxlength="2" style="text-transform:uppercase;"></div>
@@ -262,7 +262,7 @@ const body = `
           <button class="stx-cta" id="stxPayBtn" type="submit">Give</button>
         </div>
       </form>
-      <div class="stx-fine">Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, and email are required so a gift can be matched to the right giving record; everything else is optional.</div>
+      <div class="stx-fine" id="stxFine">Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, and email are required so a gift can be matched to the right giving record; everything else is optional.</div>
     </div>
   </div>
 </div>
@@ -461,6 +461,25 @@ const body = `
       document.getElementById('stxExpYear').required = false;
       return;
     }
+    // Stax.js itself requires address_1/city/zip to tokenize a real card here (AVS — see the
+    // tokenize() call's own comment) — confirmed live via a real rejected tokenize() call, not
+    // guessed. Notably childcare-portal's own Stax integration (parent-billing.js) never
+    // collects or sends address fields and works fine — that's very likely an AVS setting on
+    // the myMDO merchant account that isn't set the same way on whatever account/credentials
+    // are behind this giving mockup (a fresh Stax sandbox, not myMDO's sandbox — that one got
+    // overwritten by production per the STAX_GO_LIVE.md history), not something Stax.js
+    // universally requires. Andrew could likely get this back to fully optional by asking Stax
+    // to turn AVS off for this account, matching myMDO's behavior. Until/unless that happens,
+    // demo mode never reaches tokenize() at all so these stay genuinely optional there, but
+    // leaving them optional in real (configured) mode would let a donor reach the Give button
+    // and hit an opaque "could not read the card" failure with no indication address was the
+    // reason — so they're made required only once real Stax.js is in play, mirroring the same
+    // configured-only pattern the expiration fields already use in reverse.
+    document.getElementById('stxAddr').required = true;
+    document.getElementById('stxAddrLabel').textContent = 'Street address';
+    document.getElementById('stxCity').required = true;
+    document.getElementById('stxZip').required = true;
+    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/ZIP are required — the card processor needs the billing address to verify a real card; phone and state are still optional.';
     populateExpYearOnce();
     var s = document.createElement('script');
     s.src = '${STAXJS_URL}';
@@ -529,6 +548,12 @@ const body = `
       // (parent-billing.js's pbStaxTokenizeAndCharge) — Stax.js's sample only shows month/year
       // riding alongside the number/cvv iframes, but the proven production call also always
       // sends these; not including them is a likely reason a tokenize attempt gets rejected.
+      //
+      // address_1/address_city/address_zip/address_country are NOT optional to Stax.js itself —
+      // confirmed live: tokenize() rejects with a logic_error/fieldErrors response naming all
+      // four as required before it will even generate a token (this is AVS, standard for real
+      // card processing, not something this mockup can skip). address_country is hardcoded 'US'
+      // since this church only serves US donors and the form never collects a country.
       staxInstance.tokenize({
         firstname: document.getElementById('stxFirst').value,
         lastname: document.getElementById('stxLast').value,
@@ -536,6 +561,10 @@ const body = `
         validate: true,
         month: document.getElementById('stxExpMonth').value,
         year: document.getElementById('stxExpYear').value,
+        address_1: document.getElementById('stxAddr').value,
+        address_city: document.getElementById('stxCity').value,
+        address_zip: document.getElementById('stxZip').value,
+        address_country: 'US',
       }).then(function(res){
         // Stax.js can RESOLVE without a usable token instead of rejecting — checked explicitly
         // (matching childcare-portal's own paymentMethodId guard) rather than passing a

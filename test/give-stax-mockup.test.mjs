@@ -233,6 +233,33 @@ group('tokenize() sends the fields childcare-portal\'s own live Stax integration
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('tokenize() sends address fields — confirmed live as a genuine Stax.js requirement (AVS)');
+{
+  // Confirmed via a real rejected tokenize() call, not guessed: Stax.js refuses to generate a
+  // token without address_1/address_city/address_zip/address_country, even though
+  // childcare-portal's own tokenize() call never sends them (that's very likely an AVS setting
+  // difference between myMDO's merchant account and whatever account is behind this mockup's
+  // sandbox credentials — see the source comment for the fuller story). address_country is
+  // hardcoded 'US' since this form never collects a country and this church only serves US
+  // donors.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, "address_1: document.getElementById('stxAddr').value", 'tokenize() sends address_1');
+  has(html, "address_city: document.getElementById('stxCity').value", 'tokenize() sends address_city');
+  has(html, "address_zip: document.getElementById('stxZip').value", 'tokenize() sends address_zip');
+  has(html, "address_country: 'US'", 'tokenize() sends a hardcoded US address_country');
+
+  // Real payment requires these — leaving them "(optional)" would let a donor reach Give and
+  // hit an opaque tokenize() failure with no indication address was the reason. Required only
+  // once real Stax.js is in play (demo mode never reaches tokenize() at all).
+  has(html, "document.getElementById('stxAddr').required = true", 'street address becomes required once configured');
+  has(html, "document.getElementById('stxCity').required = true", 'city becomes required once configured');
+  has(html, "document.getElementById('stxZip').required = true", 'ZIP becomes required once configured');
+  has(html, "document.getElementById('stxAddrLabel').textContent = 'Street address'", 'the "(optional)" label is corrected once address is actually required');
+  has(html, 'id="stxAddrLabel"', 'the street address label is addressable so JS can correct its text');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('phone and state format as the donor types, matching what chms normalizes to anyway');
 {
   const res = await get('/stax-mockup');
