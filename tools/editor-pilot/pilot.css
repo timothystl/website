@@ -37,3 +37,19 @@ body.lp-editor{background:#eef1f3}.lp-editor .ed{height:calc(100dvh - 32px);over
 .lp-column img,.lp-column video,.lp-column iframe{max-width:100%}
 .lp-column .tlcb-head,.lp-column .tlcb-body,.lp-end-button{overflow-wrap:anywhere}
 @media(max-width:900px){.lp-editor .ed-paper{width:100%}}
+
+/* Background and card share a row on desktop; content sets the section height. */
+.lp-overlay{display:grid;grid-template-columns:minmax(0,1fr)!important;position:relative;margin:24px 0}
+.lp-overlay>.lp-column{grid-area:1/1;min-width:0}
+.lp-overlay>.lp-column[data-column="0"]{width:100%;align-self:stretch}
+.lp-overlay>.lp-column[data-column="1"]{box-sizing:border-box;width:var(--lp-card-width,40%);align-self:end;justify-self:end;z-index:1;background:var(--lp-card-color,#fff);padding:var(--lp-card-padding,24px);border-radius:var(--lp-card-radius,16px);box-shadow:var(--lp-card-shadow,0 12px 36px #182a3426);margin:24px}
+.lp-overlay--left>.lp-column[data-column="1"]{justify-self:start}
+.lp-overlay--center>.lp-column[data-column="1"]{justify-self:center}
+.lp-overlay--edge{padding-bottom:var(--lp-overlap,64px)}
+.lp-overlay--edge>.lp-column[data-column="1"]{transform:translateY(var(--lp-overlap,64px))}
+.lp-overlay>.lp-column[data-column="1"]>.tlcb{background:transparent}
+@container pilot-page (max-width:760px){
+ .lp-overlay{display:flex;flex-direction:column;padding-bottom:0;gap:16px}
+ .lp-overlay>.lp-column[data-column="1"]{width:100%;margin:0;transform:none;order:1}
+ .lp-overlay>.lp-column[data-column="0"]{order:0}
+}

@@ -45,3 +45,9 @@ Browser checks completed: boot; real block insertion into a column; pointer drag
 Before production adoption, port the metadata validation/rendering to the shared production path, add concurrency/version protection, cover mixed legacy half-width rows with new containers, test actual copies of representative saved pages, and verify real media/shared-data flows. This branch is a reviewable pilot, not authorization to migrate all pages.
 
 Responsive follow-up: verified the saved user draft at desktop (1080px), tablet (620px), and phone (390px) canvas widths. Desktop retained its saved 53/47 proportions; tablet and phone used one column with no horizontal overflow in the layout or image/text grid. No sample reset or content migration was performed.
+
+## Card over background
+
+Select a background block, then choose **Card over background** in Layout & spacing. Use **Add card content** to insert blocks, or drag existing blocks onto that target. Background and card retain their original block IDs and content. Card controls set left/center/right placement, inside/bottom-edge position, overlap, width, padding, color, corners, and shadow. Tablet and phone stack the card below its background at 760px and narrower. Use Section layout to return a group to columns, or Return this block to full width to detach a block.
+
+Verified card insertion and desktop overlap, plus tablet (620px) and phone (390px) stacking without horizontal overflow. Temporary test changes were undone; the existing draft was preserved. Eight model tests now pass, including overlay preservation and validation. This remains local-only.
