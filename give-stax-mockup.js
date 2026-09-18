@@ -464,17 +464,17 @@ const body = `
     // Stax.js itself requires address_1/city/zip to tokenize a real card here (AVS — see the
     // tokenize() call's own comment) — confirmed live via a real rejected tokenize() call, not
     // guessed. Notably childcare-portal's own Stax integration (parent-billing.js) never
-    // collects or sends address fields and works fine — that's very likely an AVS setting on
-    // the myMDO merchant account that isn't set the same way on whatever account/credentials
-    // are behind this giving mockup (a fresh Stax sandbox, not myMDO's sandbox — that one got
-    // overwritten by production per the STAX_GO_LIVE.md history), not something Stax.js
-    // universally requires. Andrew could likely get this back to fully optional by asking Stax
-    // to turn AVS off for this account, matching myMDO's behavior. Until/unless that happens,
-    // demo mode never reaches tokenize() at all so these stay genuinely optional there, but
-    // leaving them optional in real (configured) mode would let a donor reach the Give button
-    // and hit an opaque "could not read the card" failure with no indication address was the
-    // reason — so they're made required only once real Stax.js is in play, mirroring the same
-    // configured-only pattern the expiration fields already use in reverse.
+    // collects or sends address fields and works fine, even though it's the exact same Stax
+    // merchant account as this giving mockup — the difference is environment, not account:
+    // myMDO runs on STAX_ENVIRONMENT=production, while this giving mockup deliberately uses
+    // STAX_SANDBOX_API_KEY. Stax's sandbox mode appears to enforce AVS validation regardless of
+    // how AVS is actually configured on the merchant's production settings, so this requirement
+    // may not apply once (or if) this feature moves to a production Stax key. Until/unless that
+    // happens, demo mode never reaches tokenize() at all so these stay genuinely optional there,
+    // but leaving them optional in real (configured) mode would let a donor reach the Give
+    // button and hit an opaque "could not read the card" failure with no indication address was
+    // the reason — so they're made required only once real Stax.js is in play, mirroring the
+    // same configured-only pattern the expiration fields already use in reverse.
     document.getElementById('stxAddr').required = true;
     document.getElementById('stxAddrLabel').textContent = 'Street address';
     document.getElementById('stxCity').required = true;
