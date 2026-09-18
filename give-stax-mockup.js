@@ -75,6 +75,7 @@ const css = `<style>
   .stx-msg { padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13.5px; }
   .stx-msg.err { background: #FBEAE7; color: #A33B26; }
   .stx-msg.ok  { background: #E9F3E4; color: #3A6B2E; }
+  .stx-err-detail { display: block; margin-top: 6px; font-size: 11.5px; font-family: ui-monospace, Menlo, monospace; opacity: .85; word-break: break-word; }
   .stx-section-label {
     display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
     color: #4A5E3A; margin: 22px 0 10px;
@@ -290,6 +291,28 @@ const body = `
   }
   function clearMsg(){ document.getElementById('stxMsg').innerHTML = ''; }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // Mockup-only: shows Stax.js's actual rejection reason inline instead of a purely generic
+  // message, since this is the only diagnostic a phone tester (no DevTools console) can see.
+  // Stax's fieldErrors describe which field failed validation (e.g. "address_1 is required"),
+  // never card data itself, so surfacing them here is safe.
+  function cardErrorMsg(errOrRes){
+    var base = 'Could not read the card. Please check the expiration date and card number, and try again.';
+    try {
+      if (!errOrRes) return base;
+      var parts = [];
+      if (errOrRes.message) parts.push(String(errOrRes.message));
+      if (Array.isArray(errOrRes.fieldErrors) && errOrRes.fieldErrors.length) {
+        parts.push(errOrRes.fieldErrors.map(function(fe){
+          var field = (fe && (fe.field || fe.name)) || '?';
+          var detail = (fe && (fe.message || fe.error)) || JSON.stringify(fe);
+          return field + ': ' + detail;
+        }).join('; '));
+      }
+      if (!parts.length && errOrRes.code) parts.push(String(errOrRes.code));
+      if (!parts.length) return base;
+      return base + '<br><span class="stx-err-detail">' + esc(parts.join(' — ')) + '</span>';
+    } catch (e) { return base; }
+  }
   function subtotalCents(){
     return gifts.reduce(function(sum, g){ var n = Number(g.amount); return sum + (n > 0 ? Math.round(n * 100) : 0); }, 0);
   }
@@ -570,12 +593,12 @@ const body = `
         // (matching childcare-portal's own paymentMethodId guard) rather than passing a
         // possibly-undefined id on to submit(), which chms would just reject anyway but with a
         // less specific error than this page can give directly.
-        if (!res || !res.id) { reset(); showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false); return; }
+        if (!res || !res.id) { reset(); showMsg(cardErrorMsg(res), false); return; }
         submit(res.id);
       }).catch(function(err){
         console.error('Stax.js tokenize() failed:', err);
         reset();
-        showMsg('Could not read the card. Please check the expiration date and card number, and try again.', false);
+        showMsg(cardErrorMsg(err), false);
       });
     } else {
       submit(null);

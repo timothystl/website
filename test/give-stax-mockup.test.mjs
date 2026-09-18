@@ -260,6 +260,23 @@ group('tokenize() sends address fields — confirmed live as a genuine Stax.js r
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('a rejected tokenize() shows its real reason on-page, not just in the console');
+{
+  // A phone tester has no DevTools console to expand the logged error object, so the generic
+  // "Could not read the card" message alone leaves them stuck with no way to report what's
+  // actually wrong. cardErrorMsg() appends Stax.js's own message/fieldErrors (never card data —
+  // fieldErrors only ever names which field failed, e.g. "address_1 is required") to the shown
+  // message so it's readable directly on the device that hit the failure.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'function cardErrorMsg(errOrRes)', 'defines a helper that turns a Stax.js error/result into a display message');
+  has(html, "showMsg(cardErrorMsg(res), false)", 'a resolved-but-empty tokenize() result is shown via cardErrorMsg, not a bare generic string');
+  has(html, "showMsg(cardErrorMsg(err), false)", 'a rejected tokenize() is shown via cardErrorMsg, not a bare generic string');
+  has(html, 'errOrRes.fieldErrors', 'cardErrorMsg reads fieldErrors off the Stax.js error/result');
+  has(html, "esc(parts.join(' — '))", 'the appended detail is HTML-escaped before being inserted (showMsg uses innerHTML)');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('phone and state format as the donor types, matching what chms normalizes to anyway');
 {
   const res = await get('/stax-mockup');
