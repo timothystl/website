@@ -96,12 +96,23 @@ p:last-child{margin-bottom:0;}
    is unreachable, or nobody has ever opened that screen, the header renders
    exactly as it did before any of this existed. See admin/appearance.js. */
 .nav{position:sticky;top:0;z-index:100;background:var(--nav-bar,var(--sage));border-bottom:3px solid var(--nav-rule,var(--amber));}
-.nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;}
-.nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;}
+.nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;min-height:64px;display:flex;align-items:center;justify-content:space-between;}
+.nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;min-width:0;}
 .nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;}
 .nav-logo-img.is-square{border-radius:var(--r-sm);}
-.nav-brand-name{font-family:var(--font-ui);font-size:calc(17px * var(--tlc-text-scale, 1));font-weight:800;letter-spacing:-.01em;color:var(--nav-ink,white);display:block;}
-.nav-brand-sub{font-family:var(--font-body);font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:300;color:var(--honey);display:block;letter-spacing:.01em;}
+/* ⚠ With every .nav-links item live (the full nine), the header's natural
+   content width and the space .nav-inner's own max-width leaves it come out
+   within a couple of pixels of each other — a real measurement against the
+   deployed page with real fonts loaded, not a guess. That's a coin flip
+   that swings on font-rendering/rounding alone, no matter how wide the
+   browser window gets (max-width caps the room regardless), so the name and
+   tagline must never be allowed to wrap: a wrapped line taller than this
+   row's height is what pushed the header into the hero image below it.
+   min-width:0 here lets the brand block actually shrink below its content's
+   natural size instead of forcing the row to overflow when that happens. */
+.nav-brand > div{min-width:0;}
+.nav-brand-name{font-family:var(--font-ui);font-size:calc(17px * var(--tlc-text-scale, 1));font-weight:800;letter-spacing:-.01em;color:var(--nav-ink,white);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nav-brand-sub{font-family:var(--font-body);font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:300;color:var(--honey);display:block;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
 .nav-links button,.nav-links a{font-family:var(--font-body);font-size:calc(14px * var(--tlc-text-scale, 1));font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);opacity:1;}
