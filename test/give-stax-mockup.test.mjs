@@ -121,6 +121,30 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('the memo field moves to step 1 when an "Other" fund is chosen');
+{
+  // Real bug, caught before shipping: give-stax-mockup.js's body/css/script are one giant
+  // OUTER template literal, so a single backslash written for the INNER (browser-side) regex —
+  // `/\bother\b/i` — gets consumed by the OUTER template literal's own escape processing first.
+  // `\b` there is the JS backspace escape, not two literal characters, so the browser never
+  // actually received the regex source anyone wrote; it got silent control characters instead.
+  // No syntax error at any layer (a raw backspace byte inside a regex literal is valid JS), so
+  // `node --check` and the real-ESM-import check both stay green — the only way to catch it is
+  // asserting on the literal served bytes, which is what this checks. See the existing `\\D` a
+  // few lines below it in source for the correct (already-doubled) precedent this should have
+  // followed from the start.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, '/\\bother\\b/i', 'the Other-fund regex is double-escaped in source so the browser receives literal \\b, not a backspace byte');
+  has(html, 'stxMemoStep1Anchor', 'step 1 has a slot for the memo field to move into');
+  has(html, 'stxMemoStep2Anchor', "step 2 has a slot for the memo field's normal position");
+  has(html, 'id="stxMemoField"', 'the memo field itself is addressable so JS can relocate it');
+  has(html, 'function isOtherFundSelected', 'fund selection is checked against the loaded funds for an "Other" match');
+  has(html, 'function updateMemoPlacement', 'the memo field is moved based on that check');
+  has(html, 'updateMemoPlacement();', 'placement is re-evaluated whenever the total/selection updates');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('the cover-the-fees estimate is a flat percentage, framed as an ask not a fee added on');
 {
   const res = await get('/stax-mockup');
@@ -187,6 +211,25 @@ group('regression: a successful submission must not wipe its own success message
   const goToStepIdx = html.indexOf('goToStep(1);', submitFnStart);
   const showMsgIdx = html.indexOf("showMsg(res.d.demo ? 'Simulated gift recorded", submitFnStart);
   ok(goToStepIdx > -1 && showMsgIdx > -1 && goToStepIdx < showMsgIdx, 'goToStep(1) runs before the success showMsg(), so the message survives');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('tokenize() sends the fields childcare-portal\'s own live Stax integration proved work');
+{
+  // A test card that should work was rejected by Stax.js with no useful reason surfaced. Our
+  // call only sent { month, year } — missing firstname/lastname/method/validate, which
+  // childcare-portal's own proven-in-production tokenize() call always includes
+  // (parent-billing.js's pbStaxTokenizeAndCharge). Also guards against a resolved-but-empty
+  // response (Stax.js can resolve without a usable id instead of rejecting) rather than passing
+  // a possibly-undefined id on to submit().
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, "firstname: document.getElementById('stxFirst').value", 'tokenize() sends firstname');
+  has(html, "lastname: document.getElementById('stxLast').value", 'tokenize() sends lastname');
+  has(html, "method: 'card'", 'tokenize() sends method');
+  has(html, 'validate: true', 'tokenize() sends validate');
+  has(html, 'console.error(\'Stax.js tokenize() failed:\', err)', 'a rejected tokenize() logs the real reason instead of only showing a generic message');
+  has(html, "if (!res || !res.id) {", 'a resolved-but-empty tokenize() result is treated as failure, not passed on to submit()');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
