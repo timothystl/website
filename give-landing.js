@@ -207,7 +207,10 @@ function footerHtml(d) {
 // The document around whatever produced the middle. `css` is whatever that
 // middle needs — this page's own stylesheet on the fallback path, the block
 // engine's on the published path.
-export function renderGiveDocument({ body, css = '', appearance, details, title = 'Give — Timothy Lutheran Church' }) {
+export function renderGiveDocument({
+  body, css = '', appearance, details, title = 'Give — Timothy Lutheran Church',
+  description = 'Support the ministry of Timothy Lutheran Church — give securely online through Tithe.ly, one-time or monthly.',
+}) {
   const a = Object.assign({}, FALLBACK_APPEARANCE, appearance || {});
   const d = Object.assign({}, FALLBACK_DETAILS, details || {});
   return `<!DOCTYPE html>
@@ -216,7 +219,7 @@ export function renderGiveDocument({ body, css = '', appearance, details, title 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
-<meta name="description" content="Support the ministry of Timothy Lutheran Church — give securely online through Tithe.ly, one-time or monthly.">
+<meta name="description" content="${esc(description)}">
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/png" href="/images/favicon-32x32.png">
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">

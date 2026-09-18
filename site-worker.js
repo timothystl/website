@@ -3,6 +3,7 @@
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
 import { renderGiveLandingHtml, renderGiveBlocksHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
+import { renderGiveStaxMockupHtml, applePayDomainPlaceholderResponse } from './give-stax-mockup.js';
 
 // ── PUBLIC PUSH: the site's own service worker ──────────────────
 // The admin's is admin.timothystl.org's own — see SERVICE_WORKER_JS in
@@ -729,6 +730,17 @@ export default {
       // same as on every other hostname.
       if (ASSET_FILE_RE.test(url.pathname)) {
         return withAssetCaching(await env.ASSETS.fetch(request), url.pathname);
+      }
+
+      // Stax Giving MOCKUP (see give-stax-mockup.js) — a sandbox-only prototype alongside the
+      // real Tithe.ly page this branch otherwise serves for every other path. Checked before the
+      // real give page so it never falls through to it. The actual gift/matching logic lives in
+      // the chms repo's Worker; this page's own JS calls it cross-origin.
+      if (url.pathname === '/stax-mockup') {
+        return new Response(renderGiveStaxMockupHtml(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+      }
+      if (url.pathname === '/.well-known/apple-developer-merchantid-domain-association') {
+        return applePayDomainPlaceholderResponse();
       }
 
       const page = await getGivePage();
