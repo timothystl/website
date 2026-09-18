@@ -7,3 +7,33 @@ body.lp-editor{background:#eef1f3}.lp-editor .ed{height:calc(100dvh - 32px);over
 .lp-drag-ghost{position:fixed;z-index:99999;pointer-events:none;background:#2d7376;color:white;padding:12px 18px;border-radius:8px;box-shadow:0 6px 20px #234c5533;font:13px system-ui}.lp-editor .ed-chip,.lp-editor [data-act=move]{touch-action:none}.lp-column .tlcb-media{max-height:340px}.lp-column .tlcb-media img{max-height:340px}.lp-editor .ed-mid,.lp-editor .ed-paper,.lp-editor .tlcb-page{min-width:0}.lp-editor .ed-paper{max-width:100%}.lp-column .tlcb-stack,.lp-column .tlcb-grid{min-width:0}
 .lp-more>summary{padding:14px 0;font:600 13px system-ui;color:#45656e;cursor:pointer}.lp-controls details+details{border-top:1px solid #d7e3e1;margin-top:18px;padding-top:18px}
 @font-face{font-family:'Source Sans 3';src:local('Arial')}@font-face{font-family:'Lora';src:local('Georgia')}.lp-editor .ed-paper{max-width:none}@media(max-width:900px){.lp-editor .ed-paper{max-width:100%}}
+/* Respond to the canvas/column width, not the surrounding desktop window.
+   These rules also apply to the standalone preview. Keep desktop ratios saved. */
+.ed-paper,.preview{container-type:inline-size;container-name:pilot-page}
+.lp-column{container-type:inline-size;container-name:pilot-column}
+@container pilot-page (max-width:760px){
+  .lp-columns{grid-template-columns:minmax(0,1fr)!important;gap:16px}
+  .lp-reverse>.lp-column:first-child{order:2}
+  .lp-divider{display:none}
+  .tlcb-pair,.tlcb-grid,.tlcb-cols,.tlcb-cg-grid,.tlcb-cards,
+  .tlcb-svcs,.tlcb-sermon,.tlcb-layout,.tlcb-kids,.tlcb-band--card,
+  .tlcb-quote,.tlcb-lt,.tlcb-vals,.tlcb-tiles2{grid-template-columns:minmax(0,1fr)!important}
+  .tlcb{--tlcb-pad:18px}
+  .tlcb-side{position:static!important}
+  .tlcb-media{order:0!important}
+  .tlcb-pair>.tlcb--giving{order:-1!important}
+  .lp-stamp{font-size:var(--lp-stamp-mobile)!important}
+}
+@container pilot-column (max-width:520px){
+  .tlcb-grid,.tlcb-cols,.tlcb-cg-grid,.tlcb-cards,.tlcb-svcs,
+  .tlcb-sermon,.tlcb-band--card,.tlcb-quote,.tlcb-lt,
+  .tlcb-vals,.tlcb-tiles2{grid-template-columns:minmax(0,1fr)!important}
+  .tlcb{--tlcb-pad:18px}
+  .tlcb-media{order:0!important}
+  .tlcb-band--card-left .tlcb-band-text{order:0!important}
+  .tlcb-band--card-left .tlcb-card{order:1!important}
+  .tlcb-quote-q{font-size:23px!important}
+}
+.lp-column img,.lp-column video,.lp-column iframe{max-width:100%}
+.lp-column .tlcb-head,.lp-column .tlcb-body,.lp-end-button{overflow-wrap:anywhere}
+@media(max-width:900px){.lp-editor .ed-paper{width:100%}}

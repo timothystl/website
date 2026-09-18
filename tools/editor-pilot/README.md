@@ -15,6 +15,7 @@ Open http://127.0.0.1:4320/pages/foodpantry/edit. The server binds only to loopb
 - Open Insert or a plus between blocks. Drag a tile onto Add here or beside a block; click-to-insert is also available.
 - Drop left/right to form two columns; stack several blocks in either column.
 - Drag the column divider. Its arrow keys and the inspector’s width control are alternatives.
+- Layout columns stack when the canvas is 760px or narrower, including Tablet preview. Image/text and other inner grids also stack inside columns at 520px or narrower. Desktop proportions remain saved; the same rules apply to standalone Preview.
 - Click a block for settings. Outline and Settings are optional; neither occupies space by default.
 - Try stamp shapes, size, mobile size, rotation, position, and scheduled visibility. Existing colors and pulsing remain under More block settings.
 - Choose Before / Now / Finished in Countdown preview. Change the ending message, hide the timer, or supply button text and a destination. Event sources remain the original block fields. The supplied News & Events record is explicitly a sample.
@@ -42,3 +43,5 @@ Passed on Node 22: seven model tests plus the existing 67-assertion TinyMCE asse
 Browser checks completed: boot; real block insertion into a column; pointer drag from picker to column; Undo of drag insertion; pointer and keyboard divider resize; saved draft reload; linked countdown ending; original TinyMCE toolbar; 390px responsive layout (no horizontal overflow). Reset restored the test fixture. No JavaScript errors observed in the completed checks.
 
 Before production adoption, port the metadata validation/rendering to the shared production path, add concurrency/version protection, cover mixed legacy half-width rows with new containers, test actual copies of representative saved pages, and verify real media/shared-data flows. This branch is a reviewable pilot, not authorization to migrate all pages.
+
+Responsive follow-up: verified the saved user draft at desktop (1080px), tablet (620px), and phone (390px) canvas widths. Desktop retained its saved 53/47 proportions; tablet and phone used one column with no horizontal overflow in the layout or image/text grid. No sample reset or content migration was performed.
