@@ -110,6 +110,35 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('regression: Continue must not be silently blocked by hidden step-2 required fields');
+{
+  // Real bug, reported live: clicking Continue did nothing — no error, no advance to step 2.
+  // Root cause was native HTML5 constraint validation. stxForm wraps BOTH steps in one <form>,
+  // and stxFirst/stxLast/stxEmail (required, step 2) start `hidden`. A type="submit" button
+  // click validates the WHOLE form before firing the 'submit' event; the browser found required
+  // fields it could not focus (they're inside a hidden container) and just blocked the submit
+  // outright — no JS ever ran, no message ever showed. formnovalidate on the Continue button
+  // skips native validation for that click specifically (our own JS still validates the gift
+  // fields before advancing); the final Give button keeps native validation, since by then step
+  // 2's required fields are visible and focusable.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  const continueBtn = html.match(/<button[^>]*id="stxContinueBtn"[^>]*>/)[0];
+  const payBtn = html.match(/<button[^>]*id="stxPayBtn"[^>]*>/)[0];
+  has(continueBtn, 'formnovalidate', 'Continue skips native validation of the still-hidden step-2 fields');
+  hasNot(payBtn, 'formnovalidate', 'the final Give button keeps native validation once step 2 is visible');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('a gift defaults to General Fund so picking just an amount is enough to Continue');
+{
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'general fund', 'the client-side default-fund match is case-insensitive against fund names');
+  has(html, "gifts[0] && !gifts[0].fundId", 'only fills in the default when no fund has been picked yet');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('the Apple Pay placeholder names what is missing, not fake verification content');
 {
   const res = await get('/.well-known/apple-developer-merchantid-domain-association');

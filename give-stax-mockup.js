@@ -175,7 +175,7 @@ const body = `
           <label class="stx-section-label">How often</label>
           <div class="stx-freq-row" id="stxFreqRow"></div>
 
-          <button class="stx-cta" id="stxContinueBtn" type="submit">Continue</button>
+          <button class="stx-cta" id="stxContinueBtn" type="submit" formnovalidate>Continue</button>
           <div class="stx-step-caption">You'll enter your details and payment on the next step.</div>
         </div>
 
@@ -353,6 +353,12 @@ const body = `
     funds = d.funds || [];
     if (typeof d.estimatedFeeRate === 'number') feeRate = d.estimatedFeeRate;
     if (typeof d.estimatedFeeFixedCents === 'number') feeFixedCents = d.estimatedFeeFixedCents;
+    // Default the first gift line to General Fund so a donor who only picks an amount chip still
+    // has a valid gift to Continue with — one less required tap, and matches how most donors give.
+    if (gifts[0] && !gifts[0].fundId) {
+      var general = funds.filter(function(f){ return /general fund/i.test(f.name); })[0];
+      if (general) gifts[0].fundId = String(general.id);
+    }
     renderGifts();
     updateTotal();
     if (!configured) {
