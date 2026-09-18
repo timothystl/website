@@ -1484,7 +1484,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-10-1'; // bumped: users.email — needed to map a Cloudflare-Access-verified identity onto an admin account (see payroll-contract-auth.js)
+    const SCHEMA_VERSION = '2026-09-18-1'; // bumped: newsletters.pastor_note_heading — added by 7cf4224 without a version bump, so the ALTER never ran in production and every /api/newsletter/:id fetch 500'd with "no such column: pastor_note_heading" (newsletter detail panels failing to load on /news).
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
