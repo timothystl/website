@@ -15,6 +15,11 @@
 // Connect already owns donor identity and giving records, so this page has no business
 // duplicating that logic. See chms's src/stax-giving-mockup.js corsHeadersFor()/
 // CORS_ALLOWED_ORIGINS for the allowlist that makes the cross-origin calls below work.
+//
+// v3: reworked to a two-column hero layout (per a reference design Andrew shared) and a two-step
+// flow inside one <form> — Step 1 picks amount/fund(s)/frequency, Step 2 collects contact details
+// and payment. Both steps render server-side and are toggled client-side (no page reload, no
+// second network round trip until the real submit), so the API contract with chms is unchanged.
 import { renderGiveDocument, FALLBACK_APPEARANCE, FALLBACK_DETAILS } from './give-landing.js';
 
 // Same host chms's public API is served from — see that repo's connect-worker.js wrangler.toml
@@ -27,19 +32,52 @@ const css = `<style>
     background: #3D2B00; color: #F5D98A; text-align: center; font-weight: 700; font-size: 13px;
     letter-spacing: .02em; padding: 12px 20px;
   }
-  .stx-wrap { background: #FBF8F3; padding: 48px 20px 60px; display: flex; justify-content: center; }
-  .stx-card {
-    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 40px;
-    max-width: 480px; width: 100%; box-shadow: 0 12px 28px -18px rgba(30,45,74,.4);
+  .stx-hero { background: #FBF8F3; padding: 56px 20px 72px; }
+  .stx-hero-inner {
+    max-width: 1080px; margin: 0 auto; display: flex; align-items: flex-start; gap: 56px;
   }
-  .stx-title { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 27px; color: #1E2D4A; text-align: center; }
-  .stx-sub { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 14.5px; color: #2E7EA6; text-align: center; margin-top: 4px; margin-bottom: 28px; }
+  .stx-hero-copy { flex: 1.1; min-width: 0; padding-top: 8px; }
+  .stx-eyebrow {
+    display: block; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+    color: #C9973A; margin-bottom: 14px;
+  }
+  .stx-headline {
+    font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 38px; line-height: 1.18;
+    color: #1E2D4A; margin: 0 0 18px;
+  }
+  .stx-hero-sub { font-size: 16px; line-height: 1.6; color: #3f3d36; max-width: 46ch; margin: 0 0 28px; }
+  .stx-hero-photo {
+    position: relative; border-radius: 14px; overflow: hidden; margin-bottom: 22px;
+    padding-bottom: 62%; background: linear-gradient(135deg, #1E2D4A 0%, #2E7EA6 55%, #4A5E3A 100%);
+    border: 1px dashed rgba(255,255,255,.35);
+  }
+  .stx-hero-photo span {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; color: #FBF8F3; font-size: 12.5px; font-weight: 700;
+    letter-spacing: .03em; text-transform: uppercase; background: rgba(17,30,50,.28);
+  }
+  .stx-other-ways {
+    display: inline-block; font-family: 'Source Sans 3', sans-serif; font-weight: 700; font-size: 14.5px;
+    color: #2E7EA6; text-decoration: none;
+  }
+  .stx-other-ways:hover { text-decoration: underline; }
+  .stx-card {
+    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 34px;
+    max-width: 440px; width: 100%; flex-shrink: 0; box-shadow: 0 12px 28px -18px rgba(30,45,74,.4);
+  }
+  .stx-card-title { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1E2D4A; margin-bottom: 20px; }
+  .stx-back {
+    background: none; border: none; color: #2E7EA6; font-family: 'Source Sans 3', sans-serif;
+    font-weight: 700; font-size: 13px; cursor: pointer; padding: 0 0 18px; text-align: left;
+  }
+  .stx-back:hover { text-decoration: underline; }
+  .stx-step-caption { font-size: 12.5px; color: #6b6a5f; text-align: center; margin-top: 12px; line-height: 1.5; }
   .stx-msg { padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13.5px; }
   .stx-msg.err { background: #FBEAE7; color: #A33B26; }
   .stx-msg.ok  { background: #E9F3E4; color: #3A6B2E; }
   .stx-section-label {
     display: block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-    color: #4A5E3A; margin: 26px 0 10px;
+    color: #4A5E3A; margin: 22px 0 10px;
   }
   .stx-section-label:first-of-type { margin-top: 0; }
   .stx-field { margin-bottom: 14px; }
@@ -72,7 +110,7 @@ const css = `<style>
     background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
   }
   .stx-chip.active { background: #1E2D4A; color: #fff; border-color: #1E2D4A; }
-  .stx-freq-row { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .stx-freq-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
   .stx-freq {
     flex: 1; min-width: 78px; text-align: center; padding: 10px 6px; border-radius: 8px;
     font-size: 12.5px; font-weight: 700; background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
@@ -105,69 +143,93 @@ const css = `<style>
     border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; line-height: 1.5;
   }
   .stx-fine { font-size: 12px; color: #8C8880; text-align: center; margin-top: 18px; line-height: 1.5; }
+  @media (max-width: 860px) {
+    .stx-hero-inner { flex-direction: column; gap: 36px; }
+    .stx-card { max-width: 100%; }
+    .stx-headline { font-size: 30px; }
+  }
 </style>`;
 
 const body = `
 <div class="stx-banner">MOCKUP — sandbox only, no real charges. The real Tithe.ly giving page above is unchanged.</div>
-<div class="stx-wrap">
-  <div class="stx-card">
-    <div class="stx-title">Give</div>
-    <div class="stx-sub">Timothy Lutheran Church &middot; Stax mockup</div>
-    <div id="stxMsg"></div>
-    <form id="stxForm">
-      <label class="stx-section-label">Gift</label>
-      <div id="stxGifts"></div>
-      <button type="button" class="stx-add-gift" id="stxAddGift">+ Add Another Gift</button>
+<div class="stx-hero">
+  <div class="stx-hero-inner">
+    <div class="stx-hero-copy">
+      <span class="stx-eyebrow">Giving at Timothy &middot; Stax mockup</span>
+      <h1 class="stx-headline">Your generosity helps ministry grow.</h1>
+      <p class="stx-hero-sub">Every gift to Timothy Lutheran Church — large or small, one time or ongoing — helps us worship boldly, form disciples, and care for our neighbors in Christ's name. Thank you for giving.</p>
+      <div class="stx-hero-photo" aria-hidden="true"><span>Illustrative photo &mdash; replace with Timothy photography</span></div>
+      <a class="stx-other-ways" href="/">Other ways to give &rarr;</a>
+    </div>
+    <div class="stx-card">
+      <div class="stx-card-title">Make a gift</div>
+      <div id="stxMsg"></div>
+      <form id="stxForm">
+        <div id="stxStep1">
+          <label class="stx-section-label">Amount</label>
+          <div class="stx-chips" id="stxChips"></div>
 
-      <label class="stx-section-label">How often</label>
-      <div class="stx-freq-row" id="stxFreqRow"></div>
+          <div id="stxGifts"></div>
+          <button type="button" class="stx-add-gift" id="stxAddGift">+ Add Another Gift</button>
 
-      <div class="stx-fees-row">
-        <div>
-          <div class="stx-fees-label">Cover the processing fee</div>
-          <div class="stx-fees-amount" id="stxFeeAmount">adds an estimated fee to your total</div>
+          <label class="stx-section-label">How often</label>
+          <div class="stx-freq-row" id="stxFreqRow"></div>
+
+          <button class="stx-cta" id="stxContinueBtn" type="submit">Continue</button>
+          <div class="stx-step-caption">You'll enter your details and payment on the next step.</div>
         </div>
-        <div class="stx-yn" id="stxFeeYn">
-          <button type="button" data-val="0" class="active">No</button>
-          <button type="button" data-val="1">Yes</button>
+
+        <div id="stxStep2" hidden>
+          <button type="button" class="stx-back" id="stxBackBtn">&larr; Back</button>
+
+          <div class="stx-fees-row">
+            <div>
+              <div class="stx-fees-label">Cover the processing fee</div>
+              <div class="stx-fees-amount" id="stxFeeAmount">adds an estimated fee to your total</div>
+            </div>
+            <div class="stx-yn" id="stxFeeYn">
+              <button type="button" data-val="0" class="active">No</button>
+              <button type="button" data-val="1">Yes</button>
+            </div>
+          </div>
+
+          <div class="stx-field"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
+
+          <label class="stx-section-label">Contact details</label>
+          <div class="stx-row2">
+            <div class="stx-field"><label for="stxFirst">First name</label><input id="stxFirst" type="text" required></div>
+            <div class="stx-field"><label for="stxLast">Last name</label><input id="stxLast" type="text" required></div>
+          </div>
+          <div class="stx-row2">
+            <div class="stx-field"><label for="stxEmail">Email</label><input id="stxEmail" type="email" required></div>
+            <div class="stx-field"><label for="stxPhone">Phone (optional)</label><input id="stxPhone" type="tel"></div>
+          </div>
+          <div class="stx-field"><label for="stxAddr">Street address (optional)</label><input id="stxAddr" type="text"></div>
+          <div class="stx-row3">
+            <div class="stx-field"><label for="stxCity">City</label><input id="stxCity" type="text"></div>
+            <div class="stx-field"><label for="stxState">State</label><input id="stxState" type="text" maxlength="2" style="text-transform:uppercase;"></div>
+            <div class="stx-field"><label for="stxZip">ZIP</label><input id="stxZip" type="text" maxlength="10"></div>
+          </div>
+
+          <label class="stx-section-label">Payment</label>
+          <div class="stx-wallets">
+            <div class="stx-wallet-mount" id="stxApplePayMount"></div>
+            <div class="stx-wallet-mount" id="stxGooglePayMount"></div>
+          </div>
+          <div class="stx-field" id="stxCardNumberField">
+            <label>Card number</label>
+            <div class="stx-card-field" id="stxCardNumber" style="height:40px;"></div>
+          </div>
+          <div class="stx-field" id="stxCardCvvField" style="max-width:140px;">
+            <label>CVV</label>
+            <div class="stx-card-field" id="stxCardCvv" style="height:40px;"></div>
+          </div>
+
+          <button class="stx-cta" id="stxPayBtn" type="submit">Give</button>
         </div>
-      </div>
-
-      <div class="stx-field"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
-
-      <label class="stx-section-label">Contact details</label>
-      <div class="stx-row2">
-        <div class="stx-field"><label for="stxFirst">First name</label><input id="stxFirst" type="text" required></div>
-        <div class="stx-field"><label for="stxLast">Last name</label><input id="stxLast" type="text" required></div>
-      </div>
-      <div class="stx-row2">
-        <div class="stx-field"><label for="stxEmail">Email</label><input id="stxEmail" type="email" required></div>
-        <div class="stx-field"><label for="stxPhone">Phone (optional)</label><input id="stxPhone" type="tel"></div>
-      </div>
-      <div class="stx-field"><label for="stxAddr">Street address (optional)</label><input id="stxAddr" type="text"></div>
-      <div class="stx-row3">
-        <div class="stx-field"><label for="stxCity">City</label><input id="stxCity" type="text"></div>
-        <div class="stx-field"><label for="stxState">State</label><input id="stxState" type="text" maxlength="2" style="text-transform:uppercase;"></div>
-        <div class="stx-field"><label for="stxZip">ZIP</label><input id="stxZip" type="text" maxlength="10"></div>
-      </div>
-
-      <label class="stx-section-label">Payment</label>
-      <div class="stx-wallets">
-        <div class="stx-wallet-mount" id="stxApplePayMount"></div>
-        <div class="stx-wallet-mount" id="stxGooglePayMount"></div>
-      </div>
-      <div class="stx-field" id="stxCardNumberField">
-        <label>Card number</label>
-        <div class="stx-card-field" id="stxCardNumber" style="height:40px;"></div>
-      </div>
-      <div class="stx-field" id="stxCardCvvField" style="max-width:140px;">
-        <label>CVV</label>
-        <div class="stx-card-field" id="stxCardCvv" style="height:40px;"></div>
-      </div>
-
-      <button class="stx-cta" id="stxPayBtn" type="submit">Give</button>
-    </form>
-    <div class="stx-fine">Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, and email are required so a gift can be matched to the right giving record; everything else is optional.</div>
+      </form>
+      <div class="stx-fine">Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, and email are required so a gift can be matched to the right giving record; everything else is optional.</div>
+    </div>
   </div>
 </div>
 <script>
@@ -186,10 +248,13 @@ const body = `
     { key: 'monthly', label: 'Monthly' },
   ];
   var freq = '';
+  var CHIP_AMOUNTS = [25, 50, 100, 250];
+  var step = 1;
 
   function showMsg(text, ok){
     document.getElementById('stxMsg').innerHTML = '<div class="stx-msg ' + (ok ? 'ok' : 'err') + '">' + text + '</div>';
   }
+  function clearMsg(){ document.getElementById('stxMsg').innerHTML = ''; }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function subtotalCents(){
     return gifts.reduce(function(sum, g){ var n = Number(g.amount); return sum + (n > 0 ? Math.round(n * 100) : 0); }, 0);
@@ -197,6 +262,21 @@ const body = `
   function feeCents(){ return coverFees ? Math.round(subtotalCents() * feeRate) + feeFixedCents : 0; }
   function totalCents(){ return subtotalCents() + feeCents(); }
   function money(cents){ return '$' + (cents / 100).toFixed(2); }
+
+  function renderChips(){
+    var wrap = document.getElementById('stxChips');
+    var current = Number(gifts[0] && gifts[0].amount);
+    wrap.innerHTML = CHIP_AMOUNTS.map(function(a){
+      return '<div class="stx-chip' + (current === a ? ' active' : '') + '" data-amt="' + a + '">$' + a + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(wrap.children, function(el){
+      el.addEventListener('click', function(){
+        if (!gifts[0]) gifts[0] = { fundId: '', amount: '' };
+        gifts[0].amount = el.dataset.amt;
+        renderGifts(); renderChips(); updateTotal();
+      });
+    });
+  }
 
   function renderFreqRow(){
     var row = document.getElementById('stxFreqRow');
@@ -226,9 +306,9 @@ const body = `
     Array.prototype.forEach.call(wrap.querySelectorAll('.stx-gift-row'), function(row){
       var i = Number(row.dataset.i);
       row.querySelector('.stx-gift-fund').addEventListener('change', function(e){ gifts[i].fundId = e.target.value; updateTotal(); });
-      row.querySelector('.stx-gift-amount').addEventListener('input', function(e){ gifts[i].amount = e.target.value; updateTotal(); });
+      row.querySelector('.stx-gift-amount').addEventListener('input', function(e){ gifts[i].amount = e.target.value; renderChips(); updateTotal(); });
       var rm = row.querySelector('.stx-gift-remove');
-      if (rm) rm.addEventListener('click', function(){ gifts.splice(i, 1); renderGifts(); updateTotal(); });
+      if (rm) rm.addEventListener('click', function(){ gifts.splice(i, 1); renderGifts(); renderChips(); updateTotal(); });
     });
   }
 
@@ -236,9 +316,16 @@ const body = `
     document.getElementById('stxFeeAmount').textContent = coverFees
       ? 'adds ' + money(feeCents()) + ' to your total'
       : 'adds an estimated fee to your total';
-    var btn = document.getElementById('stxPayBtn');
     var t = totalCents();
-    btn.textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
+    document.getElementById('stxContinueBtn').textContent = t > 0 ? ('Continue with ' + money(t)) : 'Continue';
+    document.getElementById('stxPayBtn').textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
+  }
+
+  function goToStep(n){
+    step = n;
+    document.getElementById('stxStep1').hidden = n !== 1;
+    document.getElementById('stxStep2').hidden = n !== 2;
+    clearMsg();
   }
 
   document.getElementById('stxAddGift').addEventListener('click', function(){
@@ -246,6 +333,7 @@ const body = `
     renderGifts();
     updateTotal();
   });
+  document.getElementById('stxBackBtn').addEventListener('click', function(){ goToStep(1); });
   Array.prototype.forEach.call(document.querySelectorAll('#stxFeeYn button'), function(btn){
     btn.addEventListener('click', function(){
       coverFees = btn.dataset.val === '1';
@@ -255,6 +343,7 @@ const body = `
     });
   });
 
+  renderChips();
   renderFreqRow();
   renderGifts();
   updateTotal();
@@ -293,7 +382,14 @@ const body = `
   document.getElementById('stxForm').addEventListener('submit', function(e){
     e.preventDefault();
     var validGifts = gifts.filter(function(g){ return g.fundId && Number(g.amount) > 0; });
-    if (!validGifts.length) { showMsg('Choose a fund and an amount for at least one gift.', false); return; }
+
+    if (step === 1) {
+      if (!validGifts.length) { showMsg('Choose a fund and an amount for at least one gift.', false); return; }
+      goToStep(2);
+      return;
+    }
+
+    if (!validGifts.length) { showMsg('Choose a fund and an amount for at least one gift.', false); goToStep(1); return; }
 
     var payBtn = document.getElementById('stxPayBtn');
     var payBtnLabel = payBtn.textContent;
@@ -326,7 +422,7 @@ const body = `
           showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
           document.getElementById('stxForm').reset();
           gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
-          renderGifts(); renderFreqRow(); updateTotal();
+          renderGifts(); renderChips(); renderFreqRow(); updateTotal(); goToStep(1);
         }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
     }
 

@@ -78,6 +78,38 @@ group('the v2 redesign: multi-fund gifts, contact fields, frequency, fee coverag
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('the v3 redesign: two-column hero layout and a two-step flow');
+{
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'stx-hero', 'uses the two-column hero layout');
+  has(html, 'stx-headline', 'has a serif hero headline');
+  has(html, 'Illustrative photo', 'marks the photo slot as a placeholder, not a fabricated real photo');
+  hasNot(html, 'stx-hero-photo" aria-hidden="true"><img', 'does not fabricate an actual <img> for the photo placeholder');
+  has(html, 'Make a gift', 'the card is titled like the reference design');
+
+  has(html, 'id="stxStep1"', 'step 1 (amount/fund/frequency) is present');
+  has(html, 'id="stxStep2"', 'step 2 (contact/payment) is present');
+  has(html, '<div id="stxStep2" hidden>', 'step 2 starts hidden — it is reached via Continue, not shown up front');
+  has(html, 'stxContinueBtn', 'step 1 ends in a Continue action');
+  has(html, "You'll enter your details and payment on the next step.", 'step 1 sets the expectation that contact/payment come next');
+  has(html, 'stxBackBtn', 'step 2 offers a way back to step 1');
+
+  // Contact fields and payment must still live inside step 2's markup (not dropped), even though
+  // step 2 is hidden until Continue is pressed.
+  const step2Match = html.match(/<div id="stxStep2"[^>]*>[\s\S]*?<\/form>/);
+  ok(!!step2Match, 'step 2 markup block is present');
+  has(step2Match[0], 'stxFirst', 'contact fields live inside step 2');
+  has(step2Match[0], 'stxCardNumber', 'payment fields live inside step 2');
+
+  // Multi-fund gifts remain a step-1 concern (chosen before contact/payment).
+  const step1Match = html.match(/<div id="stxStep1">[\s\S]*?<\/div>\s*<div id="stxStep2"/);
+  ok(!!step1Match, 'step 1 markup block is present');
+  has(step1Match[0], 'stxAddGift', 'multi-fund "Add Another Gift" stays in step 1');
+  has(step1Match[0], 'stxChips', 'step 1 offers quick amount chips');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('the Apple Pay placeholder names what is missing, not fake verification content');
 {
   const res = await get('/.well-known/apple-developer-merchantid-domain-association');
