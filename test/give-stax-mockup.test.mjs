@@ -49,6 +49,35 @@ group('the mockup page is clearly labeled and never mentions Tithe.ly');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('the v2 redesign: multi-fund gifts, contact fields, frequency, fee coverage');
+{
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'stxAddGift', 'has an "Add Another Gift" control for multi-fund gifts');
+  has(html, 'gifts:', 'submits a gifts array (not a single fund_id/amount pair) to chms');
+  has(html, 'stxFirst', 'collects first name separately');
+  has(html, 'stxLast', 'collects last name separately');
+  has(html, 'payer_first_name', 'posts payer_first_name to chms');
+  has(html, 'payer_last_name', 'posts payer_last_name to chms');
+  has(html, 'stxAddr', 'collects a street address (optional matching signal)');
+  // The frequency row itself is built client-side from the FREQS array (see stxFreqRow), not
+  // present as static server-rendered HTML — assert on the JS source, not the markup.
+  has(html, 'Bi-weekly', 'offers the bi-weekly frequency');
+  has(html, '1st & 15th', "offers the 1st & 15th frequency (Tithe.ly's own term for it)");
+  has(html, 'biweekly', 'sends the biweekly interval value chms expects');
+  has(html, 'twice_monthly', 'sends the twice_monthly interval value chms expects');
+  has(html, 'cover_fees', 'submits a cover_fees flag');
+  has(html, 'stxMemo', 'has a memo field');
+  // Required vs optional: per the completion-rate research this mockup's docs cite, only
+  // first/last/email are marked required — phone and address are not, even though they help
+  // matching. required="" is how a browser-serialized boolean attribute with no value renders.
+  const firstField = html.match(/<input id="stxFirst"[^>]*>/)[0];
+  const phoneField = html.match(/<input id="stxPhone"[^>]*>/)[0];
+  has(firstField, 'required', 'first name is required');
+  hasNot(phoneField, 'required', 'phone is NOT required');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('the Apple Pay placeholder names what is missing, not fake verification content');
 {
   const res = await get('/.well-known/apple-developer-merchantid-domain-association');
