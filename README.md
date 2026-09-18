@@ -15,4 +15,5 @@ Start with [AGENTS.md](AGENTS.md). Current references:
 - [Website-to-Connect recovery](docs/CHMS_FORWARD_RECOVERY.md)
 
 A merge or push to `main` automatically deploys all three production Workers. Treat every merge as
-a production release requiring explicit approval.
+a production release: complete the applicable checks and verify deployment under AGENTS.md,
+without a repeated approval question.

@@ -4,7 +4,7 @@ Production has three Cloudflare Workers:
 
 - `timothystl-site` (`site-worker.js` plus `public/`) serves the public site and giving landing.
 - `tlc-newsletter-admin` (`website-admin-worker.js`) serves Website Admin, binds D1
-  `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding `CONNECT_WORKER` to `tlc-chms`,
+  `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding `CONNECT_WORKER` to `timothy-connect`,
   and runs scheduled-page promotion every 15 minutes.
 - `tlc-links` (`tlc-links-worker.js`) serves the utility links surface.
 
