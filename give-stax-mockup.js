@@ -573,20 +573,34 @@ const body = `
       // riding alongside the number/cvv iframes, but the proven production call also always
       // sends these; not including them is a likely reason a tokenize attempt gets rejected.
       //
-      // address_1/address_city/address_zip/address_country are NOT optional to Stax.js itself —
-      // confirmed live: tokenize() rejects with a logic_error/fieldErrors response naming all
-      // four as required before it will even generate a token (this is AVS, standard for real
-      // card processing, not something this mockup can skip). address_country is hardcoded 'US'
+      // address_1/address_city/address_state are conditionally required by Stax.js itself —
+      // confirmed against Stax's own tokenize() field reference
+      // (docs.staxpayments.com/docs/tokenize-a-card-on-your-website), not guessed: each of those
+      // three is documented as "Required if customer_id is not passed into details", and
+      // address_zip is separately required whenever the merchant account has AVS configured to
+      // check the zip code. This is also the confirmed (not speculated) answer to why
+      // childcare-portal's own Stax integration (parent-billing.js's pbStaxTokenizeAndCharge)
+      // never collects or sends any address field and still works fine in production: its
+      // tokenize() call always passes customer_id (every family gets a real Stax Customer
+      // created up front via create-stax-charge's /customer call) plus match_customer: true, and
+      // Stax's docs state that supplying customer_id makes it ignore "certain customer fields,
+      // such as firstname, lastname, phone, all address fields, etc." — not a different Stax
+      // account, and not a sandbox-vs-production difference. This giving mockup tokenizes
+      // anonymously (no persisted Stax customer per donor), so that exemption never applies
+      // here, and the address fields are genuinely required. address_country is hardcoded 'US'
       // since this church only serves US donors and the form never collects a country.
       //
-      // address_state is also required — confirmed live a second time: once the four fields
-      // above were added, a real tokenize() attempt still failed, this time with fieldErrors
-      // naming address_country as "must be exactly 2 characters" even though it's hardcoded to
-      // the 2-character 'US'. address_state was the one address field never sent at all (it was
-      // only ever forwarded to chms as payer_state, never to Stax.js), and Stax's validator
-      // appears to cross-check state against country as a pair — a missing state throws off that
-      // pairing and surfaces as a country-length error instead of a clearer "state is required"
-      // one. Sending the existing (already-collected) state field resolves it.
+      // Confirmed live: leaving address_state unset (it was collected in the form but never
+      // actually sent to Stax.js) makes the validator reject with a fieldErrors entry naming
+      // address_country as invalid length rather than address_state — a confusing but real quirk
+      // in how Stax attributes that specific validation failure, not a real address_country
+      // problem (it's always the valid 2-character 'US' here).
+      //
+      // A cleaner long-term fix would give this mockup its own chms-side Stax customer per donor
+      // (matched/created by email, mirroring create-stax-charge's family-level customer) so
+      // tokenize() could pass customer_id + match_customer and drop the address fields entirely,
+      // matching myMDO's friction. Not done here — that's a real scope decision (new donor
+      // identity/customer-matching logic in chms), not a comment-only fix.
       staxInstance.tokenize({
         firstname: document.getElementById('stxFirst').value,
         lastname: document.getElementById('stxLast').value,
