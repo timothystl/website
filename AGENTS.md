@@ -1,93 +1,77 @@
 # Timothy Church Website — Agent Instructions
 
-This is the only AI startup instruction file for this repository. Claude reads it through
-`CLAUDE.md`; Codex reads it directly. Do not preload or survey other Markdown files. Open a
-reference document only when the current task specifically requires it, and treat dated
-status claims as historical until verified against code, tests, GitHub, and live behavior.
+Updated September 18, 2026, at Andrew's request to remove unnecessary approval and incremental-work restrictions.
 
-## Product boundary
+## Working agreement
 
-This repository owns the public church website and Website Admin: pages, navigation,
-newsletters, calendar, public forms, Christmas Market, gym rentals, public giving links,
-and the existing payroll surface. It does not own Connect people/giving records or myMDO.
-Payroll remains here until a separately approved Finance migration is built and reconciled.
+Andrew's request authorizes the implementation, tests, documentation, commits, PR merge, and
+routine deployment needed to finish that request. This applies equally to Codex, Claude, and
+other agents. Carry the work through to a usable result; do not stop at a draft PR or ask again
+for approval already given. Follow an explicit review-only, no-deploy, or other scope limit.
 
-Production is three Cloudflare Workers:
+Deliver a coherent feature or fix in a sensible batch. Do not manufacture tiny increments,
+separate approvals for each file, numbered preparation gates, or evidence packets. Split work
+only when dependencies, rollback risk, or a real product decision justify it. Update useful
+documentation when behavior or ownership changes; normal commits and PRs are the work record.
 
-- `timothystl-site` from `site-worker.js` and `public/`;
-- `tlc-newsletter-admin` from `website-admin-worker.js`, using D1
-  `tlc-newsletter-db`, R2 `tlc-news-images`, and service binding
-  `CONNECT_WORKER`; and
-- `tlc-links` from `tlc-links-worker.js`.
+Ask only when a material decision is missing, the work would expand the requested scope, or an
+action would destroy data, irreversibly affect people, or create a new financial commitment
+not already authorized. Complete independent work while that decision is pending. A routine
+production release is not, by itself, a reason to ask. Do not send real messages or initiate
+real charges merely to test an application.
 
-## Non-negotiable rules
+Preserve unrelated work and shared history. Use a branch/worktree as useful, inspect concurrent
+changes, and resolve routine conflicts. Do not force-push or reset someone else's work.
+Current code, configuration, tests, and observed deployments outrank dated prose.
 
-- Current code, automated tests, deployed configuration, and observed live behavior outrank
-  prose documentation.
-- Preserve unrelated user work. Do not reset, rebase, or rewrite shared history casually.
-- Search for callers, routes, tests, and live dependencies before deleting code or data paths.
+## Verification and reporting
 
-Automatic merging of Claude's branches and pull requests is back on once npm test and the built-scripts check pass. Merging to main never deploys by itself — deployment stays the separate, manual, explicitly-approved step below.
-Claude Code may dispatch production deployments through .github/workflows/deploy.yml without asking first, supplying the exact approved main commit SHA being released and a real release reason for the audit trail.
-Preserve unrelated concurrent work. Do not reset, rebase, force-push, or overwrite shared history. Use a branch or disposable worktree.
-Use Node 22. Run npm test and node .github/scripts/check-built-scripts.js before merge. Add focused tests for the changed path and verify regression tests are non-vacuous.
-Current code and live evidence outrank documentation. Search callers and tests before removing routes, schema, configuration keys, or compatibility paths.
+Match verification to the change. Run meaningful tests for changed behavior and required CI;
+do not invent tests or rebuild applications solely for Markdown edits. For documentation-only
+work, review the diff, validate links and factual claims, and let applicable CI run.
+For releases, confirm the deployed revision and relevant checks. Report what shipped and any
+material limitation honestly; a green build is not proof of data migration or user acceptance.
 
-## Public-page architecture
+## Documentation policy
 
-- Published page blocks are authoritative. The Site Worker edge-renders the initial page body;
-  client navigation uses the same published-block rendering path.
-- `/api/pages?chrome=1` supplies global chrome without every page body.
-  `/api/pages?id=<pageId>` supplies one client-fetched body when edge rendering did not.
-- The website block-editor cleanup known as Phases A–D is complete for the verified published
-  pages. Recheck live publishing state before relying on old page counts.
-- Newsletter `ministry_content` and `ministry_type` may be write-only. Decide whether to render
-  or retire them; do not silently remove them.
+This is the current agent policy; `CLAUDE.md` imports it. Read only task-relevant references.
+Older approval language in plans, runbooks, comments, and archived evidence is superseded by
+this working agreement. Keep useful technical procedures and data protections, but do not
+revive retired preparation gates, waived baselines, or repeated release signoffs.
+The current overhaul status is maintained in
+[the architecture plan](https://github.com/timothystl/digital-architecture/blob/main/architecture/11-overhaul-readiness-and-execution-plan.md).
+Keep durable instructions here and detailed progress there.
 
-## Editor rule
+## Runtime and ownership
 
-TinyMCE is self-hosted from the vendored files under `admin/vendor/tinymce/`. The cloud
-subscription has lapsed. Do not add a TinyMCE Cloud API key, cloud script, paid editor load,
-or CDN dependency. After editor or vendor-asset changes, run the TinyMCE asset tests and the
-self-hosted browser boot test.
+This repository owns public pages, Website Admin, newsletters, calendar, public forms,
+Christmas Market, gym rentals, giving presentation, and the current payroll backend.
+Connect owns people/Giving; myMDO owns childcare. A Finance payroll relay does not move ownership.
 
-## Validation
+Production has three Workers:
+- `timothystl-site`: `site-worker.js` and `public/`, configured by `wrangler-site.toml`.
+- `tlc-newsletter-admin`: `website-admin-worker.js`, D1 `tlc-newsletter-db`, R2
+  `tlc-news-images`, and `CONNECT_WORKER` targeting `timothy-connect`; `wrangler.toml`.
+- `tlc-links`: `tlc-links-worker.js`, configured by `wrangler-links.toml`.
 
-Use Node 22. Before proposing a merge, mirror the applicable GitHub checks:
+Published page blocks are authoritative. Edge rendering and client navigation use the same
+published-block path. Chrome and page-body requests are separate. Preserve publish/cache
+invalidation and partial-failure handling. Check callers before removing old data fields.
 
-```bash
-for f in admin/*.js; do node --check "$f"; done
-for f in admin/*.test.mjs; do node "$f"; done
-node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs
-node test/site-taps.test.mjs
-node test/site-edge-render.test.mjs
-node test/site-404.test.mjs
-node test/site-admin-timeout.test.mjs
-node test/links-page.test.mjs
-node test/give-page.test.mjs
-```
+TinyMCE is self-hosted under `admin/vendor/tinymce/`. Keep it self-hosted; do not introduce a
+paid cloud dependency. Preserve server authorization and confidential form/payroll records.
+Sending a real newsletter is a communication action, not a deployment smoke test.
 
-Run the focused Playwright suite for the surface changed. `test/public-page.test.mjs` is the
-required browser gate for edge/client page ownership. Use `test/tinymce-selfhost.test.mjs`
-after TinyMCE changes. A test claim must be non-vacuous: confirm it exercises the intended
-path and would fail on the regression.
+## Tests and releases
 
-## Timothy Digital overhaul checkpoint
+Use Node 22 and the applicable suites in `.github/workflows/test.yml` and
+`docs/TESTING.md`. The workflow syntax-checks/imports modules, runs Admin/Worker suites,
+and runs the public-page browser gate. Use focused browser checks for the changed surface;
+editor changes also need the TinyMCE asset and self-hosted boot checks.
+Do not use Connect's nonexistent-in-this-repo built-scripts command as a release requirement.
 
-Andrew retired the old preparation-gate/implementation-phase ceremony on September 9, 2026. The
-current plan is a plain task list in the private `digital-architecture` repository's
-`architecture/11-overhaul-readiness-and-execution-plan.md` — read it before starting overhaul work
-here. In short: Finance becomes its own application (out of `chms`); shared staff login across
-Website/Connect/Finance/myMDO; code normalized and legacy-named resources renamed to match current
-scope; real developer documentation; and better observability. None of these are gated behind each
-other. Website D1 and R2 recovery tooling exists; both workflows succeeded September 11, 2026.
-See docs/OPERATIONS.md for evidence. A restore drill does not itself prove retained backup custody.
-The CONNECT_WORKER service target is now timothy-connect; its September 15 deployment succeeded.
-
-## Documentation discipline
-
-`CLAUDE.md` only imports this file. Other Markdown files are historical evidence, plans,
-handoffs, manuals, security backlogs, or legal notices—not startup instructions and not
-parallel sources of truth. Preserve third-party licenses. Put durable rules here, decisions
-in a concise ADR when needed, tasks in the issue tracker, and implementation history in Git.
-Keep this file below 200 lines and update the checkpoint when overhaul status materially changes.
+Every push to main triggers `.github/workflows/deploy.yml`, deploying Site, Admin, and Links.
+A version job may increment the Admin patch version, redeploy Admin, and push a skip-CI commit.
+Merge completed work after applicable checks and verify that automatic release; no extra
+permission is needed merely because a merge deploys. For Markdown-only changes, the same
+automatic workflow may run, but do not add a manual redeploy or version bump.
