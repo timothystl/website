@@ -501,8 +501,9 @@ const body = `
     document.getElementById('stxAddr').required = true;
     document.getElementById('stxAddrLabel').textContent = 'Street address';
     document.getElementById('stxCity').required = true;
+    document.getElementById('stxState').required = true;
     document.getElementById('stxZip').required = true;
-    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/ZIP are required — the card processor needs the billing address to verify a real card; phone and state are still optional.';
+    document.getElementById('stxFine').textContent = 'Apple Pay appears here automatically once this domain is registered with Stax. First name, last name, email, and street address/city/state/ZIP are required — the card processor needs the billing address to verify a real card; phone is still optional.';
     populateExpYearOnce();
     var s = document.createElement('script');
     s.src = '${STAXJS_URL}';
@@ -577,6 +578,15 @@ const body = `
       // four as required before it will even generate a token (this is AVS, standard for real
       // card processing, not something this mockup can skip). address_country is hardcoded 'US'
       // since this church only serves US donors and the form never collects a country.
+      //
+      // address_state is also required — confirmed live a second time: once the four fields
+      // above were added, a real tokenize() attempt still failed, this time with fieldErrors
+      // naming address_country as "must be exactly 2 characters" even though it's hardcoded to
+      // the 2-character 'US'. address_state was the one address field never sent at all (it was
+      // only ever forwarded to chms as payer_state, never to Stax.js), and Stax's validator
+      // appears to cross-check state against country as a pair — a missing state throws off that
+      // pairing and surfaces as a country-length error instead of a clearer "state is required"
+      // one. Sending the existing (already-collected) state field resolves it.
       staxInstance.tokenize({
         firstname: document.getElementById('stxFirst').value,
         lastname: document.getElementById('stxLast').value,
@@ -586,6 +596,7 @@ const body = `
         year: document.getElementById('stxExpYear').value,
         address_1: document.getElementById('stxAddr').value,
         address_city: document.getElementById('stxCity').value,
+        address_state: document.getElementById('stxState').value,
         address_zip: document.getElementById('stxZip').value,
         address_country: 'US',
       }).then(function(res){

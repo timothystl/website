@@ -246,6 +246,7 @@ group('tokenize() sends address fields — confirmed live as a genuine Stax.js r
   const html = await res.text();
   has(html, "address_1: document.getElementById('stxAddr').value", 'tokenize() sends address_1');
   has(html, "address_city: document.getElementById('stxCity').value", 'tokenize() sends address_city');
+  has(html, "address_state: document.getElementById('stxState').value", 'tokenize() sends address_state');
   has(html, "address_zip: document.getElementById('stxZip').value", 'tokenize() sends address_zip');
   has(html, "address_country: 'US'", 'tokenize() sends a hardcoded US address_country');
 
@@ -254,6 +255,7 @@ group('tokenize() sends address fields — confirmed live as a genuine Stax.js r
   // once real Stax.js is in play (demo mode never reaches tokenize() at all).
   has(html, "document.getElementById('stxAddr').required = true", 'street address becomes required once configured');
   has(html, "document.getElementById('stxCity').required = true", 'city becomes required once configured');
+  has(html, "document.getElementById('stxState').required = true", 'state becomes required once configured');
   has(html, "document.getElementById('stxZip').required = true", 'ZIP becomes required once configured');
   has(html, "document.getElementById('stxAddrLabel').textContent = 'Street address'", 'the "(optional)" label is corrected once address is actually required');
   has(html, 'id="stxAddrLabel"', 'the street address label is addressable so JS can correct its text');
