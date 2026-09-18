@@ -7556,5 +7556,30 @@ group('retiring a newsletter field does not erase old issues');
   eq(row.ministry_type, 'text', 'and neither is its stored type');
 }
 
+
+group('Food Pantry visual editor: real drafts, preview, publish and conflict protection');
+{
+ const {db,env}=await boot();const {cookie}=signIn(db);
+ const postJson=(path,body)=>worker.fetch(new Request('https://admin.timothystl.org'+path,{method:'POST',headers:{cookie,origin:'https://admin.timothystl.org','Content-Type':'application/json'},body:JSON.stringify(body)}),env,{waitUntil:()=>{}});
+ const edit=await call(env,'/pages/foodpantry/edit',{cookie});const source=await edit.text();
+ has(source,'Preview draft','Food Pantry gets visual editor');lacks(source,'LOCAL PILOT','production has no local reset controls');
+ const legacy=await (await call(env,'/pages/home/edit',{cookie})).text();lacks(legacy,'lpBoot','other pages keep existing editor');
+ const initial=await (await call(env,'/pages/api/page/foodpantry',{cookie})).json();const original=initial.page.blocks;
+ const blocks=structuredClone(original);blocks[0].pilot={layout:{group:'visual-test',column:0,mode:'overlay',offsetX:35}};
+ blocks[1].pilot={layout:{group:'visual-test',column:1,mode:'overlay',offsetX:35}};
+ const liveBefore=db.prepare('SELECT published_blocks FROM pages WHERE id=?').get('foodpantry').published_blocks;
+ let res=await postJson('/pages/api/page/foodpantry/draft',{blocks,expected_updated_at:initial.page.updated_at});eq(res.status,200,'real draft save accepts metadata');const saved=await res.json();
+ eq(db.prepare('SELECT published_blocks FROM pages WHERE id=?').get('foodpantry').published_blocks,liveBefore,'draft save never changes live');
+ res=await postJson('/pages/api/page/foodpantry/draft',{blocks:original,expected_updated_at:initial.page.updated_at});eq(res.status,409,'stale tab cannot overwrite');
+ const reopened=await (await call(env,'/pages/api/page/foodpantry',{cookie})).json();eq(reopened.page.blocks[0].pilot.layout.offsetX,35,'design survives reload');eq(JSON.stringify(reopened.page.blocks.map(({pilot,...b})=>b)),JSON.stringify(original),'all original block content survives');
+ const preview=await call(env,'/pages/foodpantry/preview',{cookie});eq(preview.status,200,'authenticated preview works');has(await preview.text(),'lp-overlay','preview renders real saved layout');eq(preview.headers.get('cache-control'),'no-store','draft preview is private');
+ const outsider=signIn(db,['pages_edit_own'],'other-ministry');eq((await call(env,'/pages/foodpantry/preview',{cookie:outsider.cookie})).status,403,'preview enforces ownership');
+ res=await postJson('/pages/api/page/foodpantry/draft',{blocks:[...blocks,blocks[0]],expected_updated_at:saved.saved_at});eq(res.status,400,'duplicate blocks rejected without dropping content');
+ res=await postJson('/pages/api/page/foodpantry/publish',{blocks:reopened.page.blocks,expected_updated_at:saved.saved_at});eq(res.status,200,'real publish succeeds');const published=await res.json();
+ const publicData=await (await call(env,'/api/pages?id=foodpantry',{fresh:true})).json();has(publicData.rendered.foodpantry,'lp-overlay','public API shares visual renderer');
+ res=await postJson('/pages/api/page/foodpantry/publish',{blocks:original,expected_updated_at:saved.saved_at});eq(res.status,409,'stale publish rejected');
+ const revisions=db.prepare('SELECT blocks FROM page_revisions WHERE page_id=? ORDER BY id DESC').all('foodpantry');ok(revisions.length>0&&JSON.parse(revisions[0].blocks)[0].pilot,'published revision preserves layout');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

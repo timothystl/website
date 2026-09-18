@@ -1,3 +1,5 @@
+import {VISUAL_EDITOR_JS,VISUAL_EDITOR_CSS} from './visual-editor.js';
+import {VISUAL_CSS,VISUAL_RUNTIME} from './visual-assets.js';
 // Page-tree logic shared by the admin screens, the editor and the public API.
 // Pure functions over plain rows — no D1, no Request — so the rules that decide
 // what staff see (what counts as a draft, what order the list is in, what a
@@ -763,6 +765,17 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     return new Response('', { status: 302, headers: { Location: `/pages/${id}/edit?tab=page` } });
   }
 
+  // Private draft preview; same renderer and ownership rules, no write.
+  if (/^\/pages\/[^/]+\/preview$/.test(path) && method === 'GET') {
+    const id=decodeURIComponent(path.split('/')[2]);
+    const row=await env.DB.prepare('SELECT * FROM pages WHERE id = ?').bind(id).first();
+    if(!row)return new Response('Not found',{status:404});
+    if(!owns(row))return denied();
+    const blocks=sanitizeBlocks(parseBlocks(row.blocks));
+    const markup=renderPage(blocks,{editing:false,slug:id,withCss:true,data:await editorShared.editorPageData(env,editorShared.ctx),...await editorShared.pageLayoutContext(env,'/pages/api',id)});
+    return new Response('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Draft preview — '+escapeHtml(row.title)+'</title><style>body{margin:0;background:#fbf8f3}.draft-preview{max-width:1080px;margin:auto}nav{padding:16px;background:#e8efec;font:14px system-ui}</style></head><body><nav>Draft preview · Not published · <a href="/pages/'+encodeURIComponent(id)+'/edit">Back to editor</a></nav><main class="draft-preview">'+markup.replace(/(src|poster)="\/images\//g,'$1="https://timothystl.org/images/')+'</main></body></html>',{headers:EDITOR_HEADERS});
+  }
+
   // ── The editor screen ──
   // Same shell as the ministry editor; it works out from its own address
   // which API to talk to. Nothing about a page is baked into the HTML.
@@ -771,10 +784,12 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     const exists = await env.DB.prepare('SELECT id, owner_username FROM pages WHERE id = ?').bind(id).first();
     if (!exists) return new Response('', { status: 302, headers: { Location: '/pages' } });
     if (!owns(exists)) return denied();
-    return new Response(editorShared.MINISTRY_EDITOR_HTML
+    const visual = id === 'foodpantry';
+    const source = visual ? editorShared.MINISTRY_EDITOR_HTML.replace('paletteOpen: true','paletteOpen: false').replace('desktop: 900','desktop: 1080').replace('boot();',VISUAL_EDITOR_JS+'\nboot().then(lpBoot);') : editorShared.MINISTRY_EDITOR_HTML;
+    return new Response(source
       .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
       .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
-      .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD), { headers: EDITOR_HEADERS });
+      .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD+(visual?'<style>'+VISUAL_CSS+VISUAL_EDITOR_CSS+'</style><script>'+VISUAL_RUNTIME+'</script>':'')), { headers: EDITOR_HEADERS });
   }
 
   // ── The editor's API ──
@@ -935,6 +950,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
       const blocks = sanitizeBlocks(parseBlocks(after.blocks));
       return jsonResponse({
         ok: true,
+        saved_at: after.updated_at,
         page: pageSettings(after),
         pages: orderPages(siblings).map((p) => ({
           id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
@@ -966,6 +982,13 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     // clamping is a courtesy, this is the control.
     if (action === '/draft' && method === 'POST') {
       const body = await request.json().catch(() => ({}));
+      const guarded = body.expected_updated_at !== undefined || parseBlocks(row.blocks).some(b=>b.pilot) || (Array.isArray(body.blocks)&&body.blocks.some(b=>b.pilot));
+      if(guarded && body.expected_updated_at !== (row.updated_at || ''))return jsonResponse({error:'This page changed in another tab. Reload before saving; nothing was overwritten.'},409);
+      if(guarded && body.blocks!==undefined){
+        const input=body.blocks,ids=new Set();
+        if(!Array.isArray(input)||input.length>120||input.some(b=>!b||!BLOCK_DEFS[b.type]||!b.id||ids.has(b.id)||!ids.add(b.id)))return jsonResponse({error:'Invalid or duplicate blocks. Nothing was saved.'},400);
+      }
+
       const blocks = sanitizeBlocks(body.blocks);
       // Locked blocks belong to the site's design rather than to the page.
       // A ministry leader can edit around one but cannot remove it, so a
@@ -977,8 +1000,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
       }
       const changes = (Array.isArray(body.changes) ? body.changes : []).slice(0, 24).map((c) => String(c).slice(0, 160));
       const nowIso = new Date().toISOString();
-      await env.DB.prepare('UPDATE pages SET blocks = ?, change_log = ?, updated_at = ?, updated_by = ? WHERE id = ?')
-        .bind(JSON.stringify(blocks), JSON.stringify(changes), nowIso, currentUser?.username || '', pageId).run();
+      const saved = await env.DB.prepare('UPDATE pages SET blocks = ?, change_log = ?, updated_at = ?, updated_by = ? WHERE id = ?'+(guarded?" AND COALESCE(updated_at,'') = ?":''))
+        .bind(JSON.stringify(blocks), JSON.stringify(changes), nowIso, currentUser?.username || '', pageId,...(guarded?[body.expected_updated_at]:[])).run();
+      if(guarded&&!saved.meta?.changes)return jsonResponse({error:'This page changed while saving. Reload before trying again.'},409);
       const after = Object.assign({}, row, { blocks: JSON.stringify(blocks) });
       return jsonResponse({ ok: true, saved_at: nowIso, status: pageEditorStatus(after), blocks });
     }
@@ -987,6 +1011,13 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     // snapshot goes into the revision log so it can be rolled back.
     if (action === '/publish' && method === 'POST') {
       const body = await request.json().catch(() => ({}));
+      const guarded = body.expected_updated_at !== undefined || parseBlocks(row.blocks).some(b=>b.pilot) || (Array.isArray(body.blocks)&&body.blocks.some(b=>b.pilot));
+      if(guarded && body.expected_updated_at !== (row.updated_at || ''))return jsonResponse({error:'This page changed in another tab. Reload before saving; nothing was overwritten.'},409);
+      if(guarded && body.blocks!==undefined){
+        const input=body.blocks,ids=new Set();
+        if(!Array.isArray(input)||input.length>120||input.some(b=>!b||!BLOCK_DEFS[b.type]||!b.id||ids.has(b.id)||!ids.add(b.id)))return jsonResponse({error:'Invalid or duplicate blocks. Nothing was saved.'},400);
+      }
+
       const blocks = sanitizeBlocks(body.blocks && body.blocks.length ? body.blocks : parseBlocks(row.blocks));
       // ⚠ THE ACTUAL GUARD, NOT JUST THE DISABLED BUTTON. Prayer and
       // Contact may publish only while their real, spam-screened form
@@ -1000,9 +1031,10 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
       }
       const json = JSON.stringify(blocks);
       const nowIso = new Date().toISOString();
-      await env.DB.prepare(
-        "UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published', publish_at = NULL, change_log = '[]', updated_at = ?, updated_by = ? WHERE id = ?"
-      ).bind(json, json, nowIso, currentUser?.username || '', pageId).run();
+      const saved = await env.DB.prepare(
+        "UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published', publish_at = NULL, change_log = '[]', updated_at = ?, updated_by = ? WHERE id = ?"+(guarded?" AND COALESCE(updated_at,'') = ?":'')
+      ).bind(json, json, nowIso, currentUser?.username || '', pageId,...(guarded?[body.expected_updated_at]:[])).run();
+      if(guarded&&!saved.meta?.changes)return jsonResponse({error:'This page changed while publishing. Reload before trying again.'},409);
       await env.DB.prepare('INSERT INTO page_revisions (page_id, blocks, note, created_at, created_by) VALUES (?, ?, ?, ?, ?)')
         .bind(pageId, json, 'Published', nowIso, currentUser?.username || 'staff').run();
       await logAudit(env.DB, currentUser, 'publish', 'page', pageId, row.title, null, { blocks: blocks.length });
@@ -1069,10 +1101,11 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
         .bind(Number(body.id) || 0, pageId).first();
       if (!rev) return jsonResponse({ error: 'Not found' }, 404);
       const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
+      const restoredAt = new Date().toISOString();
       await env.DB.prepare('UPDATE pages SET blocks = ?, updated_at = ? WHERE id = ?')
-        .bind(JSON.stringify(blocks), new Date().toISOString(), pageId).run();
+        .bind(JSON.stringify(blocks), restoredAt, pageId).run();
       return jsonResponse({
-        ok: true, blocks,
+        ok: true, blocks, saved_at: restoredAt,
         html: renderPage(blocks, Object.assign({
           editing: true, slug: row.id, withCss: true, data: await editorShared.editorPageData(env, editorShared.ctx),
         }, await editorShared.pageLayoutContext(env, '/pages/api', row.id))),

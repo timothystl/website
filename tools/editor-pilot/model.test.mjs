@@ -7,3 +7,16 @@ test('layout envelope preserves all block content and renders every ID exactly o
 test('reject unknown and duplicate blocks rather than silently discarding content',()=>{assert.throws(()=>cleanBlocks([{type:'future-block'}]));const b=newBlock('text');assert.throws(()=>cleanBlocks([b,b]))});
 test('countdown URLs are sanitized; source references remain untouched',()=>{const b=newBlock('countdown',{newsId:'42'});b.pilot={countdown:{ending:'button',url:'javascript:alert(1)',buttonText:'Next',duration:90}};const saved=cleanBlocks([b])[0];assert.equal(saved.newsId,b.newsId);assert.equal(saved.pilot.countdown.url,'');assert.equal(saved.pilot.countdown.duration,90);});
 test('fine layout and stamp values are bounded and valid linked buttons persist',()=>{const p=cleanPilot({head:999,stamp:{size:90,x:-3},countdown:{url:'https://timothystl.org/foodpantry',newTab:true}});assert.equal(p.head,80);assert.equal(p.stamp.size,30);assert.equal(p.stamp.x,0);assert.equal(p.countdown.url,'https://timothystl.org/foodpantry');assert.equal(p.countdown.newTab,true);});
+test('overlay save/reopen preserves background and card blocks without duplication',()=>{
+ const before=sanitizeBlocks(PAGE_SEEDS.foodpantry),bs=structuredClone(before);
+ for(let i=0;i<2;i++)bs[i].pilot={layout:{group:'overlay',column:i,mode:'overlay',position:'left',placement:'edge',overlap:80,cardWidth:45,cardColor:'#ffffff'}};
+ const saved=cleanBlocks(JSON.parse(JSON.stringify(bs))),html=renderPilot(saved);
+ assert.deepEqual(saved.map(({pilot,...b})=>b),before);
+ for(const b of before)assert.equal(html.split('data-id="'+b.id+'"').length-1,1);
+ assert.match(html,/lp-overlay--left lp-overlay--edge/);assert.match(html,/Add card content/);
+ assert.doesNotMatch(html,/class="lp-divider"/);
+ const preview=renderPilot(saved,{editing:false});assert.doesNotMatch(preview,/Add card content/);
+ const p=cleanPilot({layout:{mode:'overlay',overlap:999,cardColor:'red;position:fixed'}});
+ assert.equal(p.layout.overlap,160);assert.equal(p.layout.cardColor,'#ffffff');
+});
+test('card offsets persist and remain bounded',()=>{const p=cleanPilot({layout:{group:'card',mode:'overlay',offsetX:-90,offsetY:40}});assert.equal(p.layout.offsetX,-90);assert.equal(p.layout.offsetY,40);const bounded=cleanPilot({layout:{offsetX:9999,offsetY:-9999}});assert.equal(bounded.layout.offsetX,500);assert.equal(bounded.layout.offsetY,-400)});

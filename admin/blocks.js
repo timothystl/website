@@ -1,3 +1,6 @@
+import {cleanVisualDesign} from './visual-design.js';
+import {visualParts} from './visual-layout.js';
+import {VISUAL_CSS,VISUAL_SCRIPT} from './visual-assets.js';
 // ── MINISTRY PAGE BLOCKS — the single shared renderer ────────────────────────
 //
 // A ministry page is an ordered array of typed blocks. This module owns:
@@ -2241,6 +2244,7 @@ export function sanitizeBlock(b) {
       url: safeUrl(raw && raw.url).slice(0, 600),
     }));
   }
+  if (b.pilot && typeof b.pilot === 'object') out.pilot = cleanVisualDesign(b.pilot, safeUrl);
   return out;
 }
 
@@ -6712,6 +6716,11 @@ export function renderBlock(b, opts = {}) {
       <button type="button" class="tlcb-tool" data-act="hide">${b.hidden ? 'Show' : 'Hide'}</button>
       <button type="button" class="tlcb-tool tlcb-tool--del" data-act="del">Delete</button>
     </div><span class="tlcb-badge" contenteditable="false">${esc(def.label)}</span>` : '';
+  const design = b.pilot ? cleanVisualDesign(b.pilot,safeUrl) : null;
+  if(design?.stamp)for(const key of ['from','until']){const v=design.stamp[key];if(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v))design.stamp[key+'Instant']=churchInstant(v.slice(0,10),v.slice(11,16));}
+  const designAttr=design?` data-visual-design="${esc(JSON.stringify(design))}"${opts.editing?'':` data-id="${esc(b.id)}"`}`:'';
+  let designStyle='';
+  if(design){for(const [key,css] of [['spaceAbove','space-above'],['spaceBelow','space-below'],['head','head'],['body','body']])if(design[key]!=null)designStyle+=`;--tlcb-${css}:${design[key]}px`;if(design.head!=null)designStyle+=`;--tlcb-hero:${design.head}px`;if(design.line)designStyle+=`;--visual-line:${design.line}`;}
   const inner = renderInner(b, opts);
   // ⚠ A block that renders nothing renders NOTHING — not an empty wrapper.
   // The wrapper carries the block's background and its spacing, so an empty
@@ -6724,7 +6733,7 @@ export function renderBlock(b, opts = {}) {
   // every block in the rail — a block you cannot select is a block you cannot
   // delete.
   if (!inner && !opts.editing) return '';
-  return `<div class="${classes.join(' ')}"${idAttr} style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${inner}</div>`;
+  return `<div class="${classes.join(' ')}"${idAttr} style="${wrapperVars(b)}${designStyle}"${attrs}${designAttr}>${tools}${renderStamp(opts, b)}${inner}</div>`;
 }
 
 // The sidebar template's right-hand column. Reads the one site-settings record,
@@ -6917,7 +6926,8 @@ export function renderPage(blocks, opts = {}) {
   // block reads them today — its automatic mode IS the page's own section
   // list — but the alternative was a second, parallel pass over the list that
   // could disagree with the one that renders it.
-  const parts = pairHalves(list, Object.assign({}, opts, { siblings: list }));
+  const parts = list.some(b=>b.pilot?.layout?.group) ? visualParts(list,opts,{renderBlock,pairHalves,safeUrl,esc}) : pairHalves(list, Object.assign({}, opts, { siblings: list }));
+  const visualExtra = list.some(b=>b.pilot) ? '<style>'+VISUAL_CSS+'</style>'+(!opts.editing?VISUAL_SCRIPT:'') : '';
   const empty = !total && opts.editing
     ? `<div class="tlcb-empty"><b>This page is empty</b><span>Drag a block up from the panel below to begin.</span></div>`
     : '';
@@ -6925,6 +6935,6 @@ export function renderPage(blocks, opts = {}) {
   // No template named means a ministry page, which has always been a bare
   // column with the full-bleed class applied by the caller. Left exactly as it
   // was so converting ministry pages to `pages` rows can happen on its own.
-  if (!opts.template) return css + `<div class="tlcb-page"${pageFontVars(opts)}>` + parts.join('') + empty + `</div>`;
-  return css + wrapTemplate(opts.template, parts, Object.assign({}, opts, { blocks: list, empty }));
+  if (!opts.template) return css + `<div class="tlcb-page"${pageFontVars(opts)}>` + parts.join('') + empty + `</div>` + visualExtra;
+  return css + wrapTemplate(opts.template, parts, Object.assign({}, opts, { blocks: list, empty })) + visualExtra;
 }
