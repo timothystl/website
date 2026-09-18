@@ -4495,20 +4495,44 @@ const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
       if (isNaN(d)) return '';
       return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     }
+    // The truncated preview (the note paragraph on a card, "Read this
+    // letter" on both a card and a collapsed-month row) makes sense only
+    // while the full letter is NOT showing underneath it — reported
+    // directly: opening a letter "leaves the preview" instead of the full
+    // letter replacing it. item is the shared ancestor of the preview bits
+    // and the .tlcb-nl-full panel for both markups (card() and row()
+    // above), so one function toggles both without caring which it is.
+    // NO BACKTICKS IN THIS COMMENT OR ANY OTHER — see the note above this
+    // script's own declaration.
+    function setOpen(item, isOpen, link) {
+      if (!item) return;
+      var note = item.querySelector('.tlcb-nl-note');
+      if (note) note.hidden = isOpen;
+      if (link && link.classList.contains('tlcb-nl-link')) {
+        link.textContent = isOpen ? 'Hide this letter' : 'Read this letter';
+      }
+    }
     function closeAll(except) {
       var open = document.querySelectorAll('.tlcb-nl-full:not([hidden])');
-      for (var i = 0; i < open.length; i++) if (open[i] !== except) open[i].hidden = true;
+      for (var i = 0; i < open.length; i++) {
+        if (open[i] === except) continue;
+        open[i].hidden = true;
+        var item = open[i].parentElement;
+        setOpen(item, false, item ? item.querySelector('.tlcb-nl-toggle') : null);
+      }
     }
     document.addEventListener('click', function (e) {
       var t = e.target.closest ? e.target.closest('.tlcb-nl-toggle') : null;
       if (!t) return;
       e.preventDefault();
       var id = t.getAttribute('data-nl-id');
-      var panel = t.parentElement ? t.parentElement.querySelector('.tlcb-nl-full') : null;
+      var item = t.parentElement;
+      var panel = item ? item.querySelector('.tlcb-nl-full') : null;
       if (!id || !panel) return;
-      if (!panel.hidden) { panel.hidden = true; return; }
+      if (!panel.hidden) { panel.hidden = true; setOpen(item, false, t); return; }
       closeAll(panel);
       panel.hidden = false;
+      setOpen(item, true, t);
       if (panel.getAttribute('data-loaded')) return;
       panel.innerHTML = '<p class="tlcb-note">Loading&#8230;</p>';
       fetch('https://admin.timothystl.org/api/newsletter/' + id).then(function (r) {

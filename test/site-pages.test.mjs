@@ -376,6 +376,7 @@ group('a newsletter reads in place, without leaving the page — and never in an
   // real navigation — the same check that pins the click never reloads.
   await page.evaluate(() => { window.__stayedInPlace = true; });
   eq(await page.locator('#tlc-nl-overlay').count(), 0, 'no overlay exists in the document before the click');
+  eq(await page.locator('.tlcb-nl-note').isVisible(), true, 'the truncated preview shows before the letter is opened');
   await page.click('.tlcb-nl-link');
   // ⚠ A fixed sleep here is exactly the kind of flake this suite otherwise
   // avoids — the script awaits a real fetch, and how long that takes
@@ -393,10 +394,22 @@ group('a newsletter reads in place, without leaving the page — and never in an
   ok(!panelText.includes('&rsquo;') && !panelText.includes('&amp;'), 'and nothing is left double-escaped');
   eq(new URL(page.url()).pathname, '/news', 'the address stays put — this is an in-page panel, not a navigated view');
 
+  // Reported directly, alongside the overlay complaint above: opening the
+  // letter "leaves the preview" showing underneath the full text instead of
+  // replacing it. The truncated note is redundant once the real thing is on
+  // screen, so it hides, and the link's own label says what clicking it does
+  // next rather than reading "Read this letter" while the letter is already open.
+  eq(await page.locator('.tlcb-nl-note').isVisible(), false,
+    'the truncated preview hides once the full letter is showing, so the two never appear together');
+  eq((await page.locator('.tlcb-nl-link').innerText()).trim(), 'Hide this letter',
+    'and the toggle label flips to say what clicking it will do now');
+
   // Clicking again closes the very panel it opened.
   await page.click('.tlcb-nl-link');
   await page.waitForTimeout(150);
   eq(await page.locator('.tlcb-nl-full').isVisible(), false, 'a second click on the same letter closes it');
+  eq(await page.locator('.tlcb-nl-note').isVisible(), true, 'and closing it brings the truncated preview back');
+  eq((await page.locator('.tlcb-nl-link').innerText()).trim(), 'Read this letter', 'with the label back to its original wording');
   await ctx.close();
 }
 
