@@ -24,15 +24,14 @@ Production is three Cloudflare Workers:
 
 - Current code, automated tests, deployed configuration, and observed live behavior outrank
   prose documentation.
-- Never expose credentials or personal, giving, payroll, renter, vendor, or payment data.
-- Do not change production, migrations, authentication, data ownership, DNS, Worker bindings,
-  or payment behavior without Andrew's explicit approval for that operation.
-- A push or merge to `main` automatically deploys all three production Workers. Treat merging
-  as a production release. Work on a branch, require green PR checks, and obtain explicit
-  release approval before merge.
 - Preserve unrelated user work. Do not reset, rebase, or rewrite shared history casually.
 - Search for callers, routes, tests, and live dependencies before deleting code or data paths.
-- Documentation statements such as “done,” “safe,” or “deployed” are leads, not proof.
+
+Automatic merging of Claude's branches and pull requests is back on once npm test and the built-scripts check pass. Merging to main never deploys by itself — deployment stays the separate, manual, explicitly-approved step below.
+Claude Code may dispatch production deployments through .github/workflows/deploy.yml without asking first, supplying the exact approved main commit SHA being released and a real release reason for the audit trail.
+Preserve unrelated concurrent work. Do not reset, rebase, force-push, or overwrite shared history. Use a branch or disposable worktree.
+Use Node 22. Run npm test and node .github/scripts/check-built-scripts.js before merge. Add focused tests for the changed path and verify regression tests are non-vacuous.
+Current code and live evidence outrank documentation. Search callers and tests before removing routes, schema, configuration keys, or compatibility paths.
 
 ## Public-page architecture
 
@@ -42,12 +41,8 @@ Production is three Cloudflare Workers:
   `/api/pages?id=<pageId>` supplies one client-fetched body when edge rendering did not.
 - The website block-editor cleanup known as Phases A–D is complete for the verified published
   pages. Recheck live publishing state before relying on old page counts.
-- Do not delete or repoint the remaining staff-facing `/ministries/edit/:slug` and
-  `/ministries/editor/:slug` routes without a product decision. Their public read path is gone,
-  but staff usage and possible content migration remain unresolved.
 - Newsletter `ministry_content` and `ministry_type` may be write-only. Decide whether to render
   or retire them; do not silently remove them.
-- Reverify the Contact page's published form and live behavior before removing any fallback.
 
 ## Editor rule
 
