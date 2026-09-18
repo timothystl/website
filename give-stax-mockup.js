@@ -30,9 +30,9 @@ const STAXJS_URL = 'https://staxjs.staxpayments.com/staxjs-captcha.js';
 const css = `<style>
   .stx-banner {
     background: #3D2B00; color: #F5D98A; text-align: center; font-weight: 700; font-size: 13px;
-    letter-spacing: .02em; padding: 12px 20px;
+    letter-spacing: .02em; padding: 9px 20px;
   }
-  .stx-hero { background: #FBF8F3; padding: 56px 20px 72px; }
+  .stx-hero { background: #FBF8F3; padding: 44px 20px 72px; }
   .stx-hero-inner {
     max-width: 1080px; margin: 0 auto; display: flex; align-items: flex-start; gap: 56px;
   }
@@ -62,10 +62,10 @@ const css = `<style>
   }
   .stx-other-ways:hover { text-decoration: underline; }
   .stx-card {
-    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 34px;
+    background: #fff; border: 1px solid #DDE3ED; border-radius: 14px; padding: 26px;
     max-width: 440px; width: 100%; flex-shrink: 0; box-shadow: 0 12px 28px -18px rgba(30,45,74,.4);
   }
-  .stx-card-title { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1E2D4A; margin-bottom: 20px; }
+  .stx-card-title { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1E2D4A; margin-bottom: 12px; }
   .stx-back {
     background: none; border: none; color: #2E7EA6; font-family: 'Source Sans 3', sans-serif;
     font-weight: 700; font-size: 13px; cursor: pointer; padding: 0 0 18px; text-align: left;
@@ -143,6 +143,17 @@ const css = `<style>
     border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; line-height: 1.5;
   }
   .stx-fine { font-size: 12px; color: #8C8880; text-align: center; margin-top: 18px; line-height: 1.5; }
+  /* Step 2 (contact + payment) packs a lot of fields into one card — tightened deliberately so it
+     fits without scrolling on a normal screen, unlike step 1's more relaxed amount/fund spacing. */
+  #stxStep2 .stx-back { padding-bottom: 4px; }
+  #stxStep2 .stx-section-label { margin: 8px 0 4px; }
+  #stxStep2 .stx-section-label:first-of-type { margin-top: 0; }
+  #stxStep2 .stx-field { margin-bottom: 4px; }
+  #stxStep2 .stx-field label { margin-bottom: 3px; }
+  #stxStep2 .stx-field select, #stxStep2 .stx-field input { padding: 7px 12px; }
+  #stxStep2 .stx-row2, #stxStep2 .stx-row3 { gap: 8px; }
+  #stxStep2 .stx-card-field { margin-bottom: 6px; }
+  #stxStep2 .stx-cta { margin-top: 2px; padding: 13px 16px; }
   @media (max-width: 860px) {
     .stx-hero-inner { flex-direction: column; gap: 36px; }
     .stx-card { max-width: 100%; }
@@ -175,13 +186,6 @@ const body = `
           <label class="stx-section-label">How often</label>
           <div class="stx-freq-row" id="stxFreqRow"></div>
 
-          <button class="stx-cta" id="stxContinueBtn" type="submit" formnovalidate>Continue</button>
-          <div class="stx-step-caption">You'll enter your details and payment on the next step.</div>
-        </div>
-
-        <div id="stxStep2" hidden>
-          <button type="button" class="stx-back" id="stxBackBtn">&larr; Back</button>
-
           <div class="stx-fees-row">
             <div>
               <div class="stx-fees-label">Cover the processing fee</div>
@@ -192,6 +196,13 @@ const body = `
               <button type="button" data-val="1">Yes</button>
             </div>
           </div>
+
+          <button class="stx-cta" id="stxContinueBtn" type="submit" formnovalidate>Continue</button>
+          <div class="stx-step-caption">You'll enter your details and payment on the next step.</div>
+        </div>
+
+        <div id="stxStep2" hidden>
+          <button type="button" class="stx-back" id="stxBackBtn">&larr; Back</button>
 
           <div class="stx-field"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
 
@@ -212,7 +223,7 @@ const body = `
           </div>
 
           <label class="stx-section-label">Payment</label>
-          <div class="stx-wallets">
+          <div class="stx-wallets" hidden>
             <div class="stx-wallet-mount" id="stxApplePayMount"></div>
             <div class="stx-wallet-mount" id="stxGooglePayMount"></div>
           </div>

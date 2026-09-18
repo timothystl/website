@@ -107,6 +107,17 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
   ok(!!step1Match, 'step 1 markup block is present');
   has(step1Match[0], 'stxAddGift', 'multi-fund "Add Another Gift" stays in step 1');
   has(step1Match[0], 'stxChips', 'step 1 offers quick amount chips');
+
+  // Moved per Andrew's request: cover-the-fees belongs on the amount/fund/frequency step, not
+  // buried behind Continue — a donor should see the fee tradeoff before committing to advance.
+  has(step1Match[0], 'stx-fees-row', 'the cover-the-fees toggle now lives in step 1');
+  hasNot(step2Match[0], 'stx-fees-row', 'the cover-the-fees toggle is no longer duplicated in step 2');
+
+  // Apple/Google Pay were never actually wired to mount into these divs (no JS ever populates
+  // them) — reserving visible empty space for a payment method that can't appear yet just wastes
+  // room on a step Andrew wants to fit without scrolling. Hidden until real wallet support lands.
+  const walletsRow = html.match(/<div class="stx-wallets"[^>]*>/)[0];
+  has(walletsRow, 'hidden', 'the empty Apple/Google Pay placeholder row stays hidden until wired up');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
