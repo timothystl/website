@@ -574,8 +574,8 @@ const body = `
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
-      // customer_id + match_customer are what exempt tokenize() from Stax's own address/AVS
-      // requirement — confirmed against Stax's own tokenize() field reference
+      // customer_id is what exempts tokenize() from Stax's own address/AVS requirement —
+      // confirmed against Stax's own tokenize() field reference
       // (docs.staxpayments.com/docs/tokenize-a-card-on-your-website): address_1/address_city/
       // address_state are each documented as "Required if customer_id is not passed into
       // details". This is also the confirmed (not guessed) answer to why childcare-portal's own
@@ -584,6 +584,17 @@ const body = `
       // /stax-customer (chms) mirrors that here — reusing a matched donor's existing customer id
       // or creating a fresh one — so this call gets the same exemption, and address fields stay
       // genuinely optional, matching demo mode.
+      //
+      // match_customer deliberately NOT sent alongside customer_id — confirmed live: adding
+      // customer_id (this same session) started a "Store not found" (404) rejection inside
+      // tokenize() that never happened before. Stax's own docs say customer_id already skips
+      // matching/creating a customer on its own ("a new customer will not be created or matched
+      // based on values"), so match_customer should be redundant once customer_id is set;
+      // dropping it is the cheapest test of whether it was routing tokenize() through a
+      // different internal path this sandbox store isn't fully provisioned for. If "Store not
+      // found" persists without it, the cause is elsewhere (Stax-side sandbox store
+      // provisioning for customer-linked tokenization) and this mockup may need to fall back to
+      // the address-required path, or Stax support may need to enable it for this store.
       fetch(CHMS_API + '/stax-customer', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -611,7 +622,6 @@ const body = `
             month: document.getElementById('stxExpMonth').value,
             year: document.getElementById('stxExpYear').value,
             customer_id: custRes.d.customerId,
-            match_customer: true,
           }).then(function(res){
             // Stax.js can RESOLVE without a usable token instead of rejecting — checked
             // explicitly (matching childcare-portal's own paymentMethodId guard) rather than
