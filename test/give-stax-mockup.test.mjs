@@ -67,7 +67,8 @@ group('the v2 redesign: multi-fund gifts, contact fields, frequency, fee coverag
   has(html, 'biweekly', 'sends the biweekly interval value chms expects');
   has(html, 'twice_monthly', 'sends the twice_monthly interval value chms expects');
   has(html, 'cover_fees', 'submits a cover_fees flag');
-  has(html, 'stxMemo', 'has a memo field');
+  // Removed per Andrew's request — a memo/"in memory of" field is not part of this form anymore.
+  hasNot(html, 'stxMemo', 'has no memo field');
   // Required vs optional: per the completion-rate research this mockup's docs cite, only
   // first/last/email are marked required — phone and address are not, even though they help
   // matching. required="" is how a browser-serialized boolean attribute with no value renders.
@@ -106,7 +107,7 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
   const step1Match = html.match(/<div id="stxStep1">[\s\S]*?<\/div>\s*<div id="stxStep2"/);
   ok(!!step1Match, 'step 1 markup block is present');
   has(step1Match[0], 'stxAddGift', 'multi-fund "Add Another Gift" stays in step 1');
-  has(step1Match[0], 'stxChips', 'step 1 offers quick amount chips');
+  has(step1Match[0], 'stxGifts', 'step 1 renders the gift rows, each carrying its own quick-amount chips (client-rendered, see the "every gift row" group below)');
 
   // Moved per Andrew's request: cover-the-fees belongs on the amount/fund/frequency step, not
   // buried behind Continue — a donor should see the fee tradeoff before committing to advance.
@@ -121,27 +122,19 @@ group('the v3 redesign: two-column hero layout and a two-step flow');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-group('the memo field moves to step 1 when an "Other" fund is chosen');
+group('every gift row gets its own quick-amount chips, not just the first');
 {
-  // Real bug, caught before shipping: give-stax-mockup.js's body/css/script are one giant
-  // OUTER template literal, so a single backslash written for the INNER (browser-side) regex —
-  // `/\bother\b/i` — gets consumed by the OUTER template literal's own escape processing first.
-  // `\b` there is the JS backspace escape, not two literal characters, so the browser never
-  // actually received the regex source anyone wrote; it got silent control characters instead.
-  // No syntax error at any layer (a raw backspace byte inside a regex literal is valid JS), so
-  // `node --check` and the real-ESM-import check both stay green — the only way to catch it is
-  // asserting on the literal served bytes, which is what this checks. See the existing `\\D` a
-  // few lines below it in source for the correct (already-doubled) precedent this should have
-  // followed from the start.
+  // Real gap reported live: only the first gift line had preset amount chips ($25/$50/$100/
+  // $250) — a shared #stxChips row above the list, wired to only ever write gifts[0].amount.
+  // Adding a second/third gift via "+ Add Another Gift" left it with nothing but a bare $
+  // input. renderGifts() now builds a chips row per gift line, from the same CHIP_AMOUNTS list.
   const res = await get('/stax-mockup');
   const html = await res.text();
-  has(html, '/\\bother\\b/i', 'the Other-fund regex is double-escaped in source so the browser receives literal \\b, not a backspace byte');
-  has(html, 'stxMemoStep1Anchor', 'step 1 has a slot for the memo field to move into');
-  has(html, 'stxMemoStep2Anchor', "step 2 has a slot for the memo field's normal position");
-  has(html, 'id="stxMemoField"', 'the memo field itself is addressable so JS can relocate it');
-  has(html, 'function isOtherFundSelected', 'fund selection is checked against the loaded funds for an "Other" match');
-  has(html, 'function updateMemoPlacement', 'the memo field is moved based on that check');
-  has(html, 'updateMemoPlacement();', 'placement is re-evaluated whenever the total/selection updates');
+  has(html, 'function chipsHtml(currentAmount)', 'defines a chip-row renderer that takes an amount, not a hardcoded gifts[0] reference');
+  has(html, 'stx-gift-block', 'each gift line is wrapped in its own block that can carry its own chips');
+  has(html, 'chipsHtml(g.amount)', 'every gift row (the map over `gifts`, not just index 0) renders its own chips');
+  has(html, 'function syncChipActiveState(i)', 'typing an amount updates that row\'s own chip highlighting without losing focus on the input');
+  hasNot(html, 'id="stxChips"', 'no single shared chip row exists anymore — every gift line has its own');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

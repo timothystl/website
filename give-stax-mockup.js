@@ -98,7 +98,8 @@ const css = `<style>
      element (like stxExpCvvRow in demo mode) would set the DOM property but the element would
      still render as a grid. */
   .stx-row2[hidden], .stx-row3[hidden] { display: none; }
-  .stx-gift-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+  .stx-gift-block { margin-bottom: 14px; }
+  .stx-gift-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
   .stx-gift-row .stx-field { flex: 1; margin-bottom: 0; }
   .stx-gift-remove {
     flex-shrink: 0; width: 40px; height: 42px; margin-top: 0; border-radius: 9px; border: 1px solid #DDE3ED;
@@ -110,9 +111,11 @@ const css = `<style>
     font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 0 18px; text-align: left;
   }
   .stx-add-gift:hover { text-decoration: underline; }
-  .stx-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+  /* Lives inside each .stx-gift-block now, not as one shared row above the list — real gap
+     reported live: a second/third gift line had no preset amounts at all, only a bare $ input. */
+  .stx-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
   .stx-chip {
-    border-radius: 8px; font-size: 15px; font-weight: 700; text-align: center; padding: 11px 0;
+    border-radius: 7px; font-size: 13px; font-weight: 700; text-align: center; padding: 7px 0;
     background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED; cursor: pointer;
   }
   .stx-chip.active { background: #1E2D4A; color: #fff; border-color: #1E2D4A; }
@@ -186,11 +189,8 @@ const body = `
       <form id="stxForm">
         <div id="stxStep1">
           <label class="stx-section-label">Amount</label>
-          <div class="stx-chips" id="stxChips"></div>
-
           <div id="stxGifts"></div>
           <button type="button" class="stx-add-gift" id="stxAddGift">+ Add Another Gift</button>
-          <div id="stxMemoStep1Anchor"></div>
 
           <label class="stx-section-label">How often</label>
           <div class="stx-freq-row" id="stxFreqRow"></div>
@@ -212,8 +212,6 @@ const body = `
 
         <div id="stxStep2" hidden>
           <button type="button" class="stx-back" id="stxBackBtn">&larr; Back</button>
-          <div id="stxMemoStep2Anchor"></div>
-          <div class="stx-field" id="stxMemoField"><label for="stxMemo">Memo (optional)</label><input id="stxMemo" type="text" maxlength="500" placeholder="In memory of&hellip;"></div>
 
           <label class="stx-section-label">Contact details</label>
           <div class="stx-row2">
@@ -320,18 +318,21 @@ const body = `
   function totalCents(){ return subtotalCents() + feeCents(); }
   function money(cents){ return '$' + (cents / 100).toFixed(2); }
 
-  function renderChips(){
-    var wrap = document.getElementById('stxChips');
-    var current = Number(gifts[0] && gifts[0].amount);
-    wrap.innerHTML = CHIP_AMOUNTS.map(function(a){
+  function chipsHtml(currentAmount){
+    var current = Number(currentAmount);
+    return CHIP_AMOUNTS.map(function(a){
       return '<div class="stx-chip' + (current === a ? ' active' : '') + '" data-amt="' + a + '">$' + a + '</div>';
     }).join('');
-    Array.prototype.forEach.call(wrap.children, function(el){
-      el.addEventListener('click', function(){
-        if (!gifts[0]) gifts[0] = { fundId: '', amount: '' };
-        gifts[0].amount = el.dataset.amt;
-        renderGifts(); renderChips(); updateTotal();
-      });
+  }
+  // Only toggles the .active class on a row's already-rendered chips — used while the donor is
+  // typing in that row's amount field, so it doesn't rebuild (and steal focus/cursor from) the
+  // input the way a full renderGifts() would on every keystroke.
+  function syncChipActiveState(i){
+    var block = document.querySelector('.stx-gift-block[data-i="' + i + '"]');
+    if (!block) return;
+    var current = Number(gifts[i] && gifts[i].amount);
+    Array.prototype.forEach.call(block.querySelectorAll('.stx-chip'), function(el){
+      el.classList.toggle('active', Number(el.dataset.amt) === current);
     });
   }
 
@@ -387,19 +388,30 @@ const body = `
 
   function renderGifts(){
     var wrap = document.getElementById('stxGifts');
+    // Every gift line gets the SAME quick-amount chips, not just the first — real gap reported
+    // live: adding a second gift left it with nothing but a bare $ input, no presets at all.
     wrap.innerHTML = gifts.map(function(g, i){
-      return '<div class="stx-gift-row" data-i="' + i + '">' +
-        '<div class="stx-field"><select class="stx-gift-fund">' + fundOptionsHtml(g.fundId) + '</select></div>' +
-        '<div class="stx-field" style="max-width:120px;"><input class="stx-gift-amount" type="number" min="1" step="0.01" placeholder="Amount" value="' + esc(g.amount) + '"></div>' +
-        (gifts.length > 1 ? '<button type="button" class="stx-gift-remove" title="Remove this gift">&times;</button>' : '') +
+      return '<div class="stx-gift-block" data-i="' + i + '">' +
+        '<div class="stx-gift-row">' +
+          '<div class="stx-field"><select class="stx-gift-fund">' + fundOptionsHtml(g.fundId) + '</select></div>' +
+          '<div class="stx-field" style="max-width:120px;"><input class="stx-gift-amount" type="number" min="1" step="0.01" placeholder="Amount" value="' + esc(g.amount) + '"></div>' +
+          (gifts.length > 1 ? '<button type="button" class="stx-gift-remove" title="Remove this gift">&times;</button>' : '') +
+        '</div>' +
+        '<div class="stx-chips">' + chipsHtml(g.amount) + '</div>' +
       '</div>';
     }).join('');
-    Array.prototype.forEach.call(wrap.querySelectorAll('.stx-gift-row'), function(row){
-      var i = Number(row.dataset.i);
-      row.querySelector('.stx-gift-fund').addEventListener('change', function(e){ gifts[i].fundId = e.target.value; updateTotal(); });
-      row.querySelector('.stx-gift-amount').addEventListener('input', function(e){ gifts[i].amount = e.target.value; renderChips(); updateTotal(); });
-      var rm = row.querySelector('.stx-gift-remove');
-      if (rm) rm.addEventListener('click', function(){ gifts.splice(i, 1); renderGifts(); renderChips(); updateTotal(); });
+    Array.prototype.forEach.call(wrap.querySelectorAll('.stx-gift-block'), function(block){
+      var i = Number(block.dataset.i);
+      block.querySelector('.stx-gift-fund').addEventListener('change', function(e){ gifts[i].fundId = e.target.value; updateTotal(); });
+      block.querySelector('.stx-gift-amount').addEventListener('input', function(e){ gifts[i].amount = e.target.value; syncChipActiveState(i); updateTotal(); });
+      var rm = block.querySelector('.stx-gift-remove');
+      if (rm) rm.addEventListener('click', function(){ gifts.splice(i, 1); renderGifts(); updateTotal(); });
+      Array.prototype.forEach.call(block.querySelectorAll('.stx-chip'), function(chipEl){
+        chipEl.addEventListener('click', function(){
+          gifts[i].amount = chipEl.dataset.amt;
+          renderGifts(); updateTotal();
+        });
+      });
     });
   }
 
@@ -410,23 +422,6 @@ const body = `
     var t = totalCents();
     document.getElementById('stxContinueBtn').textContent = t > 0 ? ('Continue with ' + money(t)) : 'Continue';
     document.getElementById('stxPayBtn').textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
-    updateMemoPlacement();
-  }
-
-  // A fund named "Other" (staff can add one via the funds admin page, same opt-in curation as
-  // every other fund) means the gift isn't self-explanatory the way "Building Fund" is — move
-  // the memo field up to step 1 so a donor explains what it's for before they even reach
-  // contact/payment, instead of it being one more thing tucked behind Continue.
-  function isOtherFundSelected(){
-    return gifts.some(function(g){
-      var f = funds.filter(function(x){ return String(x.id) === String(g.fundId); })[0];
-      return f && /\\bother\\b/i.test(f.name);
-    });
-  }
-  function updateMemoPlacement(){
-    var memoField = document.getElementById('stxMemoField');
-    var anchor = document.getElementById(isOtherFundSelected() ? 'stxMemoStep1Anchor' : 'stxMemoStep2Anchor');
-    anchor.parentNode.insertBefore(memoField, anchor.nextSibling);
   }
 
   function goToStep(n){
@@ -472,7 +467,6 @@ const body = `
     });
   });
 
-  renderChips();
   renderFreqRow();
   renderGifts();
   updateTotal();
@@ -540,7 +534,6 @@ const body = `
     var payload = {
       gifts: validGifts.map(function(g){ return { fund_id: g.fundId, amount: g.amount }; }),
       cover_fees: coverFees,
-      memo: document.getElementById('stxMemo').value,
       payer_first_name: document.getElementById('stxFirst').value,
       payer_last_name: document.getElementById('stxLast').value,
       payer_email: document.getElementById('stxEmail').value,
@@ -564,7 +557,7 @@ const body = `
           if (!res.ok) { showMsg(res.d.error || 'Something went wrong.', false); return; }
           document.getElementById('stxForm').reset();
           gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
-          renderGifts(); renderChips(); renderFreqRow(); updateTotal(); goToStep(1);
+          renderGifts(); renderFreqRow(); updateTotal(); goToStep(1);
           // The native form reset() above never touches Stax.js's own card-number/CVV iframes —
           // re-mount them fresh so a donor's card number doesn't stay visibly filled in after a
           // successful gift (real bug, reported live).
