@@ -240,12 +240,14 @@ group('tokenize() uses a Stax customer_id instead of address fields — confirme
   // address_city/address_state are each documented as "Required if customer_id is not passed
   // into details" — so /stax-customer (chms) is called first to get one (reusing a matched
   // donor's existing customer, or creating a fresh one), and tokenize() sends that customer_id
-  // + match_customer instead of any address field.
+  // instead of any address field. match_customer deliberately NOT sent alongside it — confirmed
+  // live it was implicated in a real "Store not found" tokenize() rejection, and Stax's own docs
+  // say customer_id already skips matching/creating a customer on its own, so it was redundant.
   const res = await get('/stax-mockup');
   const html = await res.text();
   has(html, "fetch(CHMS_API + '/stax-customer'", 'a Stax customer id is fetched before tokenize() runs');
   has(html, 'customer_id: custRes.d.customerId', 'tokenize() sends the fetched customer_id');
-  has(html, 'match_customer: true', 'tokenize() sends match_customer');
+  hasNot(html, 'match_customer: true,', 'tokenize() does not send match_customer (redundant with customer_id, implicated in a real "Store not found" rejection)');
   has(html, 'payload.stax_customer_id = custRes.d.customerId', 'the same customer id rides through to /checkout or /recurring');
   hasNot(html, "address_1: document.getElementById", "tokenize() no longer sends address_1 (customer_id exempts it)");
   hasNot(html, "address_city: document.getElementById", "tokenize() no longer sends address_city (customer_id exempts it)");
