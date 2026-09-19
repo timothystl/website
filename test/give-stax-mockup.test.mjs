@@ -262,6 +262,23 @@ group('tokenize() uses a Stax customer_id instead of address fields — confirme
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('regression: a donor\'s card number does not stay visible after a successful gift');
+{
+  // Real bug, reported live: after a successful payment, the card number field still showed
+  // what the donor had typed. Root cause: Stax.js's card number/CVV live in cross-origin
+  // iframes our own form's native reset() never touches (it only resets real form elements).
+  // mountStaxCardFields() re-mounts a fresh Stax.js instance (clearing the mount divs first) —
+  // the same proven pattern childcare-portal's own Stax integration already uses, since Stax.js
+  // has no documented way to just clear an existing instance.
+  const res = await get('/stax-mockup');
+  const html = await res.text();
+  has(html, 'function mountStaxCardFields()', 'defines a helper that re-mounts fresh Stax.js card fields');
+  has(html, "numberEl.innerHTML = ''", 'the card number mount is cleared before re-mounting');
+  has(html, "cvvEl.innerHTML = ''", 'the CVV mount is cleared before re-mounting');
+  has(html, 'if (configured) mountStaxCardFields();', 'a successful submission re-mounts fresh card fields');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('a rejected tokenize() shows its real reason on-page, not just in the console');
 {
   // A phone tester has no DevTools console to expand the logged error object, so the generic

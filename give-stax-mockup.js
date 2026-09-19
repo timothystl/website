@@ -270,7 +270,7 @@ const body = `
 <script>
 (function(){
   var CHMS_API = '${CHMS_API_BASE}';
-  var configured = false, staxInstance = null;
+  var configured = false, staxInstance = null, webPaymentsToken = null;
   var funds = [];
   var gifts = [{ fundId: '', amount: '' }];
   var coverFees = false;
@@ -357,6 +357,26 @@ const body = `
       opt.value = String(y); opt.textContent = String(y);
       yearEl.appendChild(opt);
     }
+  }
+
+  // Stax.js's card number/CVV live inside its own cross-origin iframes, which our own form's
+  // native reset() (see submit()'s success handler) never touches — a real bug reported live:
+  // a donor's card number stayed visibly filled in on the page after a successful gift. Stax.js
+  // has no documented cleanup/clear API (same finding childcare-portal's own integration already
+  // made — see parent-billing.js's pbOpenStaxModal comment), so the proven fix there is the one
+  // used here too: never try to clear the old instance, always mount a fresh one. Clearing the
+  // mount divs' own innerHTML first guards against Stax.js finding old iframe content still
+  // there when it re-mounts.
+  function mountStaxCardFields(){
+    if (!webPaymentsToken || !window.StaxJs) return;
+    var numberEl = document.getElementById('stxCardNumber'), cvvEl = document.getElementById('stxCardCvv');
+    if (numberEl) numberEl.innerHTML = '';
+    if (cvvEl) cvvEl.innerHTML = '';
+    staxInstance = new window.StaxJs(webPaymentsToken, {
+      number: { id: 'stxCardNumber', placeholder: '0000 0000 0000 0000', style: 'height:38px;width:100%;font-size:15px;border:none;outline:none;', type: 'text', format: 'prettyFormat' },
+      cvv: { id: 'stxCardCvv', placeholder: 'CVV', style: 'height:38px;width:100%;font-size:15px;border:none;outline:none;', type: 'text' },
+    });
+    if (typeof staxInstance.showCardForm === 'function') staxInstance.showCardForm();
   }
 
   function fundOptionsHtml(selected){
@@ -494,12 +514,9 @@ const body = `
     s.src = '${STAXJS_URL}';
     s.onload = function(){
       fetch(CHMS_API + '/webpayments-token').then(function(r){ return r.json(); }).then(function(t){
-        if (!t.token || !window.StaxJs) return;
-        staxInstance = new window.StaxJs(t.token, {
-          number: { id: 'stxCardNumber', placeholder: '0000 0000 0000 0000', style: 'height:38px;width:100%;font-size:15px;border:none;outline:none;', type: 'text', format: 'prettyFormat' },
-          cvv: { id: 'stxCardCvv', placeholder: 'CVV', style: 'height:38px;width:100%;font-size:15px;border:none;outline:none;', type: 'text' },
-        });
-        if (typeof staxInstance.showCardForm === 'function') staxInstance.showCardForm();
+        if (!t.token) return;
+        webPaymentsToken = t.token;
+        mountStaxCardFields();
       });
     };
     document.head.appendChild(s);
@@ -548,6 +565,10 @@ const body = `
           document.getElementById('stxForm').reset();
           gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
           renderGifts(); renderChips(); renderFreqRow(); updateTotal(); goToStep(1);
+          // The native form reset() above never touches Stax.js's own card-number/CVV iframes —
+          // re-mount them fresh so a donor's card number doesn't stay visibly filled in after a
+          // successful gift (real bug, reported live).
+          if (configured) mountStaxCardFields();
           showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
         }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
     }
