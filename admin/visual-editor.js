@@ -1,5 +1,5 @@
 // Runs inside the existing editor closure, retaining real media, settings and publishing.
-export const VISUAL_EDITOR_JS = `// Injected into the existing editor closure only by the local pilot server.
+export const VISUAL_EDITOR_JS = `// Shared visual controls injected into the canonical page editor closure.
 var lpTarget=null,lpPhase='live';
 function lpP(b){return b.pilot||(b.pilot={});}
 function lpFinish(label){note(label);renderTop();renderRail();renderChanges();scheduleSave();}

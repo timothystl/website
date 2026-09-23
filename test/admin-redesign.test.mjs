@@ -3184,7 +3184,7 @@ group('the shell is the sidebar plus a context bar');
   // was never the sidebar — it was hiding it behind a hamburger. Twenty-one
   // sections in five groups is more than a horizontal bar holds honestly.
   has(body, 'class="sidebar"', 'the sidebar is there');
-  for (const g of ['Website', 'Communication', 'Events', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
+  for (const g of ['Website', 'Communications', 'Calendar &amp; events', 'Operations', 'Administration']) {
     has(body, `>${g}</div>`, `${g} is a group`);
   }
   // ⚠ The heading and the trail read the same constant. They were two typed
@@ -3242,7 +3242,7 @@ group('the shell is the sidebar plus a context bar');
 
   // The trail follows the screen.
   const gym = await (await call(env, '/gym-rentals', { cookie })).text();
-  has(gym, 'class="tlc-ctx-group">Events<', 'a gym screen names its group');
+  has(gym, 'class="tlc-ctx-group">Operations<', 'a gym screen names its group');
   has(gym, 'class="tlc-ctx-section">Gym rentals<', 'and its section');
 }
 
@@ -3290,7 +3290,7 @@ group('what is under Pages folds away');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
-  const open = (html) => /id="sidebar-under-pages"(?! hidden)/.test(html);
+  const open = (html) => /id="sidebar-under-shared"(?! hidden)/.test(html);
 
   // Five rows permanently under Pages pushed the four groups below them down
   // the sidebar and read as one flat list of ten — the opposite of what
@@ -3301,10 +3301,11 @@ group('what is under Pages folds away');
 
   // ⚠ Decided server-side, not by a script after paint. A sidebar whose rows
   // move once the page has loaded is a sidebar you cannot click confidently.
-  ok(open(await (await call(env, '/pages', { cookie })).text()),
-    'on Pages itself they are open');
+  ok(!open(await (await call(env, '/pages', { cookie })).text()),
+    'Pages stays focused on pages; shared sources have their own hub');
+  ok(open(await (await call(env, '/shared-content', { cookie })).text()), 'shared hub expands its destinations');
   for (const [path, what] of [['/ministries', 'Ministries'], ['/sermons', 'Sermons'],
-    ['/newsitems', 'News'], ['/partners', 'Partners'], ['/christian-education', 'Christian Ed']]) {
+    ['/staff', 'Staff'], ['/partners', 'Partners'], ['/christian-education', 'Christian Ed']]) {
     const html = await (await call(env, path, { cookie })).text();
     ok(open(html), `and on ${what}, which is one of them`);
     // The row you are on cannot be the row that is hidden.
@@ -6661,7 +6662,7 @@ group('the sidebar badge counts open Intake items, from the database alone');
   await call(env, '/event-intake', { cookie, fresh: true }); // syncs everything in the window
   const dash = await call(env, '/dashboard', { cookie, fresh: true });
   const dashHtml = await dash.text();
-  has(dashHtml, 'Event Intake', 'the row is visible to intake_manage');
+  has(dashHtml, 'Office follow-up', 'the row is visible to intake_manage');
   // ⚠ NOT a literal "1 item(s)" — the school-year seed's own rows are inside
   // the same sync window and genuinely count too (Andrew's "everything"), so
   // the true number is whatever badgeCounts()/intakeOpenCount() says it is.
@@ -7368,6 +7369,7 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   // Every prefix the chokepoint covers has to move the stamp too, or a page
   // whose content changed through one of them would sit behind the site's own
   // copy for a full day rather than the old fifteen minutes.
+  await new Promise(resolve => setTimeout(resolve, 2)); // content stamps have millisecond precision
   await call(env, '/staff/create', { cookie, method: 'POST', form: { name: 'Ada Lovelace', title: 'Cantor' } });
   ok(readStamp() !== after, 'a staff edit — a self-filling block — moves it as well');
 }
@@ -7563,7 +7565,7 @@ group('Food Pantry visual editor: real drafts, preview, publish and conflict pro
  const postJson=(path,body)=>worker.fetch(new Request('https://admin.timothystl.org'+path,{method:'POST',headers:{cookie,origin:'https://admin.timothystl.org','Content-Type':'application/json'},body:JSON.stringify(body)}),env,{waitUntil:()=>{}});
  const edit=await call(env,'/pages/foodpantry/edit',{cookie});const source=await edit.text();
  has(source,'Preview draft','Food Pantry gets visual editor');lacks(source,'LOCAL PILOT','production has no local reset controls');
- const legacy=await (await call(env,'/pages/home/edit',{cookie})).text();lacks(legacy,'lpBoot','other pages keep existing editor');
+ const legacy=await (await call(env,'/pages/home/edit',{cookie})).text();has(legacy,'lpBoot','Home also uses visual editor');
  const initial=await (await call(env,'/pages/api/page/foodpantry',{cookie})).json();const original=initial.page.blocks;
  const blocks=structuredClone(original);blocks[0].pilot={layout:{group:'visual-test',column:0,mode:'overlay',offsetX:35}};
  blocks[1].pilot={layout:{group:'visual-test',column:1,mode:'overlay',offsetX:35}};
@@ -7579,6 +7581,65 @@ group('Food Pantry visual editor: real drafts, preview, publish and conflict pro
  const publicData=await (await call(env,'/api/pages?id=foodpantry',{fresh:true})).json();has(publicData.rendered.foodpantry,'lp-overlay','public API shares visual renderer');
  res=await postJson('/pages/api/page/foodpantry/publish',{blocks:original,expected_updated_at:saved.saved_at});eq(res.status,409,'stale publish rejected');
  const revisions=db.prepare('SELECT blocks FROM page_revisions WHERE page_id=? ORDER BY id DESC').all('foodpantry');ok(revisions.length>0&&JSON.parse(revisions[0].blocks)[0].pilot,'published revision preserves layout');
+}
+
+group('Visual editor rollout: every canonical page, without content conversion');
+{
+ const {db,env}=await boot();const {cookie}=signIn(db);
+ const before=db.prepare('SELECT id,blocks,published_blocks,template FROM pages ORDER BY id').all();
+ for(const page of before){
+  const response=await call(env,'/pages/'+encodeURIComponent(page.id)+'/edit',{cookie});
+  eq(response.status,200,page.id+' opens visual editor');
+  has(await response.text(),'boot().then(lpBoot)',page.id+' has shared visual controls');
+ }
+ eq(JSON.stringify(db.prepare('SELECT id,blocks,published_blocks,template FROM pages ORDER BY id').all()),JSON.stringify(before),'opening every editor preserves draft, published content and templates exactly');
+ const owner=signIn(db,['pages_edit_own'],'rollout-owner');
+ eq((await call(env,'/pages/home/edit',{cookie:owner.cookie})).status,403,'rollout preserves ownership checks');
+ db.prepare('UPDATE pages SET owner_username=? WHERE id=?').run('rollout-owner','home');
+ eq((await call(env,'/pages/home/edit',{cookie:owner.cookie})).status,200,'assigned owner gets visual editor');
+}
+
+group('Admin workspace: real data, writes, permissions, and conflict handling');
+{
+ const { db, env } = await boot();const { cookie } = signIn(db);
+ const post=async(path,data,session=cookie,origin='https://admin.timothystl.org')=>worker.fetch(new Request('https://admin.timothystl.org'+path,{method:'POST',headers:{cookie:session,origin,'content-type':'application/json'},body:JSON.stringify(data)}),env,{waitUntil:()=>{}});
+ const dates={from:'2026-09-01',to:'2026-09-30'};
+ for(const path of ['/calendar-workspace','/shared-content','/shared-content/services','/pages/home/overview']){const r=await call(env,path,{cookie});eq(r.status,200,path+' works');eq(r.headers.get('cache-control'),'no-store','workspace pages are not cached');}
+ const noEdit=signIn(db,['pages_edit_own'],'limited-workspace');
+ eq((await call(env,'/shared-content/services',{cookie:noEdit.cookie})).status,403,'page ownership does not grant global service editing');
+ eq((await call(env,'/pages/home/overview',{cookie:noEdit.cookie})).status,403,'overview enforces page ownership');
+ const reader=signIn(db,['news_edit'],'news-workspace');
+ const input={title:'Workspace test event',date:'2026-09-22',endDate:'2026-09-22',time:'14:00',endTime:'15:00',room:'',type:''};
+ eq((await post('/calendar-workspace/local',input,reader.cookie)).status,403,'news editor cannot create intake records');
+ eq((await post('/calendar-workspace/local',input,cookie,'https://evil.example')).status,403,'new writes retain global CSRF protection');
+ eq((await post('/calendar-workspace/local',{...input,date:'2026-02-30'})).status,400,'invalid real date refused');
+ const beforePages=db.prepare('SELECT id,blocks,published_blocks FROM pages ORDER BY id').all();
+ let r=await post('/calendar-workspace/local',input);eq(r.status,200,'create writes existing intake record');const {id}=await r.json();
+ const record=db.prepare('SELECT * FROM event_intake WHERE id=?').get(id);eq(record.local_title,input.title,'title saved');eq(record.published_at,null,'creation does not falsely complete office follow-up');
+ r=await call(env,'/calendar-workspace/feed?'+new URLSearchParams(dates),{cookie});eq(r.status,200,'feed reads sources');let feed=await r.json();ok(feed.events.some(e=>e.id==='l:'+id),'new local event appears');
+ const read=await (await call(env,'/calendar-workspace/local/'+id,{cookie})).json();
+ r=await post('/calendar-workspace/local/'+id,{...input,title:'Edited event',revision:read.revision});eq(r.status,200,'local edit persists');
+ eq((await post('/calendar-workspace/local/'+id,{...input,title:'Stale edit',revision:read.revision})).status,409,'stale edit refused');
+ eq(db.prepare('SELECT local_title FROM event_intake WHERE id=?').get(id).local_title,'Edited event','newer edit survives');
+ eq((await post('/calendar-workspace/local/999999',input)).status,404,'missing record is explicit');
+ const span=await (await post('/calendar-workspace/local',{...input,title:'Long event',date:'2026-08-01',endDate:'2026-09-23',allDay:true})).json();
+ feed=await (await call(env,'/calendar-workspace/feed?'+new URLSearchParams(dates),{cookie})).json();ok(feed.events.some(e=>e.id==='l:'+span.id),'multi-day event beginning before month remains visible');
+ const {editorPageData}=await import('../admin/editor-shared.js');
+ const {wrapEnvForDbAttribution}=await import('../admin/db-attribution.js');
+ const {env:editorEnv}=wrapEnvForDbAttribution(env); // same stable DB identity used by real Worker requests
+ await editorPageData(editorEnv, {}); // warm the editor cache before the shared write
+ const row=db.prepare("SELECT value FROM site_settings WHERE key='church_service_times'").get();
+ const {serviceRows}=await import('../admin/workspace.js');const rows=serviceRows(row.value);rows[0].note='A note preserved with this service';
+ r=await call(env,'/shared-content/services',{cookie,method:'POST',form:{original:row.value,rows:JSON.stringify(rows),returnTo:'/pages/home/overview'}});eq(r.status,303,'structured services save');has(r.headers.get('location'),'returnTo=%2Fpages%2Fhome%2Foverview','return context kept');
+ r=await call(env,'/shared-content/services',{cookie,method:'POST',form:{original:row.value,rows:JSON.stringify(rows)}});eq(r.status,409,'stale shared service update refused');
+ has(db.prepare("SELECT value FROM site_settings WHERE key='church_service_times'").get().value,'A note preserved','note stored');
+ const renderedData=await editorPageData(editorEnv,{});
+ eq(renderedData.services[0].note,'A note preserved with this service','structured service writes invalidate the warm editor cache');
+ const search=await (await call(env,'/api/search?q=worship%20times',{cookie})).json();
+ ok(search.results.some(r=>r.href==='/shared-content/services'),'command search finds shared services');
+ eq(JSON.stringify(db.prepare('SELECT id,blocks,published_blocks FROM pages ORDER BY id').all()),JSON.stringify(beforePages),'workspace operations never rewrite page blocks');
+ db.exec('ALTER TABLE event_intake RENAME TO event_intake_unavailable');
+ r=await call(env,'/calendar-workspace/feed?'+new URLSearchParams(dates),{cookie});eq(r.status,503,'failed database read cannot look like an empty calendar');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

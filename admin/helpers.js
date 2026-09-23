@@ -742,11 +742,11 @@ ${extraHead}
 // because those are the church's own money rather than an event's.
 export const GROUPS = {
   website: 'Website',
-  email: 'Communication',
-  events: 'Events',
-  money: 'Money & Building',
-  people: 'People & Access',
-  setup: 'Setup',
+  email: 'Communications',
+  events: 'Calendar & events',
+  money: 'Operations',
+  people: 'Administration',
+  setup: 'Administration',
 };
 
 // ── SIDEBAR SHELL ─────────────────────────────────────────────
@@ -780,105 +780,53 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     `<button type="button" class="sidebar-caret" data-children="${id}" aria-expanded="${open}"`
     + ` aria-controls="${id}" title="Show or hide what is under this"><span aria-hidden="true">›</span></button>`;
 
-  // ── THE FIVE GROUPS ──
-  // Order, grouping and nesting are the design's `NAV` and `CHILD_OF`, kept in
-  // that order deliberately: it groups by *what you came here to do* — put
-  // something on the website, send an email, deal with money, manage people,
-  // set the place up — rather than by which table the data lives in. Ministries,
-  // Partners, News, Sermons and Christian Ed nest under Pages because that is
-  // what they produce; they are separate only because different people own them.
-  const showNews = hp('news_edit');
-  const pagesChildren = [
-    hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries', '', 1) : '',
-    hp('pages_edit')      ? navItem('/partners', 'Partners', activeTab === 'partners', '', 1) : '',
-    hp('pages_edit')      ? navItem('/values', 'Values', activeTab === 'values', '', 1) : '',
-    hp('pages_edit')      ? navItem('/calendar-categories', 'Calendar', activeTab === 'calcats', '', 1) : '',
-    showNews              ? navItem('/newsitems', 'News &amp; Events', activeTab === 'news', '', 1) : '',
-    hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons', '', 1) : '',
-    hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education', '', 1) : '',
-  ].filter(Boolean).join('');
-
-  // Open when you are somewhere inside it, folded away otherwise. Five rows
-  // permanently under Pages pushed everything below them down the sidebar and
-  // read as one flat list of ten, which is the opposite of what nesting them
-  // was for. The state is decided server-side so the sidebar is never drawn
-  // in the wrong shape and then corrected — a nav that moves after paint is
-  // a nav you cannot click confidently.
-  const PAGES_CHILD_TABS = ['ministries', 'partners', 'values', 'calcats', 'news', 'sermons', 'christian-education'];
-  const inPages = activeTab === 'pages' || PAGES_CHILD_TABS.includes(activeTab);
-
+  // Task-oriented navigation. All legacy routes and permission gates remain.
   const canPages = hp('pages_edit') || hp('pages_edit_own');
+  const sharedChildren = [
+    hp('ministries_edit') ? navItem('/ministries', 'Ministry content', activeTab === 'ministries', '', 1) : '',
+    hp('pages_edit') ? navItem('/partners', 'Partners', activeTab === 'partners', '', 1) : '',
+    hp('pages_edit') ? navItem('/values', 'Core values', activeTab === 'values', '', 1) : '',
+    hp('staff_edit') ? navItem('/staff', 'Staff profiles', activeTab === 'staff', '', 1) : '',
+    hp('sermons_edit') ? navItem('/sermons', 'Sermons', activeTab === 'sermons', '', 1) : '',
+    hp('news_edit') ? navItem('/christian-education', 'Christian education', activeTab === 'christian-education', '', 1) : '',
+  ].filter(Boolean).join('');
+  const inShared = ['shared', 'ministries', 'partners', 'values', 'staff', 'sermons', 'christian-education'].includes(activeTab);
   const websiteItems = [
-    canPages ? navItem('/pages', 'Pages', activeTab === 'pages',
-      badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)
-      + (pagesChildren ? navCaret('sidebar-under-pages', inPages) : '')) : '',
-    // ⚠ `hidden` is restated in CSS. `.sidebar-children` needs a display of
-    // its own, and an explicit display beats the UA's `[hidden]{display:none}`
-    // — the same trap that once left an empty state sitting under a full
-    // table. Without the restatement this panel never closes.
-    pagesChildren ? `<div class="sidebar-children" id="sidebar-under-pages"${inPages ? ' data-here' : ' hidden'}>${pagesChildren}</div>` : '',
-    hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
-    hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
-    hp('links_edit')      ? navItem('/link-cards', 'NFC Taps', activeTab === 'link-cards') : '',
+    canPages ? navItem('/pages', 'Pages', activeTab === 'pages', badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)) : '',
+    sharedChildren ? navItem('/shared-content', 'Shared content', activeTab === 'shared', navCaret('sidebar-under-shared', inShared)) : '',
+    sharedChildren ? `<div class="sidebar-children" id="sidebar-under-shared"${inShared ? ' data-here' : ' hidden'}>${sharedChildren}</div>` : '',
+    hp('pages_edit') ? navItem('/menu', 'Navigation &amp; appearance', activeTab === 'menu') : '',
+    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media library', activeTab === 'media') : '',
+    hp('links_edit') ? navItem('/link-cards', 'NFC links', activeTab === 'link-cards') : '',
     hp('settings_manage') ? navItem('/redirects', 'Redirects', activeTab === 'redirects') : '',
   ].filter(Boolean).join('');
-
-  // ── EMAIL ──
-  // Filtered Mail is not in the design's nav — it shipped after the handoff was
-  // written. It is mail held back from the office inbox, so this is where
-  // somebody would look for it.
   const canDraft = hp('newsletter_edit') || hp('newsletter_approve');
   const emailItems = [
+    hp('news_edit') ? navItem('/newsitems', 'News &amp; Events', activeTab === 'news') : '',
     canDraft ? navItem('/newsletters', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
+    hp('notices_edit') ? navItem('/notices', 'Website notices', activeTab === 'notices') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
     hp('settings_manage') ? navItem('/push-log', 'Push Log', activeTab === 'pushLog') : '',
   ].filter(Boolean).join('');
-
-  // ── EVENTS ──
-  // ⚠ The market screen is reachable on any of five permissions now (it is the
-  // whole event section, not just the vendor list), so the ROW has to be too —
-  // gating it on market_manage alone would leave the office person who writes
-  // its pages with no way to get to them. The badge still needs market_manage,
-  // because an unpaid-application count is the coordinator's own business.
   const eventItems = [
-    // The triage inbox, ahead of the market/gym/events rows below it — it is
-    // where "what needs me before Sunday" actually gets answered, across
-    // Google, News & Events and confirmed gym rentals at once. The badge is
-    // a DB count, not a live Google poll — see the note above the route in
-    // website-admin-worker.js for why.
-    hp('intake_manage')
-      ? navItem('/event-intake', 'Event Intake', activeTab === 'intake', badge(b.intake, hp('intake_manage'), `${b.intake} item(s) need a decision`)) : '',
-    // The index — every event the church runs, not only the market. Gated on
-    // events_manage (creating/administering the section) OR any one event's
-    // own coordinator key, so a VBS coordinator holding only that key can
-    // still reach the list to open their own row — they just see one.
-    (hp('events_manage') || Object.keys(b.eventPerms || {}).some((k) => hp(k)))
-      ? navItem('/events', 'Events', activeTab === 'events') : '',
+    (hp('intake_manage') || hp('news_edit') || hp('gym_manage') || hp('pages_edit')) ? navItem('/calendar-workspace', 'Calendar', activeTab === 'calendar') : '',
+    hp('intake_manage') ? navItem('/event-intake', 'Office follow-up', activeTab === 'intake', badge(b.intake, true, `${b.intake} item(s) need a decision`)) : '',
+    (hp('events_manage') || Object.keys(b.eventPerms || {}).some(k => hp(k))) ? navItem('/events', 'Registrations', activeTab === 'events') : '',
+    hp('pages_edit') ? navItem('/calendar-categories', 'Categories &amp; colors', activeTab === 'calcats') : '',
+  ].filter(Boolean).join('');
+  const moneyItems = [
     (hp('market_manage') || hp('settings_manage') || hp('giving_manage') || hp('pages_edit') || hp('ministries_edit'))
       ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
-    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
+    hp('gym_manage') ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, true, `${b.gym} gym request(s) waiting for review`)) : '',
+    hp('giving_manage') ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
+    hp('payroll_manage') ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
   ].filter(Boolean).join('');
-
-  // ── MONEY & BUILDING ──
-  const moneyItems = [
-    hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
-    hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
-  ].filter(Boolean).join('');
-
-  // ── PEOPLE & ACCESS ──
   const peopleItems = [
-    hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
-    hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
-    hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
+    hp('users_manage') ? navItem('/users', 'Users &amp; access', activeTab === 'users') : '',
+    hp('audit_view') ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
+    hp('settings_manage') ? navItem('/settings', 'Find settings', activeTab === 'settings') : '',
   ].filter(Boolean).join('');
-
-  // ── SETUP ──
-  const setupItems = [
-    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media', activeTab === 'media') : '',
-    hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
-  ].filter(Boolean).join('');
-
   return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
@@ -891,11 +839,10 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
   ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.website)}</div>${websiteItems}</div>` : ''}
-  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.email)}</div>${emailItems}</div>` : ''}
   ${eventItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.events)}</div>${eventItems}</div>` : ''}
+  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.email)}</div>${emailItems}</div>` : ''}
   ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.money)}</div>${moneyItems}</div>` : ''}
   ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.people)}</div>${peopleItems}</div>` : ''}
-  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.setup)}</div>${setupItems}</div>` : ''}
   </div>
   <div class="sidebar-footer">
     <button type="button" id="tlc-push-toggle" hidden>Notifications</button>
@@ -946,16 +893,19 @@ export function contextBar(activeTab, badges = {}, crumb = '') {
 // Dashboard's group reads "Admin", as the spec says: it belongs to no group.
 const TRAIL = {
   dashboard: { group: 'Admin', section: 'Dashboard' },
+  shared: { group: GROUPS.website, section: 'Shared content' },
+  calendar: { group: GROUPS.events, section: 'Calendar' },
+  events: { group: GROUPS.events, section: 'Registrations' },
   pages: { group: GROUPS.website, section: 'Pages', waits: 'pages' },
   ministries: { group: GROUPS.website, section: 'Ministry pages' },
   partners: { group: GROUPS.website, section: 'Partner ministries' },
   values: { group: GROUPS.website, section: 'Core values' },
-  calcats: { group: GROUPS.website, section: 'Calendar categories' },
-  news: { group: GROUPS.website, section: 'News & Events' },
+  calcats: { group: GROUPS.events, section: 'Calendar categories' },
+  news: { group: GROUPS.email, section: 'News & Events' },
   sermons: { group: GROUPS.website, section: 'Sermons' },
   'christian-education': { group: GROUPS.website, section: 'Christian Education' },
   menu: { group: GROUPS.website, section: 'Menu' },
-  notices: { group: GROUPS.website, section: 'Notices' },
+  notices: { group: GROUPS.email, section: 'Notices' },
   'link-cards': { group: GROUPS.website, section: 'Taps & links' },
   redirects: { group: GROUPS.website, section: 'Redirects' },
   newsletter: { group: GROUPS.email, section: 'Newsletter', waits: 'newsletter' },
@@ -963,14 +913,14 @@ const TRAIL = {
   filtered: { group: GROUPS.email, section: 'Filtered mail' },
   pushLog: { group: GROUPS.email, section: 'Push notification log' },
   giving: { group: GROUPS.money, section: 'Giving' },
-  intake: { group: GROUPS.events, section: 'Event Intake', waits: 'intake' },
-  market: { group: GROUPS.events, section: 'Christmas Market vendors', waits: 'market' },
-  gym: { group: GROUPS.events, section: 'Gym rentals', waits: 'gym' },
+  intake: { group: GROUPS.events, section: 'Office follow-up', waits: 'intake' },
+  market: { group: GROUPS.money, section: 'Christmas Market vendors', waits: 'market' },
+  gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
   payroll: { group: GROUPS.money, section: 'Payroll' },
-  staff: { group: GROUPS.people, section: 'Staff directory' },
+  staff: { group: GROUPS.website, section: 'Staff directory' },
   users: { group: GROUPS.people, section: 'Users' },
   audit: { group: GROUPS.people, section: 'Audit log' },
-  media: { group: GROUPS.setup, section: 'Media' },
+  media: { group: GROUPS.website, section: 'Media' },
   settings: { group: GROUPS.setup, section: 'Settings' },
   voters: { group: GROUPS.website, section: 'Voters page' },
   scheduler: { group: 'Admin', section: 'Schedule builder' },

@@ -30,7 +30,7 @@ export const SECTIONS = {
     note: 'Registration, payment, volunteers and photos are each optional per event — a tab a coordinator cannot use is absent from that event’s screen, not shown and disabled.'
   },
   pages: {
-    label: 'Pages', glyph: '▤', title: 'Pages', purpose: 'Every page on the site except the ministry pages, which have their own tab. Opening a row goes straight to the page editor.',
+    label: 'Pages', glyph: '▤', title: 'Pages', purpose: 'All site pages, including ministry pages. Open the editor for content and layout, or Overview to see shared sources.',
     action: '+ New page', search: 'Search pages', filters: ['All', 'Live', 'Draft edits', 'Not in menu'],
     columns: [['Page', '2.1fr'], ['Address', '1.5fr'], ['Short link', '1.1fr'], ['Status', '1.1fr']],
     openMode: 'editor',
@@ -250,7 +250,7 @@ export const SECTIONS = {
     note: 'Images are resized on upload so nothing stored is over 1 MB, and alt text is asked for then — while somebody still knows what the photo shows.'
   },
   settings: {
-    label: 'Settings', glyph: '⚙', title: 'Settings', purpose: 'The handful of values the rest of the site reads. Change one here and every page, email, and invoice follows.',
+    label: 'Settings', glyph: '⚙', title: 'Find settings', purpose: 'Search settings across the Admin. Open a setting at the workspace that owns it, or edit a shared value here.',
     search: 'Search settings', filters: ['All', 'Church details', 'Links', 'Gym rentals', 'Christmas Market', 'Notifications'],
     columns: [['Setting', '1.5fr'], ['Value', '2.5fr']],
     note: 'These are the real keys in site_settings. Anything not listed here is theme-owned and lives in code on purpose.'

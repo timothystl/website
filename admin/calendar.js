@@ -597,7 +597,7 @@ export function parseCalendarIds(setting) {
 // weekly service comes back as one event carrying an RRULE, and every Sunday
 // but the first vanishes from the grid. Expanding recurrence ourselves is a
 // project; asking Google to do it is a query parameter.
-export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats }) {
+export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, includeEditLinks = false }) {
   const key = String(env.GCAL_API_KEY || '').trim();
   let token = null;
   if (typeof getToken === 'function') {
@@ -621,7 +621,11 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats }) 
       if (!res.ok) return null;
       const body = await res.json();
       return (body.items || [])
-        .map((ev) => normalizeGoogleEvent(ev, 'gcal', cats))
+        .map((ev) => {
+          const normalized = normalizeGoogleEvent(ev, 'gcal', cats);
+          if (normalized && includeEditLinks && /^https:\/\/(calendar\.google\.com|www\.google\.com)\//.test(String(ev.htmlLink || ''))) normalized.editUrl = ev.htmlLink;
+          return normalized;
+        })
         .filter(Boolean)
         // ⚠ A GYM BOOKING PUSHED TO GOOGLE IS DROPPED HERE, and this is a
         // privacy rule rather than a de-dupe. addGymBookingToGCal() writes
@@ -667,19 +671,19 @@ export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, 
 // is news and belongs on /news, not on a day of the month. Unlike /api/news
 // this deliberately does NOT filter to future dates — a calendar showing last
 // month has to show what happened in it.
-export async function readNewsEvents(env, from, to, cats) {
+export async function readNewsEvents(env, from, to, cats, { strict = false } = {}) {
   try {
     const rows = await env.DB.prepare(
       `SELECT id, title, summary, body, event_date, event_end_date, event_time, event_end_time,
               event_location, publish_date, theme, value, calendar_category
          FROM news_items
-        WHERE event_date IS NOT NULL AND event_date >= ? AND event_date <= ?
+        WHERE event_date IS NOT NULL AND COALESCE(NULLIF(event_end_date, ''), event_date) >= ? AND event_date <= ?
           AND (channels IS NULL OR channels LIKE '%web%' OR channels LIKE '%calendar%')
         ORDER BY event_date ASC
         LIMIT 300`
     ).bind(addDays(from, -1), addDays(to, 1)).all();
     return (rows.results || []).map((r) => normalizeNewsItem(r, cats)).filter(Boolean);
-  } catch (_) { return []; }
+  } catch (error) { if (strict) throw error; return []; }
 }
 
 // ── EVENT INTAKE'S OWN "LOCAL" ROWS ─────────────────────────────────────────
@@ -698,19 +702,19 @@ export async function readNewsEvents(env, from, to, cats) {
 // same as it repaints everything else.
 const INTAKE_TYPE_TO_CATEGORY = { worship: 'worship', education: 'learn', rental: 'facility', news: 'special' };
 
-export async function readLocalIntakeEvents(env, from, to, cats) {
+export async function readLocalIntakeEvents(env, from, to, cats, { strict = false } = {}) {
   try {
     const rows = await env.DB.prepare(
       `SELECT id, event_type, local_title, local_event_date, local_end_date,
               local_event_time, local_end_time, room
          FROM event_intake
         WHERE source_kind = 'local' AND local_event_date IS NOT NULL
-          AND local_event_date >= ? AND local_event_date <= ?
+          AND COALESCE(NULLIF(local_end_date, ''), local_event_date) >= ? AND local_event_date <= ?
         ORDER BY local_event_date ASC
         LIMIT 300`
     ).bind(addDays(from, -1), addDays(to, 1)).all();
     return (rows.results || []).map((r) => normalizeLocalIntakeEvent(r, cats)).filter(Boolean);
-  } catch (_) { return []; }
+  } catch (error) { if (strict) throw error; return []; }
 }
 
 // Deliberately mirrors normalizeNewsItem()'s own shape — a run of days as one
@@ -758,7 +762,7 @@ export function normalizeLocalIntakeEvent(row, cats) {
 export const BUILDING_IN_USE = 'Gym rented';
 export const BUILDING_ROOM = 'Gym';
 
-export async function readGymBookings(env, from, to) {
+export async function readGymBookings(env, from, to, { strict = false } = {}) {
   try {
     const rows = await env.DB.prepare(
       `SELECT id, booking_date, start_time, end_time
@@ -768,7 +772,7 @@ export async function readGymBookings(env, from, to) {
         LIMIT 400`
     ).bind(from, to).all();
     return (rows.results || []).map(normalizeGymBooking).filter(Boolean);
-  } catch (_) { return []; }
+  } catch (error) { if (strict) throw error; return []; }
 }
 
 // A booking is a wall clock like everything else here — `HH:MM` as the office

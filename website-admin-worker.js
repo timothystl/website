@@ -57,6 +57,7 @@ import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
 // admin/intake-page.js, imported below — see its own header comment for why
 // this screen is its own module rather than another few hundred lines here.
 import { openCountOf } from './admin/intake.js';
+import { handleWorkspaceRoutes, workspaceSearchEntries } from './admin/workspace.js';
 import { handleIntakeRoutes } from './admin/intake-page.js';
 import { migrateLegacyPage, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
@@ -1364,6 +1365,7 @@ export default {
     // a public site that disagrees with the admin, so when in doubt the prefix
     // goes in the list.
     const PAGE_DATA_PREFIXES = [
+      '/shared-content/services',                  // shared worship times
       '/pages', '/menu', '/partners', '/values',   // the page tree and the chrome
       '/staff',                                    // → the Staff grid block
       '/giving',                                   // → Giving widget, Amount ladder
@@ -4883,7 +4885,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
       // it always did.
       const active = sources.filter((s) => s.on);
       const perSource = await Promise.all(active.map((s) => grab(s.sql, like, like)));
-      const results = [];
+      const results = workspaceSearchEntries(currentUser, q);
       active.forEach((s, i) => {
         for (const r of perSource[i]) {
           results.push(Object.assign({ section: s.section }, s.map(r)));
@@ -6168,6 +6170,14 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (r) return r;
     }
 
+    {
+      const isWorkspace = path.startsWith('/calendar-workspace') || path.startsWith('/shared-content');
+      if (isWorkspace) {
+        const response = await handleWorkspaceRoutes(request, env, path, method, currentUser, url, await pageBadges());
+        if (response) return response;
+      }
+    }
+
     // ── NEWSLETTER, CHRISTIAN EDUCATION & NEWS (admin/newsletter.js) ──
     // Newsletter composing/sending, Bible classes, and News & Events. Gated
     // per section inside handleNewsletterRoutes itself, exactly as it always
@@ -7413,7 +7423,7 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'church_address_near', label: 'Landmark', group: 'church-details', used: 'Welcome card on the homepage', href: '/pages/details' },
         { key: 'church_phone', label: 'Office phone', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_email', label: 'Office email', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
-        { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/pages/details' },
+        { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/shared-content/services' },
         // Two rows for one idea, because there really are two rows and hiding
         // the draft would make this screen a half-truth about what is stored.
         // Both link to the screen that owns them rather than offering a field

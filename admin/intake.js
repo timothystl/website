@@ -444,9 +444,9 @@ export function queueCounts(items) {
 }
 
 export const QUEUE_TITLES = {
-  inbox: ['Needs a decision', 'Pick a type, finish the checklist, or just publish — nothing here is required'],
+  inbox: ['Needs a decision', 'Optional office tracking — public visibility is managed by each event source'],
   imported: ['Imported from Google', 'Pulled from the office calendars — confirm what the feed can’t know'],
-  ready: ['Ready to publish', 'Everything checked off'],
+  ready: ['Checklist complete', 'Office checklist finished; public visibility is separate'],
   worship: ['Worship', 'Services, funerals, weddings, rehearsals'],
   education: ['Education', 'Adult Bible classes and studies'],
   youth: ['Youth & Family', 'Sunday School, confirmation, VBS, family events'],
