@@ -7369,6 +7369,7 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   // Every prefix the chokepoint covers has to move the stamp too, or a page
   // whose content changed through one of them would sit behind the site's own
   // copy for a full day rather than the old fifteen minutes.
+  await new Promise(resolve => setTimeout(resolve, 2)); // content stamps have millisecond precision
   await call(env, '/staff/create', { cookie, method: 'POST', form: { name: 'Ada Lovelace', title: 'Cantor' } });
   ok(readStamp() !== after, 'a staff edit — a self-filling block — moves it as well');
 }
@@ -7564,7 +7565,7 @@ group('Food Pantry visual editor: real drafts, preview, publish and conflict pro
  const postJson=(path,body)=>worker.fetch(new Request('https://admin.timothystl.org'+path,{method:'POST',headers:{cookie,origin:'https://admin.timothystl.org','Content-Type':'application/json'},body:JSON.stringify(body)}),env,{waitUntil:()=>{}});
  const edit=await call(env,'/pages/foodpantry/edit',{cookie});const source=await edit.text();
  has(source,'Preview draft','Food Pantry gets visual editor');lacks(source,'LOCAL PILOT','production has no local reset controls');
- const legacy=await (await call(env,'/pages/home/edit',{cookie})).text();lacks(legacy,'lpBoot','other pages keep existing editor');
+ const legacy=await (await call(env,'/pages/home/edit',{cookie})).text();has(legacy,'lpBoot','Home also uses visual editor');
  const initial=await (await call(env,'/pages/api/page/foodpantry',{cookie})).json();const original=initial.page.blocks;
  const blocks=structuredClone(original);blocks[0].pilot={layout:{group:'visual-test',column:0,mode:'overlay',offsetX:35}};
  blocks[1].pilot={layout:{group:'visual-test',column:1,mode:'overlay',offsetX:35}};
@@ -7580,6 +7581,22 @@ group('Food Pantry visual editor: real drafts, preview, publish and conflict pro
  const publicData=await (await call(env,'/api/pages?id=foodpantry',{fresh:true})).json();has(publicData.rendered.foodpantry,'lp-overlay','public API shares visual renderer');
  res=await postJson('/pages/api/page/foodpantry/publish',{blocks:original,expected_updated_at:saved.saved_at});eq(res.status,409,'stale publish rejected');
  const revisions=db.prepare('SELECT blocks FROM page_revisions WHERE page_id=? ORDER BY id DESC').all('foodpantry');ok(revisions.length>0&&JSON.parse(revisions[0].blocks)[0].pilot,'published revision preserves layout');
+}
+
+group('Visual editor rollout: every canonical page, without content conversion');
+{
+ const {db,env}=await boot();const {cookie}=signIn(db);
+ const before=db.prepare('SELECT id,blocks,published_blocks,template FROM pages ORDER BY id').all();
+ for(const page of before){
+  const response=await call(env,'/pages/'+encodeURIComponent(page.id)+'/edit',{cookie});
+  eq(response.status,200,page.id+' opens visual editor');
+  has(await response.text(),'boot().then(lpBoot)',page.id+' has shared visual controls');
+ }
+ eq(JSON.stringify(db.prepare('SELECT id,blocks,published_blocks,template FROM pages ORDER BY id').all()),JSON.stringify(before),'opening every editor preserves draft, published content and templates exactly');
+ const owner=signIn(db,['pages_edit_own'],'rollout-owner');
+ eq((await call(env,'/pages/home/edit',{cookie:owner.cookie})).status,403,'rollout preserves ownership checks');
+ db.prepare('UPDATE pages SET owner_username=? WHERE id=?').run('rollout-owner','home');
+ eq((await call(env,'/pages/home/edit',{cookie:owner.cookie})).status,200,'assigned owner gets visual editor');
 }
 
 group('Admin workspace: real data, writes, permissions, and conflict handling');

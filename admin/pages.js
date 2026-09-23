@@ -794,7 +794,8 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     const exists = await env.DB.prepare('SELECT id, owner_username FROM pages WHERE id = ?').bind(id).first();
     if (!exists) return new Response('', { status: 302, headers: { Location: '/pages' } });
     if (!owns(exists)) return denied();
-    const visual = id === 'foodpantry';
+    // Every canonical page uses the same editor; opening it never converts stored blocks.
+    const visual = true;
     const source = visual ? editorShared.MINISTRY_EDITOR_HTML.replace('paletteOpen: true','paletteOpen: false').replace('desktop: 900','desktop: 1080').replace('boot();',VISUAL_EDITOR_JS+'\nboot().then(lpBoot);') : editorShared.MINISTRY_EDITOR_HTML;
     return new Response(source
       .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())

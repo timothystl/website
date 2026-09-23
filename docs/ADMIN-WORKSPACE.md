@@ -1,6 +1,6 @@
 # Admin workspace functionality
 
-Local implementation for review, September 22, 2026. The existing Admin theme is retained; the mockup's color and typography redesign is a separate decision. No production release is implied by this document.
+Full rollout implementation, September 23, 2026. The existing Admin theme is retained; the mockup's color and typography redesign is a separate decision. Release status is recorded in the pull request and deployment workflow.
 
 ## Entry points
 
@@ -12,7 +12,7 @@ Local implementation for review, September 22, 2026. The existing Admin theme is
 
 Command search includes the new workspaces and shared worship times. Saving worship times invalidates public page data and the editor’s shared-data cache.
 
-Navigation groups are Website, Calendar & events, Communications, Operations, and Administration. All existing routes remain available. Shared-content destinations expand in their own group instead of being mixed with the Pages list. The full-width visual editor is unchanged.
+Navigation groups are Website, Calendar & events, Communications, Operations, and Administration. All existing routes remain available. Shared-content destinations expand in their own group instead of being mixed with the Pages list. The full-width visual editor is now enabled for every canonical page, including ministry pages reached through their existing redirects. Opening a page does not rewrite its blocks, publish a draft, or change its template. Existing ownership checks remain in force.
 
 ## Event behavior
 
