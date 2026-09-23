@@ -1,3 +1,4 @@
+import { renderPageOverview } from './workspace.js';
 import {VISUAL_EDITOR_JS,VISUAL_EDITOR_CSS} from './visual-editor.js';
 import {VISUAL_CSS,VISUAL_RUNTIME} from './visual-assets.js';
 // Page-tree logic shared by the admin screens, the editor and the public API.
@@ -406,6 +407,14 @@ export async function handlePagesRoutes(request, env, path, method, currentUser,
   const denied = () => new Response('Access denied.', { status: 403 });
   if (ownOnly && (path === '/pages/new' || path === '/pages/details')) return denied();
 
+  const overviewMatch = path.match(/^\/pages\/([^/]+)\/overview$/);
+  if (overviewMatch && method === 'GET') {
+    const page = await env.DB.prepare('SELECT * FROM pages WHERE id = ?').bind(decodeURIComponent(overviewMatch[1])).first();
+    if (!page) return new Response('Page not found.', { status: 404 });
+    if (!owns(page)) return denied();
+    return renderPageOverview(page, currentUser, badges);
+  }
+
   // ── All pages ──
   // `/pages/:id/details` renders the same list with that page's drawer open,
   // so the drawer is a real address: it survives a refresh and can be linked
@@ -525,7 +534,7 @@ export async function handlePagesRoutes(request, env, path, method, currentUser,
             : '<span style="color:var(--tlc-muted);">—</span>',
           statusCell,
         ],
-        actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/details">Details</a>${out ? '' : `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/edit">Open editor</a>`}`,
+        actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/overview">Overview</a><a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/details">Details</a>${out ? '' : `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/edit">Open editor</a>`}`,
         warn: clash
           ? (clash.reason === 'address'
               ? `${clash.link} is the real address of the ${clash.withTitle} page — this short link would shadow it, so it is switched off.`
@@ -546,7 +555,7 @@ export async function handlePagesRoutes(request, env, path, method, currentUser,
     const detailsClash = detailsLink ? detailsLink.shortLinkClash : null;
 
     return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, badges)}
+${sidebarShell('pages', currentUser, `<a href="/shared-content">Shared content</a>`, badges)}
 <div class="tlc-wrap">
   ${alertHtml || problemHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}${problemHtml}</div>` : ''}
   ${renderListSection({
@@ -693,6 +702,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     ).all().catch(() => ({ results: [] }));
     const saved = url.searchParams.get('msg') === 'saved';
     const field = (r) => {
+      if (r.key === 'church_service_times') return '<div class="form-group"><label>Service times</label><p><a href="/shared-content/services">Edit worship times as rows</a></p><p>Shared by every page that displays service times.</p></div>';
       const multiline = r.key === 'church_service_times';
       return `<div class="form-group">
   <label for="f-${escapeHtml(r.key)}">${escapeHtml(r.label || r.key)}</label>

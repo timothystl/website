@@ -727,7 +727,7 @@ function intakeStatus(item) {
   const ready = isReady(item);
   const open = openCountOf(item.type, item.checks);
   if (ready) return { done: true, label: 'Ready' };
-  if (item.publishedAt) return { done: true, label: 'Published' };
+  if (item.publishedAt) return { done: true, label: 'Office complete' };
   return { done: false, label: open == null ? 'Needs a type' : `${open} open` };
 }
 
@@ -798,7 +798,7 @@ function intakeMiddle(list, queue, selectedKey) {
       <label class="ei-bulkall"><input type="checkbox" onclick="tlcEiSelectAllShown(this)"> Select all shown</label>
       <select name="type" required><option value="">Assign type…</option>${typeOptions}</select>
       <button type="submit" formaction="/event-intake/bulk-type" class="ei-btn ei-btn-ghost">Assign to selected</button>
-      <button type="submit" formaction="/event-intake/bulk-publish" formnovalidate class="ei-btn ei-btn-gold">Publish selected</button>
+      <button type="submit" formaction="/event-intake/bulk-publish" formnovalidate class="ei-btn ei-btn-gold">Complete office follow-up</button>
     </div>` : '';
   return `<div class="ei-mid">
     <div class="ei-mid-head">
@@ -857,7 +857,7 @@ function intakeDeferredPanel(item, gymExtra) {
 
 function intakeChecklistPanel(item) {
   if (!item.type) {
-    return `<p class="ei-note">Pick a type below to see its office paperwork checklist — or just publish, nothing here is required.</p>`;
+    return `<p class="ei-note">Pick a type below to see its office paperwork checklist — or complete office follow-up. These fields are optional.</p>`;
   }
   const list = checklistFor(item.type, item.checks);
   const doneCount = list.filter((c) => c.done).length;
@@ -872,7 +872,7 @@ function intakeChecklistPanel(item) {
     <span class="ei-check-text"><span>${intakeEsc(c.label)}</span><span class="ei-check-who">${intakeEsc(c.who)}</span></span>
   </label>`).join('');
   return `<div class="ei-checklist">
-    <div class="ei-checklist-head"><span class="ei-rail-label">Office paperwork — optional, never required to publish</span><span class="ei-mid-sub">${doneCount} of ${list.length}</span></div>
+    <div class="ei-checklist-head"><span class="ei-rail-label">Office paperwork — optional; separate from public visibility</span><span class="ei-mid-sub">${doneCount} of ${list.length}</span></div>
     ${rows}
   </div>`;
 }
@@ -965,14 +965,14 @@ function intakeDetail(item, gymExtra, queue) {
         </div>` : ''}
         <div class="ei-actions">
           <button type="submit" name="action" value="save" class="ei-btn ei-btn-ghost">Save</button>
-          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">${item.publishedAt ? 'Re-publish' : 'Publish'}</button>
+          <button type="submit" name="action" value="publish" class="ei-btn ei-btn-primary">${item.publishedAt ? 'Confirm office completion' : 'Complete office follow-up'}</button>
         </div>
       </div>
     </form>
     <form method="POST" action="/event-intake/hold" class="ei-holdform"><button type="submit" class="ei-link-btn">← Back to Needs a decision</button></form>
     ${item.sourceKind === 'local' ? `<form method="POST" action="/event-intake/local/delete" class="ei-holdform" onsubmit="return confirm('Delete this event? This cannot be undone.')">
       <input type="hidden" name="key" value="${intakeEsc(item.key)}"><button type="submit" class="ei-link-btn ei-link-danger">Delete this event</button></form>` : ''}
-    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, but nothing here is required. The room, the type and the checklist are all optional; a plain note needs none of them, and Publish works with the page exactly as it is.</p>
+    <p class="ei-footnote">Google stays the office’s day-to-day tool — imported events land here with their room and time, but nothing here is required. The room, the type and the checklist are all optional; a plain note needs none of them, and completing office follow-up does not change public visibility.</p>
   </div>`;
 }
 
@@ -996,7 +996,7 @@ function tlcEiBulkSubmit(ev) {
   var isPublish = action.indexOf('bulk-publish') !== -1;
   var noun = n + ' event' + (n === 1 ? '' : 's');
   var msg = isPublish
-    ? 'Publish ' + noun + '? This does not require the checklist to be finished.'
+    ? 'Complete office follow-up for ' + noun + '? This does not change public visibility or require a finished checklist.'
     : 'Assign this type to ' + noun + '?';
   return confirm(msg);
 }
@@ -1025,7 +1025,7 @@ function tlcEiSelectAllShown(box) {
 async function renderIntakePage(ctx, currentUser, badges) {
   const { list, queue, selected, counts, openTotal, gymExtra, googleOk } = ctx;
   const warn = googleOk === false ? `<div class="ei-warn">Google Calendar could not be read just now — this list is News &amp; Events and gym rentals only, until the next visit.</div>` : '';
-  return `${sidebarShell('intake', currentUser, '', badges)}
+  return `${sidebarShell('intake', currentUser, '<a href="/calendar-workspace">← Calendar &amp; events</a>', badges)}
 <div class="ei-wrap">
   <div class="ei-topbar">
     <div class="ei-brand"><span class="ei-brand-name">Timothy’s Calendar</span><span class="ei-brand-sub">Office intake</span></div>

@@ -291,6 +291,7 @@ const PAGE_DATA_CACHE = new WeakMap();
 const EDITOR_PAGE_DATA = new WeakMap();
 const EDITOR_PAGE_DATA_TTL_MS = 5 * 60 * 1000;
 export const EDITOR_PAGE_DATA_PREFIXES = [
+  '/shared-content/services',  // structured editor of the same church service-times record
   '/pages/details',            // church_* settings → Contact details, Map, Service times
   '/menu/appearance/publish',  // the LIVE chrome record → every block's fonts and colors
   '/partners',                 // → Partner logos
