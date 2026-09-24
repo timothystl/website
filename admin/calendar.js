@@ -623,7 +623,7 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, in
       return (body.items || [])
         .map((ev) => {
           const normalized = normalizeGoogleEvent(ev, 'gcal', cats);
-          if(normalized && includeEditLinks)Object.assign(normalized,{googleCalendarId:id,googleEventId:ev.id,recurringEventId:ev.recurringEventId||''});
+          if(normalized && includeEditLinks)Object.assign(normalized,{id:'g:'+encodeURIComponent(id)+':'+ev.id,googleCalendarId:id,googleEventId:ev.id,recurringEventId:ev.recurringEventId||''});
           if (normalized && includeEditLinks && /^https:\/\/(calendar\.google\.com|www\.google\.com)\//.test(String(ev.htmlLink || ''))) normalized.editUrl = ev.htmlLink;
           return normalized;
         })
