@@ -32,6 +32,17 @@ try {
  assert.deepEqual(errors,[], 'Calendar script must boot after production bundling');
  await page.locator('.ws-day').first().waitFor();
  assert.ok(await page.locator('.ws-day').count()>=35);
+
+ assert.match(await page.locator('[data-event="n:7"]').innerText(),/Special/);
+ assert.doesNotMatch(await page.locator('[data-event="n:7"]').innerText(),/News & Events|Google Calendar/);
+ await page.locator('#calendar-search').fill('missing event');
+ assert.equal(await page.locator('[data-event="n:7"]').count(),0);
+ await page.locator('#calendar-search').fill('community');
+ assert.equal(await page.locator('[data-event="n:7"]').count(),1);
+ await page.locator('#calendar-search').fill('');
+ await page.locator('#calendar-category').selectOption('special');
+ assert.equal(await page.locator('[data-event="n:7"]').count(),1);
+ await page.locator('#calendar-category').selectOption('');
  await page.locator('[data-event="n:7"]').click();
  assert.equal(await page.locator('dialog a').getAttribute('href'),'/newsitems/edit/7');
  await page.getByRole('button',{name:'Close event panel'}).click();
@@ -60,7 +71,7 @@ try {
  const googleOut=path.join(dir,'google.mjs');
  await build({entryPoints:['admin/calendar-google-client.js'],bundle:true,format:'esm',keepNames:true,outfile:googleOut});
  const {GOOGLE_CALENDAR_CLIENT}=await import(pathToFileURL(googleOut));
- Object.assign(config,{mode:'calendar',googleEnabled:true,googleColors:[],canNews:true});
+ Object.assign(config,{mode:'calendar',googleEnabled:true,googleColors:[{id:'3',name:'Music'}],canNews:true});
  const gcal={...event,id:'g:occurrence',source:'gcal',googleCalendarId:'church@test',googleEventId:'occurrence',recurringEventId:'series'};
  const googleSaves=[];let failSave=true;
  await page.unroute('https://workspace.test/**');
@@ -76,11 +87,13 @@ try {
  await page.goto('https://workspace.test/calendar-workspace');await page.locator('.ws-day').first().waitFor();
  await page.locator('[data-add="2026-09-24"]').click();
  await page.locator('#google-event-form [name=title]').fill('Choir practice');
+ await page.locator('#google-event-form [name=colorId]').selectOption({label:'Music'});
  await page.locator('#google-event-form [name=repeat]').selectOption('WEEKLY');
  await page.getByRole('button',{name:'Save to Google Calendar'}).click();
  await page.getByText('Google did not confirm the save. Retry.',{exact:true}).waitFor();
  assert.equal(await page.locator('#google-event-form [name=title]').inputValue(),'Choir practice');
  await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.locator('#google-event-form').waitFor({state:'hidden'});await page.locator('.ws-day').first().waitFor();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ assert.equal(googleSaves[0].colorId,'3');
  assert.equal(googleSaves[0].requestId,googleSaves[1].requestId,'failed save retry keeps the same identity');assert.equal(googleSaves[1].calendarId,'church@test');assert.equal(googleSaves[1].repeat,'WEEKLY');
  await page.locator('[data-event="g:occurrence"]').click();await page.getByRole('button',{name:'Edit entire series instead'}).click();
  await page.getByText('Editing the entire series.',{exact:true}).waitFor();
@@ -108,6 +121,16 @@ try {
  assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g)||[]).length,1,'the month prints on one page');
  await page.emulateMedia({media:'screen'});await page.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
  assert.equal(await page.locator('.ws-more').count(),0,'and the page is restored after printing');
+ const sortable=[{...event,id:'n:1',title:'Zebra meeting',category:'meetings'},{...event,id:'g:2',source:'gcal',title:'Alpha choir',category:'music',start:'2026-09-24T18:00:00',end:'2026-09-24T19:00:00'}];
+ await page.route('**/calendar-workspace/feed?**',r=>r.fulfill({json:{events:sortable,categories:[{key:'meetings',name:'Meetings'},{key:'music',name:'Music'}],google:true}}));
+ await page.reload();await page.locator('.ws-day').first().waitFor();
+ await page.locator('#calendar-sort').selectOption('title');await page.locator('.ws-list-row').first().waitFor();
+ assert.deepEqual(await page.locator('.ws-list-row h3').allTextContents(),['Alpha choir','Zebra meeting']);
+ await page.locator('#calendar-sort').selectOption('category');await page.locator('.ws-list-row').first().waitFor();
+ assert.deepEqual(await page.locator('.ws-list-row h3').allTextContents(),['Zebra meeting','Alpha choir']);
+ await page.locator('#calendar-category').selectOption('music');
+ assert.deepEqual(await page.locator('.ws-list-row h3').allTextContents(),['Alpha choir']);
+ await page.locator('#calendar-search').fill('missing');assert.equal(await page.locator('.ws-list-row').count(),0);
  assert.deepEqual(errors,[]);
  console.log('Bundled calendar and services browser interactions passed.');
 } finally {await browser?.close();await rm(dir,{recursive:true,force:true});}
