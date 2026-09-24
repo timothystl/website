@@ -4,6 +4,7 @@
 
 import { renderGiveLandingHtml, renderGiveBlocksHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
 import { renderGiveStaxMockupHtml, applePayDomainPlaceholderResponse } from './give-stax-mockup.js';
+import { APPLE_PAY_DOMAIN_ASSOCIATION } from './apple-pay-domain-association.js';
 
 // ── PUBLIC PUSH: the site's own service worker ──────────────────
 // The admin's is admin.timothystl.org's own — see SERVICE_WORKER_JS in
@@ -758,6 +759,17 @@ export default {
       ), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' },
       });
+    }
+
+    // Apple Pay domain verification for Square (Christmas Market vendors) —
+    // see apple-pay-domain-association.js. Must be answered here: the path has
+    // no file extension, so it would otherwise fall through to the SPA and
+    // come back as index.html with a 200, which Apple rejects.
+    if (url.pathname === '/.well-known/apple-developer-merchantid-domain-association') {
+      return new Response(APPLE_PAY_DOMAIN_ASSOCIATION, { headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+      }});
     }
 
     // Served at the plain path so its scope covers the whole origin — a worker
