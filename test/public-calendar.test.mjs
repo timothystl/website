@@ -869,6 +869,54 @@ async function goToFixtureMonth(p) {
   await ctx.close();
 }
 
+// ── but /news's own Print month button prints the month ─────
+// Reported as "it is just wanting to print the full webpage": /news carries
+// the full calendar, Print month and all, and that button was a bare
+// window.print() on a page with no sheet — five pages of News & Events. The
+// button now draws this calendar's sheet for that one print and takes it away
+// on afterprint, so Ctrl/Cmd+P (the group above) is unchanged.
+{
+  const { p, ctx, errors } = await open({ page: 'news' });
+  await p.evaluate(() => { window.print = () => { window.__printed = true; }; });
+  await p.click('#page-news .tlc-cal-print');
+  ok(await p.evaluate(() => window.__printed === true), 'Print month still opens the print dialog');
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 1, 'and draws a sheet for this print');
+  await p.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+  const shown = await p.evaluate(() => {
+    const vis = (sel) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== 'none'; };
+    return { sheet: vis('.tlc-print-sheet'), nav: vis('.nav'), hero: vis('#page-news .tlcb--hero') };
+  });
+  ok(shown.sheet && !shown.nav && !shown.hero, 'the month prints and the News page around it does not');
+  const pdf = await p.pdf({ preferCSSPageSize: true });
+  eq((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 1, 'on one sheet of paper');
+  await p.emulateMedia({ media: 'screen' });
+  await p.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 0, 'and the sheet is gone again afterward');
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  await ctx.close();
+}
+
+// ── a sheet on a page not showing never decides what prints ─
+// /calendar's sheet stays in the document after navigating to another page.
+// Counting it made Ctrl/Cmd+P on that page print a blank sheet.
+{
+  const { p, ctx } = await open();
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 1, '/calendar draws its sheet');
+  await p.evaluate(() => showPage('home'));
+  await p.waitForTimeout(200);
+  await p.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(120);
+  const navShown = await p.$eval('.nav', (e) => getComputedStyle(e).display);
+  ok(navShown !== 'none', 'another page prints as itself, not as a hidden calendar');
+  await p.emulateMedia({ media: 'screen' });
+  await p.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  eq(await p.$$eval('.tlc-print-sheet', (x) => x.length), 1, 'and /calendar keeps its sheet afterward');
+  await ctx.close();
+}
+
 // ── subscribing to part of it ───────────────────────────────
 // ⚠ A LINK TO AN .ics FILE IS NOT A SUBSCRIPTION. Clicking one downloads a
 // snapshot: the events land once and never update, which looks like it worked

@@ -2399,7 +2399,17 @@ function tlcCalClick(st, e) {
   if (act === 'cat') { st.filter = val; st.sel = null; tlcCalRender(st); return; }
   if (act === 'src') { st.src = val; st.sel = null; tlcCalRender(st); return; }
   if (act === 'view') { st.view = val; st.sel = null; tlcCalRender(st); return; }
-  if (act === 'print') { window.print(); return; }
+  if (act === 'print') {
+    // ⚠ A COMPACT CALENDAR (a calendar block on /news or any page but
+    // /calendar) draws no sheet of its own, so its Print button used to print
+    // the whole page around it — reported as "it is just wanting to print the
+    // full webpage." The button now asks for this calendar's month: the sheet
+    // is drawn for this one print and taken away on afterprint, so Ctrl/Cmd+P
+    // on that page still prints the page itself.
+    if (st.compact && !st.printNow) { st.printNow = true; tlcCalRender(st); }
+    window.print();
+    return;
+  }
   if (act === 'event') { st.sel = (st.sel === val ? null : val); tlcCalRender(st); return; }
   if (act === 'closedetail') { st.sel = null; tlcCalRender(st); return; }
   if (act === 'subscribe') { st.subOpen = !st.subOpen; tlcCalRender(st); return; }
@@ -2718,7 +2728,7 @@ function tlcCalDetail(st) {
 // overflow hidden because the sheet has to stay one page. That is a different
 // promise from the screen's, which is why the screen has none.
 function tlcCalPrintSheet(st, monthName) {
-  if (st.compact) return ''; // one sheet in the document; /calendar owns it
+  if (st.compact && !st.printNow) return ''; // /calendar owns the standing sheet; a compact one only while its button prints
   var by = tlcCalBucket(st.events), mk = tlcCalKey(st.y, st.m);
   var used = {};
   st.events.forEach(function (ev) { used[ev.category] = true; });
@@ -2789,8 +2799,6 @@ window.addEventListener('resize', function () {
 // call window.print() without ever touching that button.
 var TLC_PRINT_UNDO = [];
 function tlcPreparePrint() {
-  var sheet = document.querySelector('.tlc-print-sheet');
-  if (!sheet) return; // nothing to isolate
   // ⚠ RESTORE BEFORE RE-PREPARING RATHER THAN BAILING. `afterprint` is what
   // normally clears TLC_PRINT_UNDO, but a browser that cancels out of the
   // print dialog, or a second `beforeprint` firing before the first
@@ -2799,7 +2807,21 @@ function tlcPreparePrint() {
   // that machine ran with none of the isolation applied at all — the "prints
   // the whole page" report on one computer and not another. Restoring first
   // makes this idempotent instead of one-shot.
-  if (TLC_PRINT_UNDO.length) tlcRestorePrint();
+  if (TLC_PRINT_UNDO.length) tlcRestorePrint(true);
+  // ⚠ ONLY THE SHEET ON SCREEN. Visiting /calendar and then another page
+  // leaves /calendar's sheet in the (hidden) document, and letting it count
+  // would isolate a page nobody is looking at — the CSS :has() rule would
+  // hide the visible page and print nothing. Sheets whose calendar is not
+  // showing are renamed out of the way until afterprint.
+  var sheet = null;
+  var all = document.querySelectorAll('.tlc-print-sheet');
+  for (var s = 0; s < all.length; s++) {
+    var host = all[s].parentNode;
+    if (!sheet && host && host.offsetParent !== null) { sheet = all[s]; continue; }
+    all[s].className = 'tlc-print-sheet-off';
+    TLC_PRINT_UNDO.push([all[s], 'CLASS', 'tlc-print-sheet']);
+  }
+  if (!sheet) return; // nothing to isolate; renamed sheets come back on afterprint
   var node = sheet;
   while (node && node.parentNode && node !== document.body) {
     var parent = node.parentNode;
@@ -2868,14 +2890,18 @@ function tlcPrintFitCells() {
     }
   }
 }
-function tlcRestorePrint() {
+function tlcRestorePrint(keepSheets) {
   for (var i = 0; i < TLC_PRINT_UNDO.length; i++) {
     var e = TLC_PRINT_UNDO[i];
     if (e[1] === 'REMOVE') { if (e[0].parentNode) e[0].parentNode.removeChild(e[0]); continue; }
+    if (e[1] === 'CLASS') { e[0].className = e[2]; continue; }
     e[0].style[e[1]] = e[2];
   }
   TLC_PRINT_UNDO = [];
   document.body.removeAttribute('data-tlc-printing');
+  if (keepSheets === true) return;
+  // A compact calendar's one-print sheet goes away again (see tlcCalClick).
+  tlcCalViews.forEach(function (st) { if (st.printNow) { st.printNow = false; tlcCalRender(st); } });
 }
 window.addEventListener('beforeprint', tlcPreparePrint);
 window.addEventListener('afterprint', tlcRestorePrint);

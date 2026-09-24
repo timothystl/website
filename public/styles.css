@@ -879,10 +879,13 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
      which is the property a denylist could never have.
 
      ⚠ SCOPED TO A DOCUMENT THAT ACTUALLY HAS A SHEET. `.tlc-print-sheet` is
-     drawn by the /calendar mount and by nothing else — the /news strip is
-     `compact` and draws none — so this cannot reach a ministry page somebody
-     is printing with its hero and its footer, which is the behavior the old
-     scoping existed to protect and still does.
+     drawn standing by the /calendar mount only. A `compact` calendar (the
+     /news one, or a block on any other page) draws one just for the print its
+     own Print month button starts, and index.html takes it away on
+     afterprint; a sheet on a page not showing is renamed out of the way on
+     beforeprint. So Ctrl/Cmd+P on a ministry page still prints it with its
+     hero and its footer, which is the behavior the old scoping existed to
+     protect and still does.
      ⚠ An inactive .page is already display:none, so only the page actually
      showing is ever in the printed document. A browser without :has() prints
      the page with its chrome above the sheet: degraded, not broken, and every
