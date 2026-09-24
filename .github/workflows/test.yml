@@ -165,6 +165,7 @@ jobs:
           export CHROME_PATH
           node test/public-page.test.mjs
           node test/workspace-browser.test.mjs
+          node test/public-calendar.test.mjs
 
 # Other browser suites not run here, and why:
 #

@@ -5,7 +5,7 @@ import { html, sidebarShell, escapeHtml as esc } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { parseBlocks, sanitizeBlocks, BLOCK_DEFS } from './blocks.js';
 import { churchDate } from './when.js';
-import { GOOGLE_COLORS, mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents, readBibleClassEvents } from './calendar.js';
+import { activeCategories, mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents, readBibleClassEvents } from './calendar.js';
 import { getGCalAccessToken } from './gym.js';
 import { ROOMS, TYPES } from './intake.js';
 import { WORKSPACE_CLIENT, WORKSPACE_CSS } from './workspace-client.js';
@@ -81,7 +81,11 @@ export async function handleWorkspaceRoutes(request,env,path,method,user,url,bad
  if(path.startsWith('/calendar-workspace')){
   if(!canCalendar(user))return denied();
   const googleResponse=await handleGoogleCalendar(request,env,path,method,user,url);if(googleResponse)return googleResponse;
-  if(path==='/calendar-workspace'&&method==='GET')return shell('calendar',user,badges,'Calendar & events',`${workspaceTabs(user,'calendar',badges)}<p>Click a date to add an event, or open a Google event to edit it here. Google holds linked scheduling details; website posts keep their promotional content. All times are church time (America/Chicago).</p><div id="workspace-calendar"></div><noscript>Enable JavaScript for the interactive calendar. Existing event forms remain available.</noscript><script type="application/json" id="workspace-data">${scriptData({mode:'calendar',googleEnabled:hp(user,'intake_manage'),startDate:realDate(url.searchParams.get('date'))?url.searchParams.get('date'):churchDate(),googleColors:GOOGLE_COLORS,today:churchDate(),canAdd:hp(user,'intake_manage'),canNews:hp(user,'news_edit'),canGym:hp(user,'gym_manage'),rooms:ROOMS,types:Object.entries(TYPES).map(([key,v])=>({key,label:v.label}))})}</script><script>${GOOGLE_CALENDAR_CLIENT}</script><script>${WORKSPACE_CLIENT}</script>`);
+  if(path==='/calendar-workspace'&&method==='GET'){
+   const rows=await env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories').all();
+   const editorCategories=activeCategories(mergedCategories(rows.results||[])).filter(c=>c.colorId).map(c=>({id:c.colorId,name:c.name}));
+   return shell('calendar',user,badges,'Calendar & events',`${workspaceTabs(user,'calendar',badges)}<p>Click a date to add an event, or open a Google event to edit it here. Google holds linked scheduling details; website posts keep their promotional content. All times are church time (America/Chicago).</p><div id="workspace-calendar"></div><noscript>Enable JavaScript for the interactive calendar. Existing event forms remain available.</noscript><script type="application/json" id="workspace-data">${scriptData({mode:'calendar',googleEnabled:hp(user,'intake_manage'),startDate:realDate(url.searchParams.get('date'))?url.searchParams.get('date'):churchDate(),googleColors:editorCategories,today:churchDate(),canAdd:hp(user,'intake_manage'),canNews:hp(user,'news_edit'),canGym:hp(user,'gym_manage'),rooms:ROOMS,types:Object.entries(TYPES).map(([key,v])=>({key,label:v.label}))})}</script><script>${GOOGLE_CALENDAR_CLIENT}</script><script>${WORKSPACE_CLIENT}</script>`);
+  }
   if(path==='/calendar-workspace/feed'&&method==='GET'){
    const from=url.searchParams.get('from'),to=url.searchParams.get('to');
    if(!realDate(from)||!realDate(to)||to<from||(new Date(to)-new Date(from))/86400000>62)return json({error:'Choose a calendar range of up to 63 days.'},400);

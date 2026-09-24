@@ -50,7 +50,7 @@ test('every Google color the office can pick maps to exactly one category', () =
   for (const c of CATEGORIES) if (c.colorId) assert.equal(categoryFor(c.colorId), c.key, c.google);
 });
 
-test('an event with no color at all is neutral, never dropped', () => {
+test('an event with no color uses a recognizable title, never dropped', () => {
   assert.equal(categoryFor(undefined), NEUTRAL_CATEGORY);
   assert.equal(categoryFor(null), NEUTRAL_CATEGORY);
   assert.equal(categoryFor(''), NEUTRAL_CATEGORY);
@@ -58,7 +58,7 @@ test('an event with no color at all is neutral, never dropped', () => {
   // event carries the calendar's default and Google sends no colorId at all.
   const ev = normalizeGoogleEvent({ id: 'x', summary: 'Trustees', start: { dateTime: '2026-08-10T19:00:00-05:00' }, end: { dateTime: '2026-08-10T20:00:00-05:00' } });
   assert.ok(ev, 'a colorless event still becomes an event');
-  assert.equal(ev.category, NEUTRAL_CATEGORY);
+  assert.equal(ev.category, 'meetings');
 });
 
 test('every category has a color and a tint, and the neutral one is reachable', () => {
@@ -751,3 +751,16 @@ test('gray (the neutral fallback) has no hue at all, so it cannot converge on st
 
 await queue.reduce((p, f) => p.then(f), Promise.resolve());
 console.log(`calendar.test.mjs: ${pass} passed`);
+
+ test('legacy event categories recognize common church events and respect explicit choices', () => {
+  const cases = [['Worship','worship'],['Christian Education','learn'],['Bible Class','learn'],["Children’s Choir",'music'],['Handbells','music'],['Sing a long','music'],['Council Meeting','meetings'],['Food Pantry','ministry'],['LWML','ministry'],['No school — LESA teacher in-service','wol'],['MDO no school','mdo'],['Something unfamiliar','other']];
+  for(const [title,key] of cases){
+   const event={summary:title,start:{date:'2026-09-24'},end:{date:'2026-09-25'}};
+   assert.equal(normalizeGoogleEvent(event).category,key,title);
+   assert.equal(normalizeGoogleEvent({...event,colorId:'9'}).category,'worship','explicit color wins');
+  }
+  assert.equal(categoryForNews({title:'No school'}),'wol');
+  assert.equal(categoryForNews({title:'No school',calendar_category:'mdo'}),'mdo');
+  const retired=mergedCategories([{key:'music',active:0}]);
+  assert.equal(normalizeGoogleEvent({summary:'Choir',start:{date:'2026-09-24'}},'gcal',retired).category,'other');
+ });

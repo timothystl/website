@@ -24,7 +24,8 @@
 import { classDates, cleanTime } from './class-schedule.js';
 
 // ── CATEGORIES ──────────────────────────────────────────────────────────────
-// ⚠ A GOOGLE EVENT HAS NO CATEGORY FIELD, so the event's COLOR is the category.
+// Explicit Google event colors map to categories. Colorless legacy events use
+// conservative title defaults, with Other for names we do not recognize.
 // Whoever enters the event picks a color once in Google and the site draws its
 // own palette from it — so ten categories still read as one calendar rather
 // than as Google's ten hues. The office-facing version of this table is in
@@ -132,7 +133,7 @@ export const CATEGORIES = DEFAULT_CATEGORIES;
 // a swatch that is ever adjusted moves every category wearing it.
 //
 // ⚠ THE NEUTRAL CATEGORY CANNOT BE REMOVED OR RETIRED, whatever the table says.
-// An event whose color nobody set — which is most of them — has to land
+// An event without a recognized color or title still has to land
 // somewhere, and a church event silently missing from the church calendar is
 // the worst failure this feature has.
 export function mergedCategories(rows) {
@@ -181,6 +182,24 @@ export function categoryFor(colorId, cats) {
   const hit = list.find((c) => c.colorId && String(c.colorId) === want);
   return hit ? hit.key : NEUTRAL_CATEGORY;
 }
+// Conservative defaults for older entries without an explicit category/color.
+// Never write these guesses back to Google or override staff categorization.
+export function categoryForTitle(title, cats) {
+  const rules = [
+    ['mdo', /\b(mdo|mother['’]?s day out)\b/i],
+    ['wol', /\b(no school|lesa|word of life|teacher in.service)\b/i],
+    ['music', /\b(choir|handbells?|sing[ -]*a[ -]*long|rehearsal)\b/i],
+    ['learn', /\b(bible (class|study)|christian education|sunday school|confirmation)\b/i],
+    ['worship', /\b(worship|divine service|communion|ash wednesday|maundy thursday|good friday)\b/i],
+    ['meetings', /\b(meeting|council|elders|trustees|voters)\b/i],
+    ['ministry', /\b(food pantry|lwml|outreach|food bank)\b/i],
+    ['youth', /\b(youth|vbs|vacation bible school)\b/i],
+    ['facility', /\b(gym rented|gym rental|room rental)\b/i],
+  ];
+  const key = rules.find(([, pattern]) => pattern.test(String(title || '')))?.[0];
+  return activeCategories(cats).some(c => c.key === key) ? key : NEUTRAL_CATEGORY;
+}
+
 export function categoryRecord(key, cats) {
   const list = activeCategories(cats);
   return list.find((c) => c.key === key)
@@ -209,7 +228,8 @@ export function categoryForNews(row, cats) {
   const said = String((row && row.calendar_category) || '').trim();
   if (said && live.some((c) => c.key === said)) return said;
   const raw = String((row && (row.value || row.theme)) || '').trim().toLowerCase();
-  const want = NEWS_VALUE_CATEGORY[raw] || 'special';
+  const inferred = categoryForTitle(row?.title, cats);
+  const want = (inferred !== NEUTRAL_CATEGORY ? inferred : NEWS_VALUE_CATEGORY[raw]) || 'special';
   // ⚠ A category the office has retired must not come back through this door —
   // by either route.
   return live.some((c) => c.key === want) ? want : NEUTRAL_CATEGORY;
@@ -259,7 +279,7 @@ export function normalizeGoogleEvent(ev, sourceLabel = 'gcal', cats) {
       start: s.date, end: addDays(endExclusive, -1), allDay: true,
       title, location: String(ev.location || '').trim(),
       description: plainText(ev.description || ''),
-      category: categoryFor(ev.colorId, cats), source: sourceLabel,
+      category: ev.colorId ? categoryFor(ev.colorId, cats) : categoryForTitle(title, cats), source: sourceLabel,
     };
   }
   const start = wallClock(s.dateTime);
@@ -269,7 +289,7 @@ export function normalizeGoogleEvent(ev, sourceLabel = 'gcal', cats) {
     start, end: wallClock(e.dateTime) || start, allDay: false,
     title, location: String(ev.location || '').trim(),
     description: plainText(ev.description || ''),
-    category: categoryFor(ev.colorId, cats), source: sourceLabel,
+    category: ev.colorId ? categoryFor(ev.colorId, cats) : categoryForTitle(title, cats), source: sourceLabel,
   };
 }
 
