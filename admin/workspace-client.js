@@ -49,7 +49,7 @@ export const WORKSPACE_CLIENT = `(function workspaceClient(){
  const date=d=>new Date(d+'T12:00:00Z'),iso=d=>d.toISOString().slice(0,10),add=(s,n)=>{const d=date(s);d.setUTCDate(d.getUTCDate()+n);return iso(d);};
  const label=s=>date(s).toLocaleDateString('en-US',{timeZone:'UTC',weekday:'short',month:'short',day:'numeric'});
  const clock=s=>{const m=/T(\\d\\d):(\\d\\d)/.exec(s);if(!m)return 'All day';const h=Number(m[1]);return \`\${h%12||12}:\${m[2]} \${h<12?'am':'pm'}\`;};
- const source=e=>({gcal:'Google Calendar',news:'News & Events',building:'Gym Rentals',local:'Entered here'}[e.source]||e.source);
+ const source=e=>({gcal:'Google Calendar',news:'News & Events',building:'Gym Rentals',local:'Entered here',class:'Christian Education'}[e.source]||e.source);
  const category=e=>typeof e.category==='object'?(e.category.key||''):e.category;
  function bounds(){if(view==='week'){const start=add(anchor,-date(anchor).getUTCDay());return [start,add(start,6)];}const first=anchor.slice(0,7)+'-01',last=new Date(Date.UTC(date(first).getUTCFullYear(),date(first).getUTCMonth()+1,0));return view==='month'?[add(first,-date(first).getUTCDay()),add(iso(last),6-last.getUTCDay())]:[first,iso(last)];}
  async function load(){const n=++serial;controller?.abort();controller=new AbortController();loading=true;error='';payload=null;render();const [from,to]=bounds();try{const r=await fetch('/calendar-workspace/feed?'+new URLSearchParams({from,to}),{signal:controller.signal});const p=await r.json();if(!r.ok)throw Error(p.error||'Calendar unavailable.');if(n!==serial)return;payload=p;window.tlcCalendarEvents=p.events||[];}catch(e){if(n!==serial||e.name==='AbortError')return;error=e.message||'Calendar unavailable.';}loading=false;render();}
@@ -77,6 +77,7 @@ export const WORKSPACE_CLIENT = `(function workspaceClient(){
  async function details(ev){if(!ev)return;if(config.googleEnabled&&ev.source==='gcal')return window.tlcGoogleCalendar.edit(ev);if(ev.source==='local'&&config.canAdd)return editLocal(ev);
   let dest='',text='';if(ev.source==='news'&&config.canNews){dest='/newsitems/edit/'+encodeURIComponent(ev.id.slice(2));text='Edit News & Events record';}
   if(ev.source==='building'&&config.canGym){dest='/gym-rentals';text='Open Gym Rentals';}
+  if(ev.source==='class'&&config.canNews){dest='/christian-education/edit/'+encodeURIComponent(ev.id.split(':')[1]);text='Edit Bible class';}
   if(ev.source==='gcal'&&ev.editUrl){dest=ev.editUrl;text='Open original Google event';}
   open(ev.title,\`<p><strong>\${esc(source(ev))}</strong></p><p>\${label(ev.start.slice(0,10))} · \${clock(ev.start)}\${ev.end!==ev.start?' through '+label(ev.end.slice(0,10))+' · '+clock(ev.end):''}</p><p>\${esc(ev.location)}</p><p style="white-space:pre-wrap">\${esc(ev.description)}</p><p>This source owns the event details. Office follow-up does not change whether the event is public.</p>\${ev.source==='gcal'?'<p>Recurring-series changes are made in Google Calendar.</p>':''}\${dest?'':'<p>No editable source link is available to your account for this record.</p>'}\`,dest?\`<a class="btn btn-primary" href="\${esc(dest)}"\${ev.source==='gcal'?' target="_blank" rel="noopener"':''}>\${text}</a>\`:'');
   if(config.googleEnabled&&config.canNews&&ev.source==='news')addPublishButton(ev);

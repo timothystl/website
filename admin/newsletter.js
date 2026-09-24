@@ -21,6 +21,7 @@ import { pushToAllSubscribers } from './webpush.js';
 import { sweepExpiredItems, extractImageKeys } from './gym.js';
 import { mergedCategories, activeCategories, normalizeClock } from './calendar.js';
 import { TINYMCE_HEAD, THEMES, CONTENT_TYPES } from './db.js';
+import { WEEKDAYS, WEEK_PATTERNS, parseDays, parseWeeks, cleanTime, composeSchedule, parseScheduleText } from './class-schedule.js';
 
 
 // ── WHAT GOES IN AN ISSUE ────────────────────────────────────
@@ -1310,14 +1311,64 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
   // ── CHRISTIAN ED: THE FORM, ONCE ──
   // Add and Edit were two copies of the same fields on the old chrome. One
   // builder, through the shared renderer.
+  // ── WHEN THE CLASS MEETS ──
+  // Real days and times rather than a sentence, so the church calendar can
+  // put the class on every date it meets. The line shown on /education is
+  // composed from these on save. A class saved before these fields existed is
+  // prefilled from its old sentence, with that sentence shown for checking.
+  const ceScheduleHtml = (c) => {
+    const structured = c && c.meet_days && c.start_time;
+    const v = structured
+      ? { days: parseDays(c.meet_days), weeks: parseWeeks(c.weeks), start: c.start_time || '', end: c.end_time || '', note: c.schedule_note || '' }
+      : (c && c.schedule ? parseScheduleText(c.schedule) : { days: [], weeks: '', start: '', end: '', note: '' });
+    const e = escapeHtml;
+    const day = (name, i) => `<label class="tlc-chip"><input type="checkbox" name="meet_days" value="${i}"${v.days.includes(i) ? ' checked' : ''}><span>${name.slice(0, 3)}</span></label>`;
+    const input = (type, name, label, value, hint = '') => `<div class="tlc-field" style="flex:1 1 150px;margin:0;"><label class="tlc-label" for="fld-${name}">${label}</label><input type="${type}" id="fld-${name}" name="${name}" value="${e(value || '')}">${hint ? `<p class="tlc-hint">${hint}</p>` : ''}</div>`;
+    const row = (inner) => `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;">${inner}</div>`;
+    const was = c && c.schedule && !structured
+      ? `<p class="tlc-hint">Previously entered as “${e(c.schedule)}”. Check the days and times below, then save to put this class on the calendar.</p>` : '';
+    return `<div class="tlc-field"><label class="tlc-label">Meets on</label>
+      <div class="tlc-chips" role="group" aria-label="Meets on">${WEEKDAYS.map(day).join('')}</div>
+      <p class="tlc-hint">Pick a day and a start time to put this class on the church calendar every week it meets. Leave both blank for a class “by arrangement.”</p>${was}</div>
+    ${row(`<div class="tlc-field" style="flex:1 1 150px;margin:0;"><label class="tlc-label" for="fld-weeks">Which weeks</label><select id="fld-weeks" name="weeks">${WEEK_PATTERNS.map((p) => `<option value="${p.value}"${p.value === v.weeks ? ' selected' : ''}>${p.label}</option>`).join('')}</select></div>`
+      + input('time', 'start_time', 'Starts at', v.start)
+      + input('time', 'end_time', 'Ends at', v.end, 'Optional.'))}
+    ${row(input('date', 'start_date', 'First class', c ? c.start_date : '', 'Optional. Leave blank if it is already running.')
+      + input('date', 'end_date', 'Last class', c ? c.end_date : '', 'Optional. For a class that ends, or breaks for summer.'))}
+    <div class="tlc-field"><label class="tlc-label" for="fld-schedule_note">Schedule note</label><input type="text" id="fld-schedule_note" name="schedule_note" value="${e(v.note)}" placeholder="Sing-along at 11:00 AM">
+      <p class="tlc-hint">Optional extra words after the day and time on the website. For a class with no set day, this is the whole schedule line, e.g. “By arrangement.”</p></div>`;
+  };
+
+  // The posted meeting pattern, cleaned, plus the display line composed from it.
+  const ceScheduleFields = (f) => {
+    const days = parseDays(f.getAll('meet_days'));
+    const start = cleanTime(f.get('start_time'));
+    const endRaw = cleanTime(f.get('end_time'));
+    const end = start && endRaw && endRaw > start ? endRaw : null;
+    const weeks = parseWeeks(f.get('weeks'));
+    const date = (k) => { const x = String(f.get(k) || '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null; };
+    const note = String(f.get('schedule_note') || '').trim();
+    const onCal = days.length && start;
+    return {
+      meet_days: onCal ? days.join(',') : null,
+      weeks: onCal ? weeks : null,
+      start_time: onCal ? start : null,
+      end_time: onCal ? end : null,
+      start_date: date('start_date'),
+      end_date: date('end_date'),
+      schedule_note: note || null,
+      schedule: composeSchedule({ days, weeks, start, end, note }) || null,
+    };
+  };
+
   const ceFormHtml = (c = null) => {
     const isNew = !c;
     const ACCENT_OPTS = [['mid', 'Navy'], ['teal', 'Teal'], ['steel', 'Steel'], ['sage', 'Moss'], ['amber', 'Gold'], ['plum', 'Plum']];
     return renderFormSection({
       title: isNew ? 'New class' : c.title || 'Edit class',
       purpose: isNew
-        ? 'It appears on /education and in the newsletter’s class picker as soon as you save.'
-        : 'Changes reach /education and the newsletter picker as soon as you save.',
+        ? 'It appears on /education, in the newsletter’s class picker, and on the church calendar as soon as you save.'
+        : 'Changes reach /education, the newsletter picker, and the church calendar as soon as you save.',
       action: isNew ? '/christian-education/create' : `/christian-education/update/${c.id}`,
       cancelHref: '/christian-education',
       saveLabel: isNew ? 'Add class' : 'Save changes',
@@ -1327,7 +1378,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
         { name: 'title', label: 'Class title', value: c ? c.title : '', required: true, placeholder: 'Men’s Bible Study' },
         { name: 'label', label: 'Eyebrow', value: c ? (c.label || '') : '', placeholder: 'Saturday mornings',
           hint: 'The small line above the title on the website.' },
-        { name: 'schedule', label: 'Schedule', value: c ? (c.schedule || '') : '', placeholder: 'Saturdays · 8:00 AM' },
+        { kind: 'html', html: ceScheduleHtml(c) },
         { kind: 'textarea', name: 'description', label: 'Description', rows: 3, value: c ? (c.description || '') : '',
           placeholder: 'What the class is, and who it is for.' },
         { name: 'leader', label: 'Leader', value: c ? (c.leader || '') : '', placeholder: 'Pastor Matt' },
@@ -1404,8 +1455,10 @@ ${renderListSection({
     // the only reading that is true when the switch is actually on.
     const ceActive = ceForm.getAll('active').includes('1') ? 1 : 0;
     const ceSort = parseInt(ceForm.get('sort_order') || '0', 10) || 0;
-    await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceActive, ceSort).run();
+    const sch = ceScheduleFields(ceForm);
+    await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order, meet_days, weeks, start_time, end_time, start_date, end_date, schedule_note, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, sch.schedule, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceActive, ceSort,
+        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString()).run();
     return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
   }
 
@@ -1423,14 +1476,16 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     const ceForm = await request.formData();
     const title = (ceForm.get('title') || '').trim();
     if (!title) return new Response('', { status: 302, headers: { Location: `/christian-education/edit/${ceId}?msg=error` } });
-    await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=? WHERE id=?')
-      .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.getAll('active').includes('1') ? 1 : 0, parseInt(ceForm.get('sort_order')||'0', 10) || 0, ceId).run();
+    const sch = ceScheduleFields(ceForm);
+    await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=?, meet_days=?, weeks=?, start_time=?, end_time=?, start_date=?, end_date=?, schedule_note=?, updated_at=? WHERE id=?')
+      .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, sch.schedule, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.getAll('active').includes('1') ? 1 : 0, parseInt(ceForm.get('sort_order')||'0', 10) || 0,
+        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString(), ceId).run();
     return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
   }
 
   if (path.startsWith('/christian-education/toggle/') && method === 'POST') {
     const ceId = path.split('/').pop();
-    await env.DB.prepare('UPDATE bible_classes SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').bind(ceId).run();
+    await env.DB.prepare('UPDATE bible_classes SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END, updated_at = ? WHERE id = ?').bind(new Date().toISOString(), ceId).run();
     return new Response('', { status: 302, headers: { Location: '/christian-education' } });
   }
 
