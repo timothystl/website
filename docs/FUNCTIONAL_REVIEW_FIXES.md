@@ -10,7 +10,9 @@ feedback; the database closes the gap between checking and writing.
 Schema setup installs both triggers before recording the new schema marker.
 Existing records are preserved, including historical conflicts that need office
 review. Expired holds stop reserving space when the existing expiry task changes
-their status. Multi-date creation invoices only slots successfully reserved.
+their status. Multi-date creation invoices only slots successfully reserved. Grouped approvals
+confirm all holds for that invoice in one statement, so a conflict leaves the
+entire group unconfirmed.
 
 ## F4: One scheduled campaign per newsletter
 

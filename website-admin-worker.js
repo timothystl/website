@@ -2297,7 +2297,10 @@ export default {
     for (const sql of DB_INIT_GYM_OVERLAP_TRIGGERS) await env.DB.prepare(sql).run();
     const newsletterColumns = await env.DB.prepare('PRAGMA table_info(newsletters)').all();
     for (const column of ['schedule_operation', 'schedule_state']) {
-      if (!newsletterColumns.results.some(c => c.name === column)) await env.DB.prepare(`ALTER TABLE newsletters ADD COLUMN ${column} TEXT`).run();
+      if (!newsletterColumns.results.some(c => c.name === column)) {
+        try { await env.DB.prepare(`ALTER TABLE newsletters ADD COLUMN ${column} TEXT`).run(); }
+        catch (error) { if (!/duplicate column name/i.test(String(error?.message || error))) throw error; }
+      }
     }
 
     // ── FOOTER COLUMNS ──
