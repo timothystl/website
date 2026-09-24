@@ -19,3 +19,8 @@ It bundles the client with `keepNames`, as Wrangler does, before opening it in C
 Do not serialize Worker functions with `Function.toString()` for browser execution: bundling
 can insert Worker-only helpers, producing a blank calendar despite passing source-level tests.
 The suite uses mock events and saves; it never creates a production event or sends a message.
+
+Google-backed calendar changes also run `admin/calendar-google.test.mjs` and the Google
+interaction cases in `test/workspace-browser.test.mjs`. Run `test/public-calendar.test.mjs`
+for public month/list/print coverage; its API-specific route must be registered after the
+catch-all so Playwright does not swallow the calendar fixtures.

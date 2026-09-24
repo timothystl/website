@@ -56,6 +56,41 @@ try {
  await page.route('https://workspace.test/**',r=>r.fulfill({contentType:'text/html',body:`<form id="service-form"><div id="service-rows"></div><input id="service-json"><button id="save-services" disabled>Save</button></form><button id="add-service">Add</button><p id="service-error"></p><script id="workspace-data" type="application/json">${JSON.stringify(config)}</script><script>${WORKSPACE_CLIENT}</script>`}));
  await page.goto('https://workspace.test/services');assert.equal(await page.locator('#save-services').isEnabled(),true);
  await page.locator('#add-service').click();assert.equal(await page.locator('.ws-service').count(),2);
+ // Google editing uses the same production bundling and a fake Google-backed API.
+ const googleOut=path.join(dir,'google.mjs');
+ await build({entryPoints:['admin/calendar-google-client.js'],bundle:true,format:'esm',keepNames:true,outfile:googleOut});
+ const {GOOGLE_CALENDAR_CLIENT}=await import(pathToFileURL(googleOut));
+ Object.assign(config,{mode:'calendar',googleEnabled:true,googleColors:[],canNews:true});
+ const gcal={...event,id:'g:occurrence',source:'gcal',googleCalendarId:'church@test',googleEventId:'occurrence',recurringEventId:'series'};
+ const googleSaves=[];let failSave=true;
+ await page.unroute('https://workspace.test/**');
+ await page.route('https://workspace.test/**',async route=>{
+  const url=new URL(route.request().url());
+  if(url.pathname.endsWith('/connection'))return route.fulfill({json:{calendars:[{id:'church@test',name:'Church',writable:true}]}});
+  if(url.pathname.endsWith('/feed'))return route.fulfill({json:{events:[gcal,event],categories:[],google:true}});
+  if(url.pathname.endsWith('/event')&&route.request().method()==='GET')return route.fulfill({json:{event:{title:'Community meal',date:'2026-09-23',endDate:'2026-09-23',time:'18:00',endTime:'19:00',etag:'"live"',eventId:url.searchParams.get('eventId'),recurringEventId:url.searchParams.get('eventId')==='occurrence'?'series':'',recurrence:url.searchParams.get('eventId')==='series'?['RRULE:FREQ=WEEKLY']:[]}}});
+  if(['/event','/create','/publish'].some(s=>url.pathname.endsWith(s))){googleSaves.push(route.request().postDataJSON());if(failSave){failSave=false;return route.fulfill({status:503,json:{error:'Google did not confirm the save. Retry.'}});}return route.fulfill({json:{saved:true}});}
+  return route.fulfill({contentType:'text/html',body:`<!doctype html>${WORKSPACE_CSS}<aside class="sidebar">Admin navigation</aside><div id="workspace-calendar"></div><script id="workspace-data" type="application/json">${JSON.stringify(config)}</script><script>${GOOGLE_CALENDAR_CLIENT}</script><script>${WORKSPACE_CLIENT}</script>`});
+ });
+ await page.setViewportSize({width:1280,height:900});
+ await page.goto('https://workspace.test/calendar-workspace');await page.locator('.ws-day').first().waitFor();
+ await page.locator('[data-add="2026-09-24"]').click();
+ await page.locator('#google-event-form [name=title]').fill('Choir practice');
+ await page.locator('#google-event-form [name=repeat]').selectOption('WEEKLY');
+ await page.getByRole('button',{name:'Save to Google Calendar'}).click();
+ await page.getByText('Google did not confirm the save. Retry.',{exact:true}).waitFor();
+ assert.equal(await page.locator('#google-event-form [name=title]').inputValue(),'Choir practice');
+ await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ assert.equal(googleSaves[0].requestId,googleSaves[1].requestId,'failed save retry keeps the same identity');assert.equal(googleSaves[1].calendarId,'church@test');assert.equal(googleSaves[1].repeat,'WEEKLY');
+ await page.locator('[data-event="g:occurrence"]').click();await page.getByRole('button',{name:'Edit entire series instead'}).click();
+ await page.getByText('Editing the entire series.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ assert.equal(googleSaves.at(-1).eventId,'series');assert.equal(googleSaves.at(-1).etag,'"live"');
+ await page.locator('[data-event="n:7"]').click();await page.getByRole('button',{name:'Publish / link to Google',exact:true}).click();
+ await page.locator('[name=linkEventId]').selectOption('occurrence');await page.getByRole('button',{name:'Publish / link to Google',exact:true}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ assert.equal(googleSaves.at(-1).sourceKey,'n:7');assert.equal(googleSaves.at(-1).linkEventId,'occurrence');
+ await page.locator('#calendar-room').selectOption('Hall');assert.equal(await page.locator('[data-event]').count(),2);
+ await page.emulateMedia({media:'print'});assert.equal(await page.locator('.sidebar').isVisible(),false);assert.equal(await page.locator('.ws-day').first().isVisible(),true);await page.emulateMedia({media:'screen'});
  assert.deepEqual(errors,[]);
  console.log('Bundled calendar and services browser interactions passed.');
 } finally {await browser?.close();await rm(dir,{recursive:true,force:true});}

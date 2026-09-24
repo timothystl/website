@@ -1,9 +1,11 @@
+import { handleGoogleCalendar, calendarLink } from './calendar-google.js';
+import { GOOGLE_CALENDAR_CLIENT } from './calendar-google-client.js';
 // New entry points over existing records; no copied page content or parallel event store.
 import { html, sidebarShell, escapeHtml as esc } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { parseBlocks, sanitizeBlocks, BLOCK_DEFS } from './blocks.js';
 import { churchDate } from './when.js';
-import { mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents } from './calendar.js';
+import { GOOGLE_COLORS, mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents } from './calendar.js';
 import { getGCalAccessToken } from './gym.js';
 import { ROOMS, TYPES } from './intake.js';
 import { WORKSPACE_CLIENT, WORKSPACE_CSS } from './workspace-client.js';
@@ -78,16 +80,21 @@ export async function handleWorkspaceRoutes(request,env,path,method,user,url,bad
  if(!(path==='/shared-content'||path.startsWith('/shared-content/')||path==='/calendar-workspace'||path.startsWith('/calendar-workspace/')))return null;
  if(path.startsWith('/calendar-workspace')){
   if(!canCalendar(user))return denied();
-  if(path==='/calendar-workspace'&&method==='GET')return shell('calendar',user,badges,'Calendar & events',`${workspaceTabs(user,'calendar',badges)}<p>Click a date to add an event, or open an event to edit it at its source. All times are church time (America/Chicago).</p><div id="workspace-calendar"></div><noscript>Enable JavaScript for the interactive calendar. Existing event forms remain available.</noscript><script type="application/json" id="workspace-data">${scriptData({mode:'calendar',today:churchDate(),canAdd:hp(user,'intake_manage'),canNews:hp(user,'news_edit'),canGym:hp(user,'gym_manage'),rooms:ROOMS,types:Object.entries(TYPES).map(([key,v])=>({key,label:v.label}))})}</script><script>${WORKSPACE_CLIENT}</script>`);
+  const googleResponse=await handleGoogleCalendar(request,env,path,method,user,url);if(googleResponse)return googleResponse;
+  if(path==='/calendar-workspace'&&method==='GET')return shell('calendar',user,badges,'Calendar & events',`${workspaceTabs(user,'calendar',badges)}<p>Click a date to add an event, or open a Google event to edit it here. Google holds linked scheduling details; website posts keep their promotional content. All times are church time (America/Chicago).</p><div id="workspace-calendar"></div><noscript>Enable JavaScript for the interactive calendar. Existing event forms remain available.</noscript><script type="application/json" id="workspace-data">${scriptData({mode:'calendar',googleEnabled:hp(user,'intake_manage'),startDate:realDate(url.searchParams.get('date'))?url.searchParams.get('date'):churchDate(),googleColors:GOOGLE_COLORS,today:churchDate(),canAdd:hp(user,'intake_manage'),canNews:hp(user,'news_edit'),canGym:hp(user,'gym_manage'),rooms:ROOMS,types:Object.entries(TYPES).map(([key,v])=>({key,label:v.label}))})}</script><script>${GOOGLE_CALENDAR_CLIENT}</script><script>${WORKSPACE_CLIENT}</script>`);
   if(path==='/calendar-workspace/feed'&&method==='GET'){
    const from=url.searchParams.get('from'),to=url.searchParams.get('to');
    if(!realDate(from)||!realDate(to)||to<from||(new Date(to)-new Date(from))/86400000>62)return json({error:'Choose a calendar range of up to 63 days.'},400);
    try{
     const [catRows,idRow]=await Promise.all([env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories').all(),env.DB.prepare("SELECT value FROM site_settings WHERE key = 'calendar_google_ids'").first()]);
     const cats=mergedCategories(catRows.results||[]);
+    const links=(await env.DB.prepare("SELECT * FROM calendar_event_links").all()).results||[];
     const [google,news,building,local]=await Promise.all([fetchGoogleEvents(env,{ids:parseCalendarIds(idRow?.value),from,to,getToken:getGCalAccessToken,cats,includeEditLinks:true}),readNewsEvents(env,from,to,cats,{strict:true}),readGymBookings(env,from,to,{strict:true}),readLocalIntakeEvents(env,from,to,cats,{strict:true})]);
-    // Keep source records distinct in Admin. Public-feed deduplication is unchanged.
-    return json({events:[...google.events,...news,...building,...local].filter(e=>e.start.slice(0,10)<=to&&(e.end||e.start).slice(0,10)>=from),categories:cats,google:google.ok,googleReason:google.reason});
+    // Only unlinked sources remain separate. A linked post is publishing metadata for Google.
+    for(const ev of [...news,...local]){const link=links.find(l=>l.source_key===ev.id);if(link)ev.googleLink=link;}
+    for(const ev of google.events){const link=links.find(l=>l.calendar_id===ev.googleCalendarId&&l.event_id===ev.googleEventId&&l.source_key.startsWith('n:'));if(link)ev.newsId=link.source_key.slice(2);}
+    const linked=new Set(links.filter(l=>['synced','cancelled','error'].includes(l.state)).map(l=>l.source_key));
+    return json({events:[...google.events,...news.filter(e=>!linked.has(e.id)),...building,...local.filter(e=>!linked.has(e.id))].filter(e=>e.start.slice(0,10)<=to&&(e.end||e.start).slice(0,10)>=from),categories:cats,google:google.ok,googleReason:google.reason,syncErrors:links.filter(l=>l.last_error).map(l=>({sourceKey:l.source_key,error:l.last_error}))});
    }catch(e){console.error('Admin calendar read failed',e);return json({error:'The calendar could not be loaded. Retry before making changes.'},503);}
   }
   const localMatch=path.match(/^\/calendar-workspace\/local\/(\d+)$/);
@@ -97,7 +104,9 @@ export async function handleWorkspaceRoutes(request,env,path,method,user,url,bad
    return row?json({event:Object.fromEntries(localFields.map(k=>[k,row[k]])),revision:await revision(row)}):json({error:'This local event no longer exists.'},404);
   }
   if((path==='/calendar-workspace/local'||localMatch)&&method==='POST'){
-   if(!hp(user,'intake_manage'))return denied();let body,values;
+   if(!hp(user,'intake_manage'))return denied();
+   if(localMatch&&await calendarLink(env,'l:'+localMatch[1]))return json({error:'This event is linked to Google. Edit it from the calendar to keep one scheduling record.'},409);
+   let body,values;
    try{body=await request.json();values=calendarInput(body);}catch(e){return json({error:e.message||'Invalid event.'},400);}
    let id=localMatch?.[1];
    if(id){

@@ -1,3 +1,4 @@
+import { CALENDAR_LINK_SCHEMA, CALENDAR_NEWS_LINK_INDEX, calendarLink, refreshCalendarLinks } from './admin/calendar-google.js';
 // Timothy Lutheran Church — Newsletter Admin Worker
 // Purpose: Serves admin.timothystl.org — newsletter, news, sermons, youth pages, gym rentals, voter pages
 // Deploy: Cloudflare Worker + D1 (tlc-newsletter-db) + KV (RSVP_STORE)
@@ -892,6 +893,7 @@ function valuePhotoUploadScript() {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(promoteScheduledPages(env));
+    ctx.waitUntil((async()=>{await env.DB.prepare(CALENDAR_LINK_SCHEMA).run();await env.DB.prepare(CALENDAR_NEWS_LINK_INDEX).run();await refreshCalendarLinks(env);})());
     ctx.waitUntil((async () => {
       await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX).run();
       await env.DB.prepare(DB_INIT_CHMS_FORWARD_OUTBOX_INDEX).run();
@@ -1486,7 +1488,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-18-1'; // bumped: newsletters.pastor_note_heading — added by 7cf4224 without a version bump, so the ALTER never ran in production and every /api/newsletter/:id fetch 500'd with "no such column: pastor_note_heading" (newsletter detail panels failing to load on /news).
+    const SCHEMA_VERSION = '2026-09-24-calendar-links'; // Exact Google scheduling links; publishing and office records remain in place.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1501,6 +1503,8 @@ export default {
     // Init DB
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
+    await env.DB.prepare(CALENDAR_LINK_SCHEMA).run();
+    await env.DB.prepare(CALENDAR_NEWS_LINK_INDEX).run();
     try { await env.DB.prepare(DB_INIT_EVENT_INTAKE).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_YOUTH_PAGES).run(); } catch (e) {}
@@ -8673,6 +8677,7 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
       let before = null;
       try { before = JSON.parse(entry.before_state); } catch(_) { return new Response('Invalid state data.', { status: 400 }); }
       if (entry.entity_type === 'news_item') {
+        if(await calendarLink(env,'n:'+entry.entity_id))return new Response('This post is linked to Google. Edit publishing content from the post and scheduling from Calendar.',{status:409});
         await env.DB.prepare(
           'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
         ).bind(before.title, before.summary, sanitizeClassicRich(before.body), before.image_url, before.publish_date, before.event_date, before.expire_date, before.pinned, entry.entity_id).run();

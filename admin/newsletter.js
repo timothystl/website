@@ -1,3 +1,4 @@
+import { calendarLink, refreshCalendarLinks } from './calendar-google.js';
 // ── NEWSLETTER, CHRISTIAN EDUCATION, AND NEWS & EVENTS ────────────────────
 // The weekly email is the one thing in this admin that reaches ~600 people and
 // cannot be taken back. So the rules that decide whether an issue may still be
@@ -498,8 +499,17 @@ async function buildNewsletterEmailPayload(env, id) {
   if (!row) return null;
 
   const eventsRows = await env.DB.prepare(
-    'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
+    'SELECT news_item_id, event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
   ).bind(id).all();
+
+  const linkedIds=(eventsRows.results||[]).filter(e=>e.news_item_id).map(e=>String(e.news_item_id));
+  await refreshCalendarLinks(env,{strict:true,sourceKeys:linkedIds.map(id=>'n:'+id)});
+  for(const event of eventsRows.results||[]){if(event.news_item_id&&await calendarLink(env,'n:'+event.news_item_id)){
+    const post=await env.DB.prepare('SELECT id,title,summary,event_date,event_time FROM news_items WHERE id=?').bind(event.news_item_id).first();
+    if(!post?.event_date)throw new Error('A selected Google event was cancelled. Remove it from this newsletter before sending.');
+    Object.assign(event,eventRowFromPost(post));
+    await env.DB.prepare('UPDATE events SET event_date=?,event_name=?,event_time=?,event_desc=? WHERE newsletter_id=? AND news_item_id=?').bind(event.event_date,event.event_name,event.event_time,event.event_desc,id,event.news_item_id).run();
+  }}
 
   // Re-fetch the newsletter's selected news items (title + summary/body/image) so the
   // Featured/More-from-Timothy sections aren't silently empty when sending/resending.
@@ -531,6 +541,7 @@ async function buildNewsletterEmailPayload(env, id) {
 // fact about the week whether or not anybody wanted a paragraph on it, and
 // leaving a dated post out of the offer would send somebody back to typing it.
 async function upcomingEventPosts(env) {
+  await refreshCalendarLinks(env);
   const today = churchDate();
   try {
     const rows = await env.DB.prepare(
@@ -621,7 +632,7 @@ function eventPickerHtml(posts, picked = [], typed = []) {
         </div>`).join('')}
     </div>`;
 
-  return `<div id="events-container">${list}${legacy}</div>${typed && typed.length ? TYPED_EVENT_JS : ''}`;
+  return `<p><a href="/calendar-workspace" target="_blank" rel="noopener">Choose or create a Google calendar event</a> — use its Website / newsletter post button, then reload this picker after saving your draft. Linked dates are verified again before sending; you can keep editing a draft if Google is unavailable.</p><div id="events-container">${list}${legacy}</div>${typed && typed.length ? TYPED_EVENT_JS : ''}`;
 }
 
 // What a save reads back. The picked posts are re-read from the database
@@ -630,6 +641,7 @@ function eventPickerHtml(posts, picked = [], typed = []) {
 async function newsletterEventsFromForm(env, form) {
   const ids = form.getAll('event_news_ids').map((v) => String(v).trim()).filter(Boolean);
   let picked = [];
+  await refreshCalendarLinks(env,{sourceKeys:ids.map(id=>'n:'+id)});
   if (ids.length) {
     const ph = ids.map(() => '?').join(',');
     try {
@@ -1973,7 +1985,7 @@ ${classesJs}
       });
     }
 
-    const payload = await buildNewsletterEmailPayload(env, id);
+    let payload;try{payload=await buildNewsletterEmailPayload(env,id);}catch(error){return html('<p>Calendar details could not be confirmed. Nothing was sent or scheduled. Review the linked events in Calendar, then retry.</p><a href="/calendar-workspace">Open Calendar</a>','Calendar needs attention');}
     if (!payload) return new Response('Not found', { status: 404 });
     const { row, emailHtml } = payload;
     const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
@@ -2028,7 +2040,7 @@ ${classesJs}
     }
     const scheduledAtIso = scheduledDate.toISOString();
 
-    const payload = await buildNewsletterEmailPayload(env, id);
+    let payload;try{payload=await buildNewsletterEmailPayload(env,id);}catch(error){return html('<p>Calendar details could not be confirmed. Nothing was sent or scheduled. Review the linked events in Calendar, then retry.</p><a href="/calendar-workspace">Open Calendar</a>','Calendar needs attention');}
     if (!payload) return new Response('Not found', { status: 404 });
     const { row, emailHtml } = payload;
     const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId], scheduledAt: scheduledAtIso });
@@ -2450,6 +2462,8 @@ ${newsEventTimeScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
   // ── NEWS ITEMS: EDIT FORM ──
   if (path.startsWith('/newsitems/edit/') && method === 'GET') {
     const id = path.split('/').pop();
+    const link=await calendarLink(env,'n:'+id);
+    if(link)await refreshCalendarLinks(env,{sourceKeys:['n:'+id]});
     const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
     if (!item) return new Response('Not found', { status: 404 });
     const newsMsg = url.searchParams.get('msg');
@@ -2459,7 +2473,9 @@ ${newsEventTimeScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
 ${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`, badges)}
 <div class="tlc-wrap">
 ${newsAlert ? `<div class="tlc-section" style="padding-bottom:0;">${newsAlert}</div>` : ''}
+<p class="alert alert-info">${link?(link.state==='pending'?'Google has not confirmed this link yet. Retry publishing from Calendar.':'Scheduling is linked to Google. Edit dates and location in Calendar; this form owns the photo and promotional copy.'):'This post stays as it is until you choose to publish or link it to Google.'} <a href="/calendar-workspace?date=${escapeHtml(item.event_date||churchDate())}&source=n:${id}">Open in Calendar</a></p>
 ${newsFormHtml(item)}
+${link?`<script>for(const name of ['event_date','event_end_date','event_time','event_end_time','event_location','event_all_day'])document.querySelectorAll('[name="'+name+'"]').forEach(el=>el.disabled=true);</script>`:''}
 </div>
 ${newsImageUploadScript(item.image_url || '')}
 ${newsEventTimeScript()}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
@@ -2469,6 +2485,14 @@ ${newsEventTimeScript()}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
   if (path.startsWith('/newsitems/update/') && method === 'POST') {
     const id = path.split('/').pop();
     const form = await request.formData();
+    const linked=await calendarLink(env,'n:'+id);
+    if(linked){
+      await refreshCalendarLinks(env,{sourceKeys:['n:'+id]});
+      const schedule=await env.DB.prepare('SELECT event_date,event_end_date,event_time,event_end_time,event_location FROM news_items WHERE id=?').bind(id).first();
+      if(!schedule)return new Response('Post not found',{status:404});
+      for(const [key,value] of Object.entries(schedule))form.set(key,value||'');
+      form.set('event_all_day',schedule.event_time?'0':'1');
+    }
     const title = form.get('title') || '';
     const summary = form.get('summary') || '';
     const body = sanitizeClassicRich(form.get('body') || '');   // FX-04
@@ -2506,7 +2530,7 @@ ${newsEventTimeScript()}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     ].filter(Boolean).join(',') || 'web';
     const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
     await env.DB.prepare(
-      'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, event_end_date=?, event_time=?, event_end_time=?, event_location=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
+      `UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_date ELSE ? END, event_end_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_date ELSE ? END, event_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_time ELSE ? END, event_end_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_time ELSE ? END, event_location=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_location ELSE ? END, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?`
     ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
     await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
     return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
