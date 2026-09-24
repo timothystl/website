@@ -620,9 +620,12 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, in
       const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
       if (!res.ok) return null;
       const body = await res.json();
+      // Operational readiness only: never log event content or account credentials.
+      if(body.accessRole)console.info('calendar_access_role',{calendarId:id,role:body.accessRole});
       return (body.items || [])
         .map((ev) => {
           const normalized = normalizeGoogleEvent(ev, 'gcal', cats);
+          if(normalized && includeEditLinks)Object.assign(normalized,{id:'g:'+encodeURIComponent(id)+':'+ev.id,googleCalendarId:id,googleEventId:ev.id,recurringEventId:ev.recurringEventId||''});
           if (normalized && includeEditLinks && /^https:\/\/(calendar\.google\.com|www\.google\.com)\//.test(String(ev.htmlLink || ''))) normalized.editUrl = ev.htmlLink;
           return normalized;
         })
@@ -648,13 +651,15 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, in
 // ── THE FEED ────────────────────────────────────────────────────────────────
 // Everything above, assembled. Returns the payload /api/calendar serves.
 export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, cats }) {
+  let linked=new Set();
+  try{linked=new Set(((await env.DB.prepare("SELECT source_key FROM calendar_event_links WHERE state IN ('synced','cancelled','error')").all()).results||[]).map(l=>l.source_key));}catch(e){console.warn('Calendar link refresh unavailable');}
   const [google, news, building, local] = await Promise.all([
     fetchGoogleEvents(env, { ids: calendarIds, from, to, getToken, cats }),
     readNewsEvents(env, from, to, cats),
     readGymBookings(env, from, to),
     readLocalIntakeEvents(env, from, to, cats),
   ]);
-  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news, building, local))));
+  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news.filter(e=>!linked.has(e.id)), building, local.filter(e=>!linked.has(e.id))))));
   // Trimmed to the requested window AFTER the merge, so an event that reaches
   // into the window from outside it is kept while one that only touched the
   // padding is not.

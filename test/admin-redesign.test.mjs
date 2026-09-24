@@ -7642,5 +7642,34 @@ group('Admin workspace: real data, writes, permissions, and conflict handling');
  r=await call(env,'/calendar-workspace/feed?'+new URLSearchParams(dates),{cookie});eq(r.status,503,'failed database read cannot look like an empty calendar');
 }
 
+group('Google calendar routes keep authorization and linked schedule ownership');
+{
+ const {db,env}=await boot();const {cookie}=signIn(db);
+ const reader=signIn(db,['news_edit'],'calendar-reader');
+ const request=(session,origin)=>worker.fetch(new Request('https://admin.timothystl.org/calendar-workspace/google/create',{method:'POST',headers:{cookie:session,origin,'content-type':'application/json'},body:'{}'}),env,ctx);
+ eq((await request(reader.cookie,'https://admin.timothystl.org')).status,403,'news permission alone cannot write Google');
+ eq((await request(cookie,'https://evil.example')).status,403,'Google writes enforce existing CSRF boundary');
+ const publicResult=await call(env,'/calendar-workspace/google/connection');ok(!String(publicResult.headers.get('content-type')).includes('application/json'),'anonymous clients receive sign-in HTML rather than connection data');
+ const connection=await (await call(env,'/calendar-workspace/google/connection',{cookie})).json();ok(connection.calendars.every(c=>!c.writable),'missing credentials never claim writable access');
+ db.prepare("INSERT INTO event_intake(id,source_kind,local_title,local_event_date) VALUES(700,'local','Preserved event','2026-09-25')").run();
+ db.prepare("INSERT INTO calendar_event_links(source_key,calendar_id,event_id,state) VALUES('l:700','calendar@timothystl.org','linked','pending')").run();
+ const blocked=await worker.fetch(new Request('https://admin.timothystl.org/calendar-workspace/local/700',{method:'POST',headers:{cookie,origin:'https://admin.timothystl.org','content-type':'application/json'},body:JSON.stringify({title:'Wrong',date:'2026-09-26',allDay:true})}),env,ctx);
+ eq(blocked.status,409,'legacy local editor cannot rewrite linked scheduling');
+ eq(db.prepare('SELECT local_title FROM event_intake WHERE id=700').get().local_title,'Preserved event','legacy source remains intact');
+ db.prepare("INSERT INTO news_items(id,title,event_date,event_time,event_end_time,body,image_url) VALUES(701,'Post','2026-09-25','09:00','10:00','Original copy','/photo.jpg')").run();
+ db.prepare("INSERT INTO calendar_event_links(source_key,calendar_id,event_id,state) VALUES('n:701','calendar@timothystl.org','post-linked','pending')").run();
+ const updated=await call(env,'/newsitems/update/701',{cookie,method:'POST',form:{title:'New promotional title',body:'Revised copy',image_url:'/photo.jpg',publish_date:'2026-09-23',event_date:'2026-10-10',event_time:'20:00',event_end_time:'21:00'}});
+ eq(updated.status,302,'publishing copy remains editable');
+ const post=db.prepare('SELECT * FROM news_items WHERE id=701').get();eq(post.event_date,'2026-09-25','posted date cannot override linked schedule');eq(post.event_time,'09:00','posted time cannot override linked schedule');eq(post.title,'New promotional title','promotional title saved');
+ db.prepare("UPDATE calendar_event_links SET state='synced' WHERE source_key='n:701'").run();
+ db.prepare("INSERT INTO newsletters(id,subject,published_at) VALUES(702,'Test issue','2026-09-23')").run();
+ db.prepare("INSERT INTO events(newsletter_id,news_item_id,event_name,event_date) VALUES(702,701,'Selected post','2026-09-25')").run();
+ const beforeFetch=globalThis.fetch;let sends=0;globalThis.fetch=async()=>{sends++;throw Error('No external requests expected without credentials');};
+ try{const response=await call(env,'/send-email/702',{cookie,method:'POST',form:{list_type:'test'}});has(await response.text(),'Nothing was sent or scheduled','unverified linked scheduling stops newsletter delivery');eq(sends,0,'no newsletter request was made');}finally{globalThis.fetch=beforeFetch;}
+ const {privateKey}=crypto.generateKeyPairSync('rsa',{modulusLength:2048});env.GCAL_SERVICE_ACCOUNT_EMAIL='test@example.test';env.GCAL_PRIVATE_KEY=privateKey.export({type:'pkcs8',format:'pem'});
+ let mailed='';globalThis.fetch=async(url,options={})=>{if(String(url).includes('oauth2.googleapis.com'))return Response.json({access_token:'test'});if(String(url).includes('googleapis.com/calendar'))return Response.json({id:'post-linked',summary:'Google schedule',etag:'"1"',start:{dateTime:'2026-10-02T11:00:00-05:00'},end:{dateTime:'2026-10-02T12:00:00-05:00'}});if(options.body?.includes('htmlContent'))mailed=JSON.parse(options.body).htmlContent;return Response.json({id:123});};
+ try{const response=await call(env,'/send-email/702',{cookie,method:'POST',form:{list_type:'test'}});eq(response.status,302,'verified Google schedule can prepare a mocked send');ok(mailed.includes('11:00')||mailed.includes('11:00am'),'mocked newsletter uses refreshed Google time');eq(db.prepare('SELECT event_date FROM events WHERE newsletter_id=702').get().event_date,'2026-10-02','hosted newsletter snapshot matches prepared email scheduling');}finally{globalThis.fetch=beforeFetch;}
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

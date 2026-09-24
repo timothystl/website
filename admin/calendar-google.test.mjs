@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { generateKeyPairSync } from 'node:crypto';
+import { CALENDAR_LINK_SCHEMA, CALENDAR_NEWS_LINK_INDEX, handleGoogleCalendar, googleEventInput, refreshCalendarLinks, recurrenceUntil } from './calendar-google.js';
+import { buildCalendarFeed, fetchGoogleEvents } from './calendar.js';
+import { DB_INIT_NEWS_ITEMS, DB_INIT_EVENT_INTAKE, DB_INIT_AUDIT_LOG } from './db.js';
+const db=new DatabaseSync(':memory:');db.exec(CALENDAR_LINK_SCHEMA+';'+CALENDAR_NEWS_LINK_INDEX+';'+DB_INIT_NEWS_ITEMS+';'+DB_INIT_EVENT_INTAKE+';'+DB_INIT_AUDIT_LOG);
+for(const name of ['event_date','event_end_date','event_time','event_end_time','event_location','channels','theme','value','calendar_category'])db.exec('ALTER TABLE news_items ADD COLUMN '+name+' TEXT');
+db.exec("CREATE TABLE site_settings(key TEXT PRIMARY KEY,value TEXT);INSERT INTO site_settings VALUES ('calendar_google_ids','church@example.test');");
+function stmt(sql,args=[]){return {bind:(...a)=>stmt(sql,a),first:async()=>db.prepare(sql).get(...args)||null,all:async()=>({results:db.prepare(sql).all(...args)}),run:async()=>{const r=db.prepare(sql).run(...args);return{meta:{last_row_id:Number(r.lastInsertRowid),changes:Number(r.changes)}};}};}
+const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+const env={DB:{prepare:stmt,batch:async statements=>{db.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}}},GCAL_SERVICE_ACCOUNT_EMAIL:'service@example.test',GCAL_PRIVATE_KEY:privateKey.export({type:'pkcs8',format:'pem'})};
+const user={id:1,username:'office',permissions:JSON.stringify(['intake_manage','news_edit'])};
+const calendarId='church@example.test',events=new Map(),calls=[];let outage=false,conflict=false;
+globalThis.fetch=async(url,options={})=>{
+ const u=new URL(url);if(u.hostname==='oauth2.googleapis.com')return Response.json({access_token:'mock-token'});
+ calls.push({url:u,options});if(outage)throw Error('offline');
+ const id=decodeURIComponent(u.pathname.split('/events/')[1]||'');
+ if(options.method==='POST'){const e=JSON.parse(options.body);if(events.has(e.id))return new Response('',{status:409});const result={...e,etag:'"1"',htmlLink:'https://calendar.google.com/event/mock'};events.set(e.id,result);return Response.json(result);}
+ if(options.method==='PATCH'){const old=events.get(id);if(conflict||options.headers['If-Match']!==old.etag)return new Response('',{status:412});const result={...old,...JSON.parse(options.body),etag:'"2"'};events.set(id,result);return Response.json(result);}
+ if(!id)return Response.json({summary:'Church',accessRole:'writer',items:[]});
+ return events.has(id)?Response.json(events.get(id)):new Response('',{status:404});
+};
+async function call(path,data=null,who=user){const url=new URL('https://admin.test/calendar-workspace/google/'+path);const r=await handleGoogleCalendar(new Request(url,{method:data?'POST':'GET',...(data?{body:JSON.stringify(data)}:{})}),env,url.pathname,data?'POST':'GET',who,url);return {status:r.status,body:await r.json()};}
+assert.equal(recurrenceUntil('2026-09-27',false),'20260928T045959Z');
+assert.equal(recurrenceUntil('2026-12-27',false),'20261228T055959Z');
+assert.equal(recurrenceUntil('2026-09-27',true),'20260927');
+const input={calendarId,title:'Worship',date:'2026-09-27',endDate:'2026-09-27',time:'09:00',endTime:'10:00',location:'Sanctuary',description:'Welcome'};
+assert.equal((await call('connection',null,{permissions:'[]'})).status,403);
+assert.equal((await call('connection')).body.calendars[0].writable,true);
+assert.equal((await call('create',{...input,calendarId:'outsider@example.test',requestId:'a'.repeat(32)})).status,403);
+assert.throws(()=>googleEventInput({...input,date:'2026-02-30'}));assert.throws(()=>googleEventInput({...input,endTime:'08:00'}));
+assert.equal(googleEventInput({...input,allDay:true,endDate:'2026-09-29'}).end.date,'2026-09-30');
+let r=await call('create',{...input,requestId:'a'.repeat(32)});assert.equal(r.status,200);const eventId=r.body.event.eventId;
+r=await call('create',{...input,requestId:'a'.repeat(32)});assert.equal(r.status,200);assert.equal(events.size,1,'retry cannot duplicate an event');
+assert.ok(calls.filter(c=>c.options.method).every(c=>c.url.searchParams.get('sendUpdates')==='none'));
+const stored=events.get(eventId);stored.attendees=[{email:'guest@example.test'}];stored.recurrence=['RRULE:FREQ=WEEKLY'];
+r=await call('event',{...input,eventId,etag:'"old"'});assert.equal(r.status,409);
+conflict=true;r=await call('event',{...input,eventId,etag:'"1"'});assert.equal(r.status,409);conflict=false;
+r=await call('event',{...input,eventId,etag:'"1"',title:'Changed'});assert.equal(r.status,200);assert.deepEqual(events.get(eventId).attendees,stored.attendees);assert.deepEqual(events.get(eventId).recurrence,stored.recurrence);
+assert.equal((await call('event',{...input,eventId,etag:'*'})).status,400);
+assert.equal((await call('promote',{calendarId,eventId})).status,400,'series promotion must choose an occurrence');
+events.get(eventId).recurrence=[];
+r=await call('promote',{calendarId,eventId});assert.equal(r.status,200);const promotion=r.body.url;assert.equal((await call('promote',{calendarId,eventId})).body.url,promotion);assert.equal(db.prepare('SELECT COUNT(*) n FROM news_items').get().n,1);
+const newsId=promotion.split('/').pop();db.prepare('UPDATE news_items SET image_url=?,body=? WHERE id=?').run('/photo.jpg','Promotional copy',newsId);
+events.get(eventId).start={dateTime:'2026-10-04T11:00:00-05:00'};events.get(eventId).end={dateTime:'2026-10-04T12:00:00-05:00'};
+await refreshCalendarLinks(env,{strict:true});let post=db.prepare('SELECT * FROM news_items WHERE id=?').get(newsId);assert.equal(post.event_date,'2026-10-04');assert.equal(post.event_time,'11:00');assert.equal(post.body,'Promotional copy');assert.equal(post.image_url,'/photo.jpg');
+outage=true;await assert.rejects(refreshCalendarLinks(env,{strict:true}));outage=false;
+assert.equal(db.prepare('SELECT event_date FROM news_items WHERE id=?').get(newsId).event_date,'2026-10-04');
+r=await call('event',{calendarId,eventId,etag:'"2"',cancel:true});assert.equal(r.status,200);assert.equal(db.prepare('SELECT event_date FROM news_items WHERE id=?').get(newsId).event_date,null);assert.equal(db.prepare('SELECT body FROM news_items WHERE id=?').get(newsId).body,'Promotional copy');
+db.prepare('INSERT INTO news_items (id,title,event_date,event_time,event_end_time,body) VALUES (?,?,?,?,?,?)').run(7,'Legacy','2026-10-05','10:00','11:00','Do not lose');
+r=await call('publish',{...input,title:'Legacy',date:'2026-10-05',endDate:'2026-10-05',sourceKey:'n:7'});assert.equal(r.status,200);const count=events.size;
+assert.equal((await call('publish',{...input,title:'Legacy',date:'2026-10-05',endDate:'2026-10-05',sourceKey:'n:7'})).status,200);assert.equal(events.size,count);
+assert.equal(db.prepare('SELECT body FROM news_items WHERE id=7').get().body,'Do not lose');
+assert.equal((await call('publish',{...input,sourceKey:'n:7'},{permissions:JSON.stringify(['intake_manage'])})).status,403);
+assert.equal((await call('publish',{...input,sourceKey:'n:999'})).status,404);
+db.prepare('INSERT INTO news_items (id,title,event_date) VALUES (?,?,?)').run(8,'Link me','2026-10-01');
+assert.equal((await call('publish',{...input,sourceKey:'n:8',linkEventId:'missing'})).status,404);assert.equal(db.prepare("SELECT * FROM calendar_event_links WHERE source_key='n:8'").get(),undefined,'invalid link does not reserve record');
+// A linked legacy post must not reappear at its cached old date after a Google move.
+const googleFetch=globalThis.fetch;
+const published=(await env.DB.prepare("SELECT * FROM calendar_event_links WHERE source_key='n:7'").first());
+const canonical=events.get(published.event_id);canonical.start={dateTime:'2026-10-06T09:00:00-05:00'};canonical.end={dateTime:'2026-10-06T10:00:00-05:00'};
+globalThis.fetch=async()=>Response.json({items:[canonical]});
+const feed=await buildCalendarFeed(env,{from:'2026-10-01',to:'2026-10-31',getToken:async()=> 'mock',calendarIds:[calendarId]});
+assert.ok(feed.events.some(e=>e.id==='g:'+published.event_id&&e.start.startsWith('2026-10-06')));
+assert.ok(!feed.events.some(e=>e.id==='n:7'),'exact link suppresses cached source even when its dates differ');
+const distinct=await fetchGoogleEvents(env,{ids:[calendarId,'second@example.test'],from:'2026-10-01',to:'2026-10-31',getToken:async()=>'mock',includeEditLinks:true});
+assert.equal(new Set(distinct.events.map(e=>e.id)).size,2,'same event ID in two calendars remains two distinct Admin edit targets');
+globalThis.fetch=googleFetch;
+console.log('Google calendar permission, concurrency, idempotency, publishing, cancellation and preservation checks passed.');

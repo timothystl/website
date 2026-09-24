@@ -1,3 +1,4 @@
+import { calendarLink } from './calendar-google.js';
 // ── EVENT INTAKE — the office's own triage screen over everything that has
 // a date ─────────────────────────────────────────────────────────────────
 //
@@ -446,7 +447,7 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
             patch.published_by = currentUser.username;
           }
 
-          if (row.source_kind === 'local') {
+          if (row.source_kind === 'local' && !(await calendarLink(env,'l:'+row.id))) {
             const title = String(form.get('local_title') || '').trim();
             if (title) patch.local_title = title;
             const d = String(form.get('local_event_date') || '').trim();
@@ -471,6 +472,7 @@ export async function handleIntakeRoutes(request, env, path, method, currentUser
             patch.local_end_time = normalizeClock(form.get('local_end_time'));
           }
 
+          if(row.source_kind==='local'&&await calendarLink(env,'l:'+row.id))delete patch.room;
           await writeIntakePatch(row.id, patch);
         }
         return redirectTo(queue, key);
@@ -881,7 +883,7 @@ function intakeDetail(item, gymExtra, queue) {
   if (!item) {
     return `<div class="ei-detail ei-detail-empty">
       <p>Nothing in this queue. Pick another one on the left, or
-      <a href="/event-intake/new-form">enter a new event</a> directly.</p>
+      <a href="/calendar-workspace?add=1">enter a new event</a> directly.</p>
     </div>`;
   }
   const status = intakeStatus(item);
@@ -1031,7 +1033,7 @@ async function renderIntakePage(ctx, currentUser, badges) {
     <div class="ei-brand"><span class="ei-brand-name">Timothy’s Calendar</span><span class="ei-brand-sub">Office intake</span></div>
     <div class="ei-topbar-r">
       <span class="ei-open-count">${openTotal} item${openTotal === 1 ? '' : 's'} still need${openTotal === 1 ? 's' : ''} something</span>
-      <a class="ei-btn ei-btn-gold" href="/event-intake/new-form">+ New event</a>
+      <a class="ei-btn ei-btn-gold" href="/calendar-workspace?add=1">+ New event</a>
     </div>
   </div>
   ${warn}

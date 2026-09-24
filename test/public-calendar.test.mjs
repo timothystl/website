@@ -124,6 +124,8 @@ async function open(opts = {}) {
   const errors = [];
   p.on('pageerror', (e) => errors.push(String(e)));
   let calls = 0;
+  // Register catch-all first: Playwright gives later handlers precedence.
+  await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
     if (u.includes('/api/calendar')) {
@@ -132,11 +134,10 @@ async function open(opts = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(feed) });
     }
     if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ pages: [], menu: null, rendered: finalRendered, redirects: {},
+      body: JSON.stringify({ pages: Object.keys(finalRendered).map(id=>({id,slug:'/'+id})), menu: null, rendered: finalRendered, redirects: {},
         css: Object.keys(finalRendered).length ? BLOCK_CSS : '' }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
-  await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.goto(base + '/' + which, { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#page-' + (which || 'calendar') + ' .tlc-cal', { timeout: 5000 }).catch(() => {});
   await p.waitForTimeout(500);
@@ -602,14 +603,15 @@ async function goToFixtureMonth(p) {
     await route.fulfill({ response: res, body: stripped, contentType: 'text/css' });
   });
   const calRendered = defaultRendered('calendar');
+  // Register catch-all first: Playwright gives later handlers precedence.
+  await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.route('https://admin.timothystl.org/**', (route) => {
     const u = route.request().url();
     if (u.includes('/api/calendar')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FEED) });
     if (u.includes('/api/pages')) return route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ pages: [], menu: null, rendered: calRendered, redirects: {}, css: BLOCK_CSS }) });
+      body: JSON.stringify({ pages: Object.keys(calRendered).map(id=>({id,slug:'/'+id})), menu: null, rendered: calRendered, redirects: {}, css: BLOCK_CSS }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
-  await p.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await p.goto(base + '/calendar', { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#page-calendar .tlc-cal', { timeout: 5000 }).catch(() => {});
   await p.waitForTimeout(500);
