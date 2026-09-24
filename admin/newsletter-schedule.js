@@ -8,7 +8,7 @@ export async function withScheduleOperation(env, id, action) {
   const row = await env.DB.prepare('UPDATE newsletters SET schedule_operation = ? WHERE id = ? AND schedule_operation IS NULL RETURNING *').bind(token, id).first();
   if (!row) return { error: 'This issue is busy or unavailable. Refresh before retrying. If it stays busy, ask an administrator to check its Brevo campaign.' };
   try { return await action(row); }
-  catch { return { error: 'The campaign operation could not be confirmed. Refresh and retry; the saved campaign will be reused.' }; }
+  catch { return { error: 'The campaign operation could not be confirmed. Refresh and check the campaign in Brevo before retrying.' }; }
   finally {
     await env.DB.prepare('UPDATE newsletters SET schedule_operation = NULL WHERE id = ? AND schedule_operation = ?').bind(id, token).run();
   }
