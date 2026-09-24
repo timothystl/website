@@ -620,6 +620,8 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, in
       const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
       if (!res.ok) return null;
       const body = await res.json();
+      // Operational readiness only: never log event content or account credentials.
+      if(body.accessRole)console.info('calendar_access_role',{calendarId:id,role:body.accessRole});
       return (body.items || [])
         .map((ev) => {
           const normalized = normalizeGoogleEvent(ev, 'gcal', cats);
