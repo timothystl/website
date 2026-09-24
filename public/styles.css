@@ -96,7 +96,7 @@ p:last-child{margin-bottom:0;}
    is unreachable, or nobody has ever opened that screen, the header renders
    exactly as it did before any of this existed. See admin/appearance.js. */
 .nav{position:sticky;top:0;z-index:100;background:var(--nav-bar,var(--sage));border-bottom:3px solid var(--nav-rule,var(--amber));}
-.nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;min-height:64px;display:flex;align-items:center;justify-content:space-between;}
+.nav-inner{max-width:1200px;margin:0 auto;padding:0 28px;min-height:64px;display:flex;align-items:center;justify-content:space-between;}
 .nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;min-width:0;}
 .nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;}
 .nav-logo-img.is-square{border-radius:var(--r-sm);}
@@ -109,12 +109,17 @@ p:last-child{margin-bottom:0;}
    tagline must never be allowed to wrap: a wrapped line taller than this
    row's height is what pushed the header into the hero image below it.
    min-width:0 here lets the brand block actually shrink below its content's
-   natural size instead of forcing the row to overflow when that happens. */
+   natural size instead of forcing the row to overflow when that happens.
+   The row is 1200px, not the page body's 1080px, so the tagline has room to
+   show in full even when a browser's zoom or font metrics run the labels
+   ~10% wider than ours (it was reported cut off as "…to the Natio…");
+   .nav-links is flex-shrink:0 with nowrap labels so any squeeze left over
+   lands on the brand's ellipsis, never on a two-line "News & Events". */
 .nav-brand > div{min-width:0;}
 .nav-brand-name{font-family:var(--font-ui);font-size:calc(17px * var(--tlc-text-scale, 1));font-weight:800;letter-spacing:-.01em;color:var(--nav-ink,white);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .nav-brand-sub{font-family:var(--font-body);font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:300;color:var(--honey);display:block;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
-.nav-links button,.nav-links a{font-family:var(--font-body);font-size:calc(14px * var(--tlc-text-scale, 1));font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
+.nav-links{display:flex;align-items:center;gap:4px;list-style:none;flex-shrink:0;}
+.nav-links button,.nav-links a{font-family:var(--font-body);font-size:calc(14px * var(--tlc-text-scale, 1));font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;white-space:nowrap;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);opacity:1;}
 .nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,white) !important;opacity:1 !important;
   font-family:var(--font-ui) !important;font-size:calc(13px * var(--tlc-text-scale, 1)) !important;padding:12px 19px !important;font-weight:800 !important;border-radius:999px !important;}
@@ -503,16 +508,14 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   .footer-inner{grid-template-columns:1fr 1fr;}
   .two-col{grid-template-columns:1fr;}
 }
-/* ⚠ 1024px, not 900px or 620px: measured (not eyeballed) with all nine
-   .nav-links items plus the brand block on screen — the two stop fitting on
-   one line, and the .nav-brand-sub tagline starts wrapping under them and
-   overlapping the row, right around 989px. 1024px keeps a real margin above
-   that measured failure point for scrollbar width and font-metric drift
-   across browsers, while still switching to the hamburger well before the
-   squeeze most people would ever notice. Its own query, separate from the
-   900px block above, because that one is tuned for the page-body grids and
-   happens to share a number with nothing here. */
-@media(max-width:1024px){
+/* ⚠ 1100px: measured (not eyeballed) with all nine .nav-links items plus
+   the full brand block. The labels no longer wrap (a two-line "News & Events"
+   used to buy the room), so the row needs ~1075px to show the whole tagline;
+   below that the brand ellipsizes. 1100px switches to the hamburger just
+   above that, with a little margin for scrollbar width and font drift. Its
+   own query, separate from the 900px block above, because that one is tuned
+   for the page-body grids. */
+@media(max-width:1100px){
   .nav-links{display:none;}
   .nav-toggle{display:flex;min-width:44px;min-height:44px;align-items:center;justify-content:center;padding:0;}
 }
