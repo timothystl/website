@@ -576,6 +576,17 @@ function tlcUploadHandler(blobInfo) {
 // origin, not this admin one. Blank until the Cloudflare route exists, in which
 // case links fall back to whatever host the request came in on, which is the
 // behavior this had before the portal moved.
+// One statement per invoice group: a conflict rolls back every confirmation
+// in that group, so a failed approval cannot leave half its holds uninvoiced.
+export async function confirmGymHolds(db, bookings) {
+  if (!bookings.length) return;
+  const ids = JSON.stringify(bookings.map(b => b.id));
+  const result = await db.prepare(`UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL
+    WHERE id IN (SELECT value FROM json_each(?)) AND status='hold'
+      AND (SELECT COUNT(*) FROM gym_bookings WHERE id IN (SELECT value FROM json_each(?)) AND status='hold') = ?`
+  ).bind(ids, ids, bookings.length).run();
+  if (result.meta.changes !== bookings.length) throw new Error('gym_booking_overlap: selected holds changed; refresh before confirming');
+}
 export function isGymOverlap(error) {
   return /gym_booking_overlap|UNIQUE constraint failed: gym_bookings\.booking_date/.test(String(error?.message || error));
 }
@@ -4567,9 +4578,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
           const pymtLink = await getPaymentLink(env);
 
           // Confirm all holds
-          for (const b of holds.results) {
-            await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(b.id).run();
-          }
+          await confirmGymHolds(env.DB, holds.results);
 
           const bookings = holds.results;
           const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
@@ -4659,9 +4668,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
 
         let confirmed = 0;
         for (const [groupId, bookings] of byGroup) {
-          for (const booking of bookings) {
-            await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(booking.id).run();
-          }
+          await confirmGymHolds(env.DB, bookings);
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
           if (group) {
             for (const b of bookings) b.group_name = group.name;
@@ -4728,9 +4735,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
 
         let confirmed = 0;
         for (const [groupId, bookings] of byGroup) {
-          for (const booking of bookings) {
-            await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(booking.id).run();
-          }
+          await confirmGymHolds(env.DB, bookings);
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
           // Build recurrenceMap for pattern-aware invoice
           const recurrenceMap = {};

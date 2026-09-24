@@ -27,3 +27,18 @@ test('installation never deletes existing overlaps and allows unrelated edits', 
   db.exec("UPDATE gym_bookings SET notes='review existing conflict'");
   assert.equal(db.prepare('SELECT COUNT(*) n FROM gym_bookings').get().n, 2);
 });
+test('a conflicting grouped approval leaves every hold in that group unchanged', async () => {
+  const { confirmGymHolds } = await import('./gym.js');
+  const db = new DatabaseSync(':memory:'); db.exec(DB_INIT_GYM_BOOKINGS);
+  // Legacy conflict predates the trigger; approving the second hold must not
+  // leave the first one confirmed without its group invoice.
+  db.exec("INSERT INTO gym_bookings(group_id,booking_date,start_time,end_time,status) VALUES(1,'2026-10-01','10:00','11:00','hold'),(1,'2026-10-01','13:00','15:00','hold'),(2,'2026-10-01','14:00','16:00','confirmed')");
+  for (const sql of DB_INIT_GYM_OVERLAP_TRIGGERS) db.exec(sql);
+  const adapter = { prepare(sql) { return { bind(...args) { return { async run() { return { meta: db.prepare(sql).run(...args) }; } }; } }; } };
+  await assert.rejects(() => confirmGymHolds(adapter, [{id:1},{id:2}]), isGymOverlap);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM gym_bookings WHERE status='hold'").get().n, 2);
+  db.exec("UPDATE gym_bookings SET status='cancelled' WHERE id=3");
+  await confirmGymHolds(adapter, [{id:1},{id:2}]);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM gym_bookings WHERE status='hold'").get().n, 0);
+  await assert.rejects(() => confirmGymHolds(adapter, [{id:1},{id:2}]), /selected holds changed/);
+});
