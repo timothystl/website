@@ -91,6 +91,23 @@ try {
  assert.equal(googleSaves.at(-1).sourceKey,'n:7');assert.equal(googleSaves.at(-1).linkEventId,'occurrence');
  await page.locator('#calendar-room').selectOption('Hall');assert.equal(await page.locator('[data-event]').count(),2);
  await page.emulateMedia({media:'print'});assert.equal(await page.locator('.sidebar').isVisible(),false);await page.locator('.ws-day').first().waitFor({state:'visible'});assert.equal(await page.locator('.ws-day').first().isVisible(),true);await page.emulateMedia({media:'screen'});
+ // Print this view prints the calendar alone: one landscape page for a month, a busy day ending in "+N more".
+ await page.locator('#calendar-room').selectOption('');
+ const busy=Array.from({length:14},(_,i)=>({...event,id:'b:'+i,title:'Busy item '+i,start:'2026-09-16T'+String(8+i%12).padStart(2,'0')+':00:00',end:null}));
+ await page.unroute('https://workspace.test/**');
+ await page.route('https://workspace.test/**',r=>{const u=new URL(r.request().url());if(u.pathname.endsWith('/feed'))return r.fulfill({json:{events:busy,categories:[],google:true}});if(u.pathname.endsWith('/connection'))return r.fulfill({json:{calendars:[]}});return r.fulfill({contentType:'text/html',body:`<!doctype html>${WORKSPACE_CSS}<aside class="sidebar">Admin navigation</aside><div class="tlc-main"><main class="ws-wrap"><h1 class="page-title">Calendar &amp; events</h1><p id="intro">Click a date to add an event.</p><div id="workspace-calendar"></div></main></div><div class="tlc-k">Search every section</div><script id="workspace-data" type="application/json">${JSON.stringify(config)}</script><script>${GOOGLE_CALENDAR_CLIENT}</script><script>${WORKSPACE_CLIENT}</script>`});});
+ await page.setViewportSize({width:989,height:749});
+ await page.goto('https://workspace.test/calendar-workspace');await page.locator('.ws-day').first().waitFor();
+ await page.evaluate(()=>{window.print=()=>{window.__printed=true;};});await page.locator('[data-print]').click();
+ assert.equal(await page.evaluate(()=>window.__printed),true,'Print this view opens the print dialog');
+ await page.emulateMedia({media:'print'});await page.waitForTimeout(100);
+ for(const sel of ['.page-title','#intro','.tlc-k','[data-view=month]','#calendar-room'])assert.equal(await page.locator(sel).isVisible(),false,sel+' does not print');
+ assert.equal(await page.locator('#workspace-calendar h2').first().isVisible(),true,'the month title prints');
+ assert.match(await page.locator('.ws-more').first().textContent(),/^\+\d+ more$/,'a busy day says how many more it holds');
+ const pdf=await page.pdf({preferCSSPageSize:true});
+ assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g)||[]).length,1,'the month prints on one page');
+ await page.emulateMedia({media:'screen'});await page.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
+ assert.equal(await page.locator('.ws-more').count(),0,'and the page is restored after printing');
  assert.deepEqual(errors,[]);
  console.log('Bundled calendar and services browser interactions passed.');
 } finally {await browser?.close();await rm(dir,{recursive:true,force:true});}
