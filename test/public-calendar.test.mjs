@@ -367,7 +367,12 @@ async function goToFixtureMonth(p) {
   // onto a second page. (That it really is one page is proven by generating a
   // PDF and counting, below; this is the mechanism that makes it true.)
   const cells = await p.$$eval('.tlc-print-cell', (c) => c.map((x) => Math.round(x.getBoundingClientRect().height)));
-  eq(cells.length, 42, 'six weeks are on the sheet');
+  // Only the weeks the month uses — no blank week of the next month on paper.
+  const dim = new Date(Date.UTC(+YM.slice(0, 4), +YM.slice(5, 7), 0)).getUTCDate();
+  const WEEKS = Math.ceil((dowOf(day(1)) + dim) / 7);
+  eq(cells.length, WEEKS * 7, 'the sheet carries exactly the ' + WEEKS + ' weeks the month uses');
+  const lastRowOut = await p.$$eval('.tlc-print-cell', (c) => c.slice(-7).every((x) => x.classList.contains('tlc-print-cell--out')));
+  eq(lastRowOut, false, 'so the last row always holds days of this month');
   ok(Math.max(...cells) - Math.min(...cells) <= 1, 'every week row is the same height: ' + Math.max(...cells) + ' vs ' + Math.min(...cells));
   const clips = await p.$eval('.tlc-print-cell', (c) => getComputedStyle(c).overflow);
   eq(clips, 'hidden', 'and a day with too much on it clips rather than growing the row');
@@ -379,7 +384,7 @@ async function goToFixtureMonth(p) {
   // page count.
   const fits = await p.evaluate(() => {
     const sheet = document.querySelector('.tlc-print-sheet');
-    const last = document.querySelectorAll('.tlc-print-cell')[41];
+    const all = document.querySelectorAll('.tlc-print-cell'), last = all[all.length - 1];
     return Math.round(last.getBoundingClientRect().bottom - sheet.getBoundingClientRect().bottom);
   });
   ok(fits <= 1, 'the last week of the month is inside the sheet, not clipped off it (' + fits + 'px past)');

@@ -911,9 +911,10 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
     background:#fff;padding:0;box-shadow:none;border:none;
     /* The page box, so the grid below has a fixed height to divide. */
     height:100vh;overflow:hidden;}
-  /* One auto row for the weekday strip, then six equal rows for the weeks. The
+  /* One auto row for the weekday strip, then one equal row per week the month
+     uses (index.html sets --tlc-print-weeks: 4, 5 or 6). The
      grid takes the space the header and footer do not. */
   .tlc-print-grid{flex:1 1 auto;min-height:0;
-    grid-template-rows:auto repeat(6, minmax(0, 1fr));}
+    grid-template-rows:auto repeat(var(--tlc-print-weeks, 6), minmax(0, 1fr));}
   .tlc-print-cell{height:auto;min-height:0;}
 }

@@ -2737,7 +2737,14 @@ function tlcCalPrintSheet(st, monthName) {
       '<span class="nm">' + tlcCalEsc(c.name) + '</span></div>';
   }).join('');
   var head = TLC_CAL_DOWS.map(function (d) { return '<div class="dw">' + d.slice(0, 3).toUpperCase() + '</div>'; }).join('');
-  var cells = tlcCalCells(st).map(function (d) {
+  // Only the weeks the month uses: five for most months, six when it spills,
+  // four for a February that starts on Sunday. The screen keeps six rows so
+  // the grid doesn't jump; paper has no reason to carry a blank week of the
+  // next month. Reported: "the print includes an empty week from the next month."
+  var days = tlcCalCells(st);
+  while (days.length > 7 && days[days.length - 7].slice(0, 7) !== mk) days = days.slice(0, -7);
+  var weeks = days.length / 7;
+  var cells = days.map(function (d) {
     var out = d.slice(0, 7) !== mk;
     var evs = (by[d] || []).map(function (ev) {
       var c = tlcCalCat(st, ev.category);
@@ -2753,7 +2760,7 @@ function tlcCalPrintSheet(st, monthName) {
       '<div class="who">Timothy Lutheran Church · 6704 Fyler Ave</div>' +
       '<div class="mon">' + tlcCalEsc(monthName) + '</div>' +
     '</div><div class="tlc-print-legend">' + legend + '</div></div>' +
-    '<div class="tlc-print-grid">' + head + cells + '</div>' +
+    '<div class="tlc-print-grid" style="--tlc-print-weeks:' + weeks + '">' + head + cells + '</div>' +
     '<div class="tlc-print-foot"><span>timothystl.org/calendar · (314) 781-8673</span>' +
     '<span>Printed ' + tlcCalEsc(new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})) + '</span></div>' +
   '</div>';
