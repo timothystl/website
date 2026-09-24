@@ -10,7 +10,7 @@ if [ "$(git rev-parse origin/main^)" = "$(git rev-parse HEAD)" ] &&
    [ "$(git diff --name-only HEAD origin/main)" = 'admin/helpers.js' ]; then
   changes=$(git diff --unified=0 HEAD origin/main -- admin/helpers.js | grep -E '^[+-]' | grep -vE '^(---|\+\+\+)')
   if [ "$(printf '%s\n' "$changes" | wc -l | tr -d ' ')" = '2' ] &&
-     ! printf '%s\n' "$changes" | grep -qvE "^[+-]export const VERSION = 'v[0-9.]+'.*"; then
+     ! printf '%s\n' "$changes" | grep -qvE "^[+-]export const VERSION = 'v[0-9.]+(-alpha[.][0-9]+|-beta[.][0-9]+)?'.*"; then
     git checkout --quiet --detach origin/main
     echo 'deploy=true' >> "$GITHUB_OUTPUT"
     echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -27,7 +27,9 @@ if ! git diff HEAD^ HEAD -- admin/helpers.js | grep -q '^+export const VERSION =
 import fs from 'node:fs';
 const path = 'admin/helpers.js';
 const source = fs.readFileSync(path, 'utf8');
-const next = source.replace(/export const VERSION = 'v(\d+)\.(\d+)(?:\.(\d+))?'/, (_, major, minor, patch) => `export const VERSION = 'v${major}.${minor}.${Number(patch || 0) + 1}'`);
+const next = source.replace(/export const VERSION = 'v(\d+)\.(\d+)(?:\.(\d+))?(?:-(alpha|beta)\.(\d+))?'/, (_, major, minor, patch, channel, number) => channel
+  ? `export const VERSION = 'v${major}.${minor}.${patch || 0}-${channel}.${Number(number) + 1}'`
+  : `export const VERSION = 'v${major}.${minor}.${Number(patch || 0) + 1}'`);
 if (next === source) throw new Error('Admin version not found');
 fs.writeFileSync(path, next);
 JS
