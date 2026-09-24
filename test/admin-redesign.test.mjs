@@ -7702,6 +7702,26 @@ group('a Bible class meets on real dates the calendar draws');
   has(form, 'name="start_time" value="08:00"', 'and its 8:00 AM start');
 }
 
+group('an existing database gets the Bible class columns on the next deploy');
+{
+  // Production is never a fresh database: it is one the PREVIOUS release
+  // already migrated and stamped. The first release of these columns forgot
+  // to bump SCHEMA_VERSION, so the gate skipped them and every class save
+  // failed. Rebuild that state and prove a save works.
+  const { db, env } = await boot();
+  for (const col of ['meet_days', 'weeks', 'start_time', 'end_time', 'start_date', 'end_date', 'schedule_note', 'updated_at', 'calendar_group', 'calendar_aliases', 'not_matches']) {
+    db.exec(`ALTER TABLE bible_classes DROP COLUMN ${col}`);
+  }
+  db.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', '2026-09-24-calendar-links')").run();
+  const prod = { ...env, DB: d1(db) }; // a new binding, as a fresh deploy's isolate has
+  const { cookie } = signIn(db);
+  const id = db.prepare('SELECT id FROM bible_classes ORDER BY id LIMIT 1').get().id;
+  const res = await call(prod, `/christian-education/update/${id}`, { cookie, method: 'POST', form: {
+    title: 'Adult Bible Class', meet_days: ['0'], weeks: '', start_time: '09:30', active: ['0', '1'], accent: 'mid', sort_order: '0' } });
+  eq(res.status, 302, 'the save succeeds on a previously migrated database');
+  eq(db.prepare('SELECT start_time FROM bible_classes WHERE id = ?').get(id).start_time, '09:30', 'and the meeting time is stored');
+}
+
 group('Bible classes: one calendar slot, and possible matches');
 {
   const { db, env } = await boot();
