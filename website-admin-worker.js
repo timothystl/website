@@ -2150,7 +2150,8 @@ export default {
     // See admin/class-schedule.js. `schedule` stays as the display line and is
     // composed from these on save.
     for (const col of ['meet_days TEXT', 'weeks TEXT', 'start_time TEXT', 'end_time TEXT',
-                       'start_date TEXT', 'end_date TEXT', 'schedule_note TEXT', 'updated_at TEXT']) {
+                       'start_date TEXT', 'end_date TEXT', 'schedule_note TEXT', 'updated_at TEXT',
+                       'calendar_group TEXT', 'calendar_aliases TEXT', 'not_matches TEXT']) {
       try { await env.DB.prepare(`ALTER TABLE bible_classes ADD COLUMN ${col}`).run(); } catch (_) {}
     }
     // Menu visibility, separate from published state. Taking a ministry out of

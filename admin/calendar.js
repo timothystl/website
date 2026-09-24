@@ -415,6 +415,16 @@ const dayOf = (iso) => String(iso || '').slice(0, 10);
 // the sign-up — then a building booking, which at least knows it is a booking,
 // then Google. The CLOCK is a separate question and is answered below.
 const SOURCE_RANK = { news: 3, class: 2, building: 2, gcal: 1, both: 0 };
+
+// Same happening, by name. A Bible class can carry `aliases` — the titles it
+// goes by elsewhere (the office confirms these on the Christian Ed screen), so
+// "Adult Bible Class" and a Google series called "Bible Class" can be told
+// they are one thing without renaming either.
+const sameTitle = (a, b) => {
+  const x = norm(a.title), y = norm(b.title);
+  if (x === y) return true;
+  return (a.aliases || []).some((t) => norm(t) === y) || (b.aliases || []).some((t) => norm(t) === x);
+};
 const rankOf = (e) => SOURCE_RANK[e.source] || 0;
 
 export function dedupeEvents(events) {
@@ -422,7 +432,7 @@ export function dedupeEvents(events) {
   for (const ev of events) {
     const hit = out.findIndex((o) => {
       if (o.source === ev.source) return false;
-      if (norm(o.title) !== norm(ev.title)) return false;
+      if (!sameTitle(o, ev)) return false;
       if (dayOf(o.start) !== dayOf(ev.start)) return false;
       const a = minutesOf(o.start), b = minutesOf(ev.start);
       // One of the pair being all-day is the ordinary case (a News record
@@ -754,12 +764,13 @@ export function normalizeLocalIntakeEvent(row, cats) {
 export async function readBibleClassEvents(env, from, to, cats, { strict = false } = {}) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, title, description, leader, location, meet_days, weeks, start_time, end_time, start_date, end_date
+      `SELECT id, title, description, leader, location, meet_days, weeks, start_time, end_time, start_date, end_date,
+              calendar_group, calendar_aliases
          FROM bible_classes
         WHERE active = 1 AND meet_days IS NOT NULL AND meet_days != '' AND start_time IS NOT NULL AND start_time != ''
         LIMIT 100`
     ).all();
-    return (rows.results || []).flatMap((r) => normalizeBibleClass(r, from, to, cats));
+    return groupClassEvents((rows.results || []).flatMap((r) => normalizeBibleClass(r, from, to, cats)));
   } catch (error) { if (strict) throw error; return []; }
 }
 
@@ -779,7 +790,65 @@ export function normalizeBibleClass(row, from, to, cats) {
     allDay: false,
     title, location: String(row.location || '').trim(),
     description, category, source: 'class', url: '/education',
+    classId: row.id, group: String(row.calendar_group || '').trim(),
+    aliases: parseTitleList(row.calendar_aliases),
+    leader,
   }));
+}
+
+// ── ONE SLOT FOR SEVERAL CLASSES ────────────────────────────────────────────
+// Classes given the same `calendar_group` ("Christian Education") that meet
+// on the same day at overlapping times become ONE calendar entry, named for
+// the group, spanning the earliest start to the latest end, with each class
+// listed in its description. A Sunday at 9:30 with three classes then reads
+// as one hour of Christian Education rather than three chips on top of each
+// other. A class alone in its slot keeps its own name.
+export function groupClassEvents(events) {
+  const out = [], buckets = new Map();
+  for (const ev of events) {
+    if (!ev.group) { out.push(ev); continue; }
+    const key = `${norm(ev.group)}|${dayOf(ev.start)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(ev);
+  }
+  for (const list of buckets.values()) {
+    list.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+    let run = [];
+    const flush = () => {
+      if (!run.length) return;
+      if (run.length === 1) { out.push(run[0]); run = []; return; }
+      const first = run[0];
+      const end = run.reduce((m, e) => (e.end > m ? e.end : m), first.end);
+      const places = [...new Set(run.map((e) => e.location).filter(Boolean))];
+      const clock = (iso) => { const [h, m] = iso.slice(11, 16).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+      out.push({
+        id: `cg:${norm(first.group).replace(/ /g, '-')}:${first.start}`,
+        start: first.start, end, allDay: false,
+        title: first.group,
+        location: places.length > 2 ? 'Several rooms' : places.join(' & '),
+        description: run.map((e) => [`${clock(e.start)} · ${e.title}`, e.location, e.leader ? `led by ${e.leader}` : ''].filter(Boolean).join(' — ')).join('\n'),
+        category: first.category, source: 'class', url: '/education',
+        classIds: run.map((e) => e.classId), group: first.group,
+        aliases: [...new Set(run.flatMap((e) => [e.title, ...(e.aliases || [])]))],
+      });
+      run = [];
+    };
+    let runEnd = '';
+    for (const ev of list) {
+      // Overlapping, or starting at the same minute as a class that stated no end.
+      if (run.length && ev.start > runEnd) flush();
+      run.push(ev);
+      const evEnd = ev.end > ev.start ? ev.end : ev.start;
+      runEnd = run.length === 1 || evEnd > runEnd ? evEnd : runEnd;
+    }
+    flush();
+  }
+  return out;
+}
+
+// Titles a class is also known by: one per line (or separated by `|`).
+export function parseTitleList(raw) {
+  return [...new Set(String(raw || '').split(/\r?\n|\|/).map((t) => t.trim()).filter(Boolean))];
 }
 
 // ── BUILDING RENTALS ────────────────────────────────────────────────────────
@@ -841,4 +910,72 @@ export function normalizeGymBooking(row) {
     category: 'facility',
     source: 'building',
   };
+}
+
+// ── POSSIBLE MATCHES ────────────────────────────────────────────────────────
+// A Google event that looks like one of the Christian Ed classes but is not
+// named the same, so the de-dupe leaves both on the month: "Bible Class" at
+// 9:30 on a Sunday beside "Adult Bible Class" at 9:30. Found here, confirmed
+// (or dismissed) by a person on the Christian Ed screen — never merged on a
+// guess, because two different things at the same hour is ordinary on a
+// Sunday morning.
+//
+// A candidate is a timed Google event on a date the class meets, starting
+// within 30 minutes of it, that shares a meaningful word with the class title
+// or was filed in Google under Learn. One row per (class, Google title), with
+// how often it happened in the window, since a weekly series is many events.
+const MATCH_STOP = new Set(['the', 'and', 'for', 'with', 'class', 'classes', 'group', 'our', 'all', 'at', 'of', 'in', 'a', 'on']);
+const words = (t) => norm(t).split(' ').filter((w) => w.length >= 3 && !MATCH_STOP.has(w));
+
+export function findCalendarMatches(classRows, googleEvents, from, to) {
+  const found = new Map();
+  for (const row of classRows || []) {
+    const start = cleanTime(row.start_time);
+    if (!start) continue;
+    const dates = new Set(classDates(row, from, to));
+    if (!dates.size) continue;
+    const known = new Set([row.title, ...parseTitleList(row.calendar_aliases), ...parseTitleList(row.not_matches)].map(norm));
+    const mine = new Set(words(row.title));
+    const at = minutesOf(`T${start}`);
+    for (const g of googleEvents || []) {
+      if (g.allDay || !dates.has(dayOf(g.start))) continue;
+      if (known.has(norm(g.title))) continue;
+      if (Math.abs(minutesOf(g.start) - at) > 30) continue;
+      if (!(words(g.title).some((w) => mine.has(w)) || g.category === 'learn')) continue;
+      const key = `${row.id}|${norm(g.title)}`;
+      const hit = found.get(key) || { classId: row.id, classTitle: row.title, googleTitle: g.title, count: 0, first: g.start };
+      hit.count += 1;
+      if (g.start < hit.first) hit.first = g.start;
+      found.set(key, hit);
+    }
+  }
+  // A Google title already claimed by one class (as an alias) is not offered
+  // to the others.
+  const claimed = new Set((classRows || []).flatMap((r) => parseTitleList(r.calendar_aliases)).map(norm));
+  return [...found.values()].filter((m) => !claimed.has(norm(m.googleTitle)))
+    .sort((a, b) => (a.first < b.first ? -1 : 1));
+}
+
+// Running classes that meet on the same weekday at the same start time and
+// are NOT already in one calendar group — candidates for one slot.
+export function findGroupSuggestions(classRows) {
+  const slots = new Map();
+  for (const r of classRows || []) {
+    const start = cleanTime(r.start_time);
+    if (!r.active || !start || !String(r.meet_days || '').trim()) continue;
+    for (const d of String(r.meet_days).split(',')) {
+      const key = `${d.trim()}|${start}`;
+      if (!slots.has(key)) slots.set(key, []);
+      slots.get(key).push(r);
+    }
+  }
+  const out = [];
+  for (const [key, list] of slots) {
+    if (list.length < 2) continue;
+    const groups = new Set(list.map((r) => norm(r.calendar_group)));
+    if (groups.size === 1 && [...groups][0]) continue; // already one group
+    const [day, start] = key.split('|');
+    out.push({ day: Number(day), start, classes: list.map((r) => ({ id: r.id, title: r.title, group: r.calendar_group || '' })) });
+  }
+  return out;
 }

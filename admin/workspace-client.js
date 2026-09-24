@@ -77,7 +77,7 @@ export const WORKSPACE_CLIENT = `(function workspaceClient(){
  async function details(ev){if(!ev)return;if(config.googleEnabled&&ev.source==='gcal')return window.tlcGoogleCalendar.edit(ev);if(ev.source==='local'&&config.canAdd)return editLocal(ev);
   let dest='',text='';if(ev.source==='news'&&config.canNews){dest='/newsitems/edit/'+encodeURIComponent(ev.id.slice(2));text='Edit News & Events record';}
   if(ev.source==='building'&&config.canGym){dest='/gym-rentals';text='Open Gym Rentals';}
-  if(ev.source==='class'&&config.canNews){dest='/christian-education/edit/'+encodeURIComponent(ev.id.split(':')[1]);text='Edit Bible class';}
+  if(ev.source==='class'&&config.canNews){dest=ev.classId?'/christian-education/edit/'+encodeURIComponent(ev.classId):'/christian-education';text=ev.classId?'Edit Bible class':'Open Christian Education';}
   if(ev.source==='gcal'&&ev.editUrl){dest=ev.editUrl;text='Open original Google event';}
   open(ev.title,\`<p><strong>\${esc(source(ev))}</strong></p><p>\${label(ev.start.slice(0,10))} · \${clock(ev.start)}\${ev.end!==ev.start?' through '+label(ev.end.slice(0,10))+' · '+clock(ev.end):''}</p><p>\${esc(ev.location)}</p><p style="white-space:pre-wrap">\${esc(ev.description)}</p><p>This source owns the event details. Office follow-up does not change whether the event is public.</p>\${ev.source==='gcal'?'<p>Recurring-series changes are made in Google Calendar.</p>':''}\${dest?'':'<p>No editable source link is available to your account for this record.</p>'}\`,dest?\`<a class="btn btn-primary" href="\${esc(dest)}"\${ev.source==='gcal'?' target="_blank" rel="noopener"':''}>\${text}</a>\`:'');
   if(config.googleEnabled&&config.canNews&&ev.source==='news')addPublishButton(ev);

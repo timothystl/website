@@ -2,7 +2,7 @@
 // Run: node admin/class-schedule.test.mjs
 import assert from 'node:assert/strict';
 import { composeSchedule, parseScheduleText, classDates, formatTimeRange } from './class-schedule.js';
-import { normalizeBibleClass, mergedCategories } from './calendar.js';
+import { normalizeBibleClass, mergedCategories, groupClassEvents, dedupeEvents, findCalendarMatches, findGroupSuggestions } from './calendar.js';
 
 let pass = 0;
 const test = (name, fn) => { fn(); pass++; };
@@ -62,7 +62,63 @@ test('calendar entries are wall-clock, Learn-colored, one per date', () => {
     id: 'c:7:2026-10-04', start: '2026-10-04T09:30:00', end: '2026-10-04T10:30:00', allDay: false,
     title: 'Junior & Senior High Bible Class', location: '3rd Floor Youth Room',
     description: 'Scripture together.\n\nLed by Gary Krekow', category: 'learn', source: 'class', url: '/education',
+    classId: 7, group: '', aliases: [], leader: 'Gary Krekow',
   });
+});
+
+const cats = mergedCategories([]);
+const oct = (row) => normalizeBibleClass(row, '2026-10-04', '2026-10-04', cats);
+const adult = { id: 1, title: 'Adult Bible Class', meet_days: '0', start_time: '09:30', end_time: '10:30', location: 'Fellowship Hall', calendar_group: 'Christian Education' };
+const youth = { id: 2, title: 'Junior & Senior High Bible Class', meet_days: '0', start_time: '09:30', location: '3rd Floor Youth Room', calendar_group: 'Christian Education' };
+const school = { id: 3, title: 'Sunday School', meet_days: '0', start_time: '09:30', end_time: '10:15', calendar_group: 'Christian Education' };
+const confirm = { id: 4, title: 'Confirmation', meet_days: '0', start_time: '12:30', end_time: '13:30', calendar_group: 'Christian Education' };
+
+test('a group meeting at one time becomes one entry', () => {
+  const out = groupClassEvents([...oct(adult), ...oct(youth), ...oct(school), ...oct(confirm)]);
+  assert.equal(out.length, 2, 'the 9:30 classes fold together; 12:30 Confirmation stands alone');
+  const ce = out.find((e) => e.title === 'Christian Education');
+  assert.equal(ce.start, '2026-10-04T09:30:00');
+  assert.equal(ce.end, '2026-10-04T10:30:00', 'spans to the latest end');
+  assert.deepEqual(ce.classIds, [1, 2, 3]);
+  assert.match(ce.description, /9:30 AM · Adult Bible Class — Fellowship Hall/);
+  assert.equal(out.find((e) => e.classId === 4).title, 'Confirmation', 'a class alone in its slot keeps its name');
+});
+test('an ungrouped class is untouched', () => {
+  const out = groupClassEvents([...oct({ ...adult, calendar_group: '' }), ...oct(youth)]);
+  assert.deepEqual(out.map((e) => e.title).sort(), ['Adult Bible Class', 'Junior & Senior High Bible Class']);
+});
+test('an alias makes a differently named Google event merge', () => {
+  const g = { id: 'g:x', title: 'Bible Class', start: '2026-10-04T09:30:00', end: '2026-10-04T10:30:00', allDay: false, source: 'gcal', category: 'learn' };
+  assert.equal(dedupeEvents([g, ...oct(adult)]).length, 2, 'without an alias both stay');
+  const merged = dedupeEvents([g, ...oct({ ...adult, calendar_aliases: 'Bible Class' })]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].title, 'Adult Bible Class', 'the class wins the words');
+  const grouped = groupClassEvents([...oct(adult), ...oct(youth)]);
+  assert.equal(dedupeEvents([{ ...g, title: 'Adult Bible Class' }, ...grouped]).length, 1, 'a group answers to its members’ names');
+});
+test('possible matches: similar name, same slot, not yet decided', () => {
+  const google = [
+    { title: 'Bible Class', start: '2026-10-04T09:30:00', allDay: false, category: 'other' },
+    { title: 'Bible Class', start: '2026-10-11T09:30:00', allDay: false, category: 'other' },
+    { title: 'Handbells', start: '2026-10-04T09:30:00', allDay: false, category: 'music' },
+    { title: 'Bible Study', start: '2026-10-04T18:00:00', allDay: false, category: 'other' },
+    { title: 'Adult Bible Class', start: '2026-10-04T09:30:00', allDay: false, category: 'other' },
+  ];
+  const rows = [{ ...adult, calendar_group: '' }];
+  const m = findCalendarMatches(rows, google, '2026-10-01', '2026-10-31');
+  assert.equal(m.length, 1, 'only "Bible Class": Handbells shares no word, the evening one is another time, the exact name already merges');
+  assert.equal(m[0].googleTitle, 'Bible Class');
+  assert.equal(m[0].count, 2);
+  assert.equal(findCalendarMatches([{ ...rows[0], calendar_aliases: 'Bible Class' }], google, '2026-10-01', '2026-10-31').length, 0, 'confirmed');
+  assert.equal(findCalendarMatches([{ ...rows[0], not_matches: 'Bible Class' }], google, '2026-10-01', '2026-10-31').length, 0, 'dismissed');
+});
+test('group suggestions: same day and time, not yet one group', () => {
+  const a = { ...adult, active: 1, calendar_group: '' }, y = { ...youth, active: 1, calendar_group: '' };
+  const s = findGroupSuggestions([a, y, { ...confirm, active: 1 }]);
+  assert.equal(s.length, 1);
+  assert.deepEqual(s[0].classes.map((c) => c.id), [1, 2]);
+  assert.equal(findGroupSuggestions([{ ...a, calendar_group: 'CE' }, { ...y, calendar_group: 'CE' }]).length, 0, 'already grouped');
+  assert.equal(findGroupSuggestions([a, { ...y, active: 0 }]).length, 0, 'paused classes are left out');
 });
 
 console.log(`class-schedule: ${pass} passed`);
