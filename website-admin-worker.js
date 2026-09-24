@@ -1488,7 +1488,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-24-calendar-links'; // Exact Google scheduling links; publishing and office records remain in place.
+    const SCHEMA_VERSION = '2026-09-24-class-schedule'; // Bible class meeting pattern, calendar group, aliases and dismissed matches (bible_classes columns).
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
