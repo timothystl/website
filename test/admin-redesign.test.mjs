@@ -7702,5 +7702,32 @@ group('a Bible class meets on real dates the calendar draws');
   has(form, 'name="start_time" value="08:00"', 'and its 8:00 AM start');
 }
 
+group('Bible classes: one calendar slot, and possible matches');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const make = (title, start) => call(env, '/christian-education/create', { cookie, method: 'POST', form: {
+    title, meet_days: ['0'], weeks: '', start_time: start, end_time: '', active: ['0', '1'], accent: 'mid', sort_order: '0' } });
+  await make('Adult Bible Class', '09:30');
+  await make('Sunday School', '09:30');
+  const ids = db.prepare("SELECT id FROM bible_classes WHERE title IN ('Adult Bible Class', 'Sunday School') ORDER BY id").all().map((r) => String(r.id));
+  const list = await (await call(env, '/christian-education', { cookie })).text();
+  has(list, 'Possible calendar matches', 'two classes at one time are offered as one slot');
+  has(list, 'Show as one entry', 'with a button to do it');
+  eq((await call(env, '/christian-education/group', { cookie, method: 'POST', form: { ids, group: 'Christian Education' } })).status, 302, 'grouping saves');
+  const feed = await (await call(env, '/api/calendar?month=2026-10', { fresh: true })).json();
+  const oct4 = feed.events.filter((e) => e.start.startsWith('2026-10-04') && e.source === 'class');
+  eq(oct4.length, 1, 'the two classes are one entry on the calendar');
+  eq(oct4[0].title, 'Christian Education', 'named for the group');
+  const after = await (await call(env, '/christian-education', { cookie })).text();
+  ok(!after.includes('Adult Bible Class</strong>, <strong>Sunday School'), 'and are no longer suggested');
+  await call(env, `/christian-education/match/${ids[0]}`, { cookie, method: 'POST', form: { google_title: 'Bible Class', decision: 'same' } });
+  eq(db.prepare('SELECT calendar_aliases FROM bible_classes WHERE id = ?').get(ids[0]).calendar_aliases, 'Bible Class', '“Same” records the Google title on the class');
+  await call(env, `/christian-education/match/${ids[1]}`, { cookie, method: 'POST', form: { google_title: 'Choir', decision: 'different' } });
+  eq(db.prepare('SELECT not_matches FROM bible_classes WHERE id = ?').get(ids[1]).not_matches, 'Choir', '“Not the same” is remembered');
+  const edit = await (await call(env, `/christian-education/edit/${ids[0]}`, { cookie })).text();
+  has(edit, 'name="calendar_group" list="ce-groups" value="Christian Education"', 'the edit form shows the group');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

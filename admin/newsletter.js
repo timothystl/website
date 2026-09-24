@@ -18,10 +18,10 @@ import { valueByKey, normalizeValue } from './values.js';
 import { churchDate, churchDatePlus } from './when.js';
 import { sendBrevoNewsletter, buildEmailHtml, cancelBrevoCampaign, getBrevoListCount } from './email.js';
 import { pushToAllSubscribers } from './webpush.js';
-import { sweepExpiredItems, extractImageKeys } from './gym.js';
-import { mergedCategories, activeCategories, normalizeClock } from './calendar.js';
+import { sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './gym.js';
+import { mergedCategories, activeCategories, normalizeClock, fetchGoogleEvents, parseCalendarIds, findCalendarMatches, findGroupSuggestions, parseTitleList } from './calendar.js';
 import { TINYMCE_HEAD, THEMES, CONTENT_TYPES } from './db.js';
-import { WEEKDAYS, WEEK_PATTERNS, parseDays, parseWeeks, cleanTime, composeSchedule, parseScheduleText } from './class-schedule.js';
+import { WEEKDAYS, WEEK_PATTERNS, formatTime, parseDays, parseWeeks, cleanTime, composeSchedule, parseScheduleText } from './class-schedule.js';
 
 
 // ── WHAT GOES IN AN ISSUE ────────────────────────────────────
@@ -1358,10 +1358,63 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       end_date: date('end_date'),
       schedule_note: note || null,
       schedule: composeSchedule({ days, weeks, start, end, note }) || null,
+      calendar_group: String(f.get('calendar_group') || '').trim().slice(0, 80) || null,
+      calendar_aliases: parseTitleList(f.get('calendar_aliases')).join('\n') || null,
     };
   };
 
-  const ceFormHtml = (c = null) => {
+  // ── POSSIBLE MATCHES ──
+  // Two kinds, both confirmed by a person rather than merged on a guess:
+  //   · a Google event that looks like one of these classes (same day, within
+  //     half an hour, a shared word or filed under Learn) but is named
+  //     differently, so it would show on the month twice;
+  //   · classes that meet at the same day and time without sharing a
+  //     calendar group, which could be one entry.
+  // The Google read covers the next six weeks; if Google cannot be reached
+  // the panel just shows the grouping half.
+  const ceMatchesPanel = async (rows) => {
+    const running = rows.filter((r) => r.active);
+    let matches = [];
+    try {
+      const from = churchDate(), to = churchDatePlus(42);
+      const [catRows, idRow] = await Promise.all([
+        env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories').all().catch(() => ({ results: [] })),
+        env.DB.prepare("SELECT value FROM site_settings WHERE key = 'calendar_google_ids'").first().catch(() => null),
+      ]);
+      const cats = mergedCategories(catRows.results || []);
+      const google = await fetchGoogleEvents(env, { ids: parseCalendarIds(idRow && idRow.value), from, to, getToken: getGCalAccessToken, cats });
+      matches = findCalendarMatches(running, google.events, from, to);
+    } catch (_) { matches = []; }
+    const groups = findGroupSuggestions(running);
+    if (!matches.length && !groups.length) return '';
+    const e = escapeHtml;
+    const when = (iso) => { const [h, m] = iso.slice(11, 16).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+    const dayName = (ymd) => WEEKDAYS[new Date(ymd + 'T12:00:00Z').getUTCDay()];
+    const btn = 'class="tlc-btn-primary" style="padding:6px 12px;font-size:13px;"';
+    const quiet = 'class="tlc-btn-quiet" style="padding:6px 12px;font-size:13px;background:none;border:0;cursor:pointer;"';
+    const item = (text, forms) => `<li style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-top:1px solid var(--tlc-edge, #e6e0d4);"><span style="flex:1 1 280px;">${text}</span><span style="display:flex;gap:6px;flex-wrap:wrap;">${forms}</span></li>`;
+    const matchItems = matches.map((m) => item(
+      `Google’s <strong>“${e(m.googleTitle)}”</strong> (${e(dayName(m.first.slice(0, 10)))}s, ${e(when(m.first))}, ${m.count} time${m.count === 1 ? '' : 's'} in the next six weeks) may be the same as <strong>${e(m.classTitle)}</strong>.`,
+      `<form method="POST" action="/christian-education/match/${m.classId}" style="margin:0;"><input type="hidden" name="google_title" value="${e(m.googleTitle)}"><input type="hidden" name="decision" value="same"><button type="submit" ${btn}>Same — show once</button></form>`
+      + `<form method="POST" action="/christian-education/match/${m.classId}" style="margin:0;"><input type="hidden" name="google_title" value="${e(m.googleTitle)}"><input type="hidden" name="decision" value="different"><button type="submit" ${quiet}>Not the same</button></form>`));
+    const groupItems = groups.map((g) => {
+      const existing = g.classes.map((c) => c.group).find(Boolean) || 'Christian Education';
+      return item(
+        `${g.classes.map((c) => `<strong>${e(c.title)}</strong>`).join(', ')} all meet ${e(WEEKDAYS[g.day])}s at ${e(formatTime(g.start))}. They could be one entry on the calendar.`,
+        `<form method="POST" action="/christian-education/group" style="margin:0;display:flex;gap:6px;align-items:center;">${g.classes.map((c) => `<input type="hidden" name="ids" value="${c.id}">`).join('')}<input type="text" name="group" value="${e(existing)}" aria-label="Calendar entry name" style="width:190px;padding:6px 8px;font-size:13px;"><button type="submit" ${btn}>Show as one entry</button></form>`);
+    });
+    return `<div class="tlc-section" style="padding-bottom:0;"><div class="tlc-form-card">
+      <h2 class="tlc-label" style="margin:0 0 4px;">Possible calendar matches</h2>
+      <p class="tlc-hint" style="margin:0 0 6px;">Things that may show twice, or could share one slot, on the church calendar. Nothing changes until you choose.</p>
+      <ul style="list-style:none;margin:0;padding:0;font:400 14px/1.45 var(--tlc-sans);color:var(--tlc-body);">${matchItems.join('')}${groupItems.join('')}</ul>
+    </div></div>`;
+  };
+
+  const ceGroups = async () => {
+    const r = await env.DB.prepare("SELECT DISTINCT calendar_group AS g FROM bible_classes WHERE calendar_group IS NOT NULL AND calendar_group != '' ORDER BY g").all().catch(() => ({ results: [] }));
+    return (r.results || []).map((x) => x.g);
+  };
+  const ceFormHtml = (c = null, groups = []) => {
     const isNew = !c;
     const ACCENT_OPTS = [['mid', 'Navy'], ['teal', 'Teal'], ['steel', 'Steel'], ['sage', 'Moss'], ['amber', 'Gold'], ['plum', 'Plum']];
     return renderFormSection({
@@ -1383,6 +1436,10 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
           placeholder: 'What the class is, and who it is for.' },
         { name: 'leader', label: 'Leader', value: c ? (c.leader || '') : '', placeholder: 'Pastor Matt' },
         { name: 'location', label: 'Location', value: c ? (c.location || '') : '', placeholder: 'Fellowship Hall' },
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label" for="fld-calendar_group">Calendar group</label><input type="text" id="fld-calendar_group" name="calendar_group" list="ce-groups" value="${escapeHtml(c ? (c.calendar_group || '') : '')}" placeholder="Christian Education"><datalist id="ce-groups">${[...new Set(['Christian Education', ...groups])].map((g) => `<option value="${escapeHtml(g)}"></option>`).join('')}</datalist><p class="tlc-hint">Optional. Classes with the same group that meet at the same time show as one entry on the church calendar, named for the group, with each class listed inside it.</p></div>` },
+        { kind: 'textarea', name: 'calendar_aliases', label: 'Same as these calendar events', rows: 2, value: c ? (c.calendar_aliases || '') : '',
+          placeholder: 'Bible Class',
+          hint: 'Optional, one title per line. A Google Calendar event with one of these titles at the same time is treated as this class and shown once. The “Possible matches” list fills this in for you.' },
         { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Core value</label>${valueChips('value', c ? c.value : null)}<p class="tlc-hint">Which of the four this class serves.</p></div>` },
         { kind: 'choice', name: 'accent', label: 'Accent color', value: c ? (c.accent || 'mid') : 'mid',
           options: ACCENT_OPTS.map(([v, l]) => ({ value: v, label: l })) },
@@ -1400,14 +1457,18 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (path === '/christian-education/new') {
       return html(`
 ${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, badges)}
-<div class="tlc-wrap">${ceFormHtml()}</div>`, 'New class — TLC Admin');
+<div class="tlc-wrap">${ceFormHtml(null, await ceGroups())}</div>`, 'New class — TLC Admin');
     }
 
     const ceRows = await env.DB.prepare('SELECT * FROM bible_classes ORDER BY sort_order, id').all();
     const ceMsg = url.searchParams.get('msg');
     const ceAlert = ceMsg === 'saved' ? `<div class="alert alert-success">✓ Class saved.</div>`
       : ceMsg === 'deleted' ? `<div class="alert alert-info">Class removed.</div>`
-      : ceMsg === 'error' ? `<div class="alert alert-error">Title is required.</div>` : '';
+      : ceMsg === 'error' ? `<div class="alert alert-error">Title is required.</div>`
+      : ceMsg === 'matched' ? `<div class="alert alert-success">✓ Merged. That calendar event now shows once, as this class.</div>`
+      : ceMsg === 'dismissed' ? `<div class="alert alert-info">Noted. That pair will not be suggested again.</div>`
+      : ceMsg === 'grouped' ? `<div class="alert alert-success">✓ Grouped. Those classes now share one calendar entry.</div>` : '';
+    const cePanel = await ceMatchesPanel(ceRows.results || []);
 
     const rows = ceRows.results.map((c) => ({
       href: `/christian-education/edit/${c.id}`,
@@ -1429,6 +1490,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
 ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, badges)}
 <div class="tlc-wrap">
 ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
+${cePanel}
 ${renderListSection({
   key: 'christian-ed',
   title: sectionCfg('ed').title,
@@ -1456,9 +1518,9 @@ ${renderListSection({
     const ceActive = ceForm.getAll('active').includes('1') ? 1 : 0;
     const ceSort = parseInt(ceForm.get('sort_order') || '0', 10) || 0;
     const sch = ceScheduleFields(ceForm);
-    await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order, meet_days, weeks, start_time, end_time, start_date, end_date, schedule_note, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order, meet_days, weeks, start_time, end_time, start_date, end_date, schedule_note, updated_at, calendar_group, calendar_aliases) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, sch.schedule, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceActive, ceSort,
-        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString()).run();
+        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString(), sch.calendar_group, sch.calendar_aliases).run();
     return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
   }
 
@@ -1468,7 +1530,7 @@ ${renderListSection({
     if (!ceRow) return new Response('Not found', { status: 404 });
     return html(`
 ${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, badges)}
-<div class="tlc-wrap">${ceFormHtml(ceRow)}</div>`, 'Edit class — TLC Admin');
+<div class="tlc-wrap">${ceFormHtml(ceRow, await ceGroups())}</div>`, 'Edit class — TLC Admin');
   }
 
   if (path.startsWith('/christian-education/update/') && method === 'POST') {
@@ -1477,10 +1539,36 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     const title = (ceForm.get('title') || '').trim();
     if (!title) return new Response('', { status: 302, headers: { Location: `/christian-education/edit/${ceId}?msg=error` } });
     const sch = ceScheduleFields(ceForm);
-    await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=?, meet_days=?, weeks=?, start_time=?, end_time=?, start_date=?, end_date=?, schedule_note=?, updated_at=? WHERE id=?')
+    await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=?, meet_days=?, weeks=?, start_time=?, end_time=?, start_date=?, end_date=?, schedule_note=?, updated_at=?, calendar_group=?, calendar_aliases=? WHERE id=?')
       .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, sch.schedule, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.getAll('active').includes('1') ? 1 : 0, parseInt(ceForm.get('sort_order')||'0', 10) || 0,
-        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString(), ceId).run();
+        sch.meet_days, sch.weeks, sch.start_time, sch.end_time, sch.start_date, sch.end_date, sch.schedule_note, new Date().toISOString(), sch.calendar_group, sch.calendar_aliases, ceId).run();
     return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
+  }
+
+  // Confirm or dismiss a possible match from the panel on the list.
+  if (path.startsWith('/christian-education/match/') && method === 'POST') {
+    const ceId = path.split('/').pop();
+    const f = await request.formData();
+    const title = String(f.get('google_title') || '').trim().slice(0, 200);
+    const row = await env.DB.prepare('SELECT calendar_aliases, not_matches FROM bible_classes WHERE id = ?').bind(ceId).first();
+    if (!row || !title) return new Response('', { status: 302, headers: { Location: '/christian-education' } });
+    const same = f.get('decision') === 'same';
+    const col = same ? 'calendar_aliases' : 'not_matches';
+    const next = parseTitleList([row[col] || '', title].join('\n')).join('\n');
+    await env.DB.prepare(`UPDATE bible_classes SET ${col} = ?, updated_at = ? WHERE id = ?`).bind(next, new Date().toISOString(), ceId).run();
+    return new Response('', { status: 302, headers: { Location: `/christian-education?msg=${same ? 'matched' : 'dismissed'}` } });
+  }
+
+  // Put several classes in one calendar group, from the panel on the list.
+  if (path === '/christian-education/group' && method === 'POST') {
+    const f = await request.formData();
+    const name = String(f.get('group') || '').trim().slice(0, 80);
+    const ids = f.getAll('ids').map((x) => parseInt(x, 10)).filter((n) => n > 0).slice(0, 30);
+    if (name && ids.length) {
+      const now = new Date().toISOString();
+      for (const id of ids) await env.DB.prepare('UPDATE bible_classes SET calendar_group = ?, updated_at = ? WHERE id = ?').bind(name, now, id).run();
+    }
+    return new Response('', { status: 302, headers: { Location: '/christian-education?msg=grouped' } });
   }
 
   if (path.startsWith('/christian-education/toggle/') && method === 'POST') {
