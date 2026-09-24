@@ -146,7 +146,9 @@ group('the cover-the-fees estimate is a flat percentage, framed as an ask not a 
   hasNot(html, 'adds an estimated fee to your total', 'old "fee added to your total" framing is gone');
   hasNot(html, 'to your total', 'no remaining copy frames this as a fee tacked onto the total');
   has(html, "'gives ' + money(feeCents()) + ' extra to cover the fee'", 'the toggled-on state also uses the "gives extra" framing');
-  has(html, 'var feeRate = 0.02', 'the flat rate is 2%, matching the interchange + $0.12 Andrew described');
+  has(html, 'var feeRate = 0.02', 'the fallback flat rate is 2%, matching the interchange + $0.12 Andrew described');
+  has(html, 'if (typeof d.estimatedFeeRate === \'number\') feeRate = d.estimatedFeeRate;', 'the live rate comes from the percentage staff set in Connect');
+  has(html, "(Math.round(feeRate * 10000) / 100) + '% to cover", 'a fractional rate like 2.9% is shown as-is, not rounded to a whole percent');
   hasNot(html, 'feeFixedCents', 'no separate fixed-cents component — Andrew asked for a flat percentage only');
 }
 
