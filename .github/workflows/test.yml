@@ -155,7 +155,7 @@ jobs:
           node-version: '22'
       - name: Install pinned Playwright and Chromium
         run: |
-          npm install --no-save --no-package-lock playwright@1.55.0
+          npm install --no-save --no-package-lock playwright@1.55.0 esbuild@0.25.10
           npx playwright install --with-deps chromium
       - name: Public page rendering and retry behavior
         env:
@@ -164,6 +164,7 @@ jobs:
           CHROME_PATH=$(node -e "console.log(require('playwright').chromium.executablePath())")
           export CHROME_PATH
           node test/public-page.test.mjs
+          node test/workspace-browser.test.mjs
 
 # Other browser suites not run here, and why:
 #

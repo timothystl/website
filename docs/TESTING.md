@@ -12,3 +12,10 @@ reconciliation.
 
 Before merge, verify relative documentation links and inspect the workflow consequence: merging to
 `main` is a production release of all three Workers.
+
+The calendar and Worship Times workspace browser test runs in CI with the public-page gate:
+`node test/workspace-browser.test.mjs` (Playwright 1.55.0 and esbuild 0.25.10).
+It bundles the client with `keepNames`, as Wrangler does, before opening it in Chromium.
+Do not serialize Worker functions with `Function.toString()` for browser execution: bundling
+can insert Worker-only helpers, producing a blank calendar despite passing source-level tests.
+The suite uses mock events and saves; it never creates a production event or sends a message.
