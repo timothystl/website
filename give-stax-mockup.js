@@ -272,7 +272,7 @@ const body = `
   var funds = [];
   var gifts = [{ fundId: '', amount: '' }];
   var coverFees = false;
-  var feeRate = 0.02; // overwritten by /funds — see its own comment in src (Andrew's flat estimate)
+  var feeRate = 0.02; // fallback only; /funds returns the percentage staff set in Connect (Public giving funds page)
   var FREQS = [
     { key: '', label: 'One Time' },
     { key: 'weekly', label: 'Weekly' },
@@ -418,7 +418,7 @@ const body = `
   function updateTotal(){
     document.getElementById('stxFeeAmount').textContent = coverFees
       ? 'gives ' + money(feeCents()) + ' extra to cover the fee'
-      : 'consider giving an extra ' + Math.round(feeRate * 100) + '% to cover the processing fee';
+      : 'consider giving an extra ' + (Math.round(feeRate * 10000) / 100) + '% to cover the processing fee';
     var t = totalCents();
     document.getElementById('stxContinueBtn').textContent = t > 0 ? ('Continue with ' + money(t)) : 'Continue';
     document.getElementById('stxPayBtn').textContent = t > 0 ? ('Give ' + money(t)) : 'Give';
