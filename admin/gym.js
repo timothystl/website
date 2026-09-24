@@ -576,7 +576,17 @@ function tlcUploadHandler(blobInfo) {
 // origin, not this admin one. Blank until the Cloudflare route exists, in which
 // case links fall back to whatever host the request came in on, which is the
 // behavior this had before the portal moved.
-export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '', badges = {}) {
+export function isGymOverlap(error) {
+  return /gym_booking_overlap|UNIQUE constraint failed: gym_bookings\.booking_date/.test(String(error?.message || error));
+}
+export async function handleGymRoutes(...args) {
+  try { return await handleGymRoutesInner(...args); }
+  catch (error) {
+    if (!isGymOverlap(error)) throw error;
+    return new Response('That time overlaps an active booking. Reload the calendar and choose another time. Any earlier bookings in a multi-date request remain visible in the calendar.', { status: 409 });
+  }
+}
+async function handleGymRoutesInner(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '', badges = {}) {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
     if (path.startsWith('/gym/book/')) {
@@ -2450,8 +2460,8 @@ ${portalHeader}
               + `<button type="submit" class="tlc-gym-approve">Approve</button></form>`
               + `<a class="tlc-gym-open" href="/gym-rentals/groups/${b.group_id}">Open</a>`,
             warn: c.bad ? (gymBlockedBy[b.booking_date]
-              ? `${fmtBookingDate(b.booking_date)} is blocked — ${gymBlockedBy[b.booking_date]}. Approving anyway will double-book the gym.`
-              : 'This slot overlaps a booking that is already confirmed. Approving anyway will double-book the gym.') : '',
+              ? `${fmtBookingDate(b.booking_date)} is blocked — ${gymBlockedBy[b.booking_date]}. Resolve this conflict before approving.`
+              : 'This slot overlaps a booking that is already confirmed. Resolve this conflict before approving.') : '',
             warnCta: c.bad ? { label: 'See the month', href: `/gym-rentals?view=calendar&m=${(b.booking_date || '').slice(0, 7)}` } : null,
           });
         }
@@ -4293,13 +4303,22 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
              VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
           );
           const bookingIds = [];
+          const bookedSlots = [];
           for (let i = 0; i < validSlots.length; i++) {
             step = `insert-booking-${i + 1}/${validSlots.length}`;
             const s = validSlots[i];
-            const r = await insertStmt.bind(group_id, s.date, s.start_time, s.end_time, notes).run();
-            bookingIds.push(r.meta.last_row_id);
+            try {
+              const r = await insertStmt.bind(group_id, s.date, s.start_time, s.end_time, notes).run();
+              bookingIds.push(r.meta.last_row_id);
+              bookedSlots.push(s);
+            } catch (error) {
+              if (!isGymOverlap(error)) throw error;
+              // Another request won this slot after preflight. Invoice only
+              // successful bookings, just as with conflicts found beforehand.
+            }
           }
-          const bookings = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
+          if (!bookedSlots.length) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
+          const bookings = bookedSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
 
           const sortedDates = bookings.map(b => b.booking_date).sort();
           const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
@@ -4384,6 +4403,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
 
           return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
         } catch (e) {
+          if (isGymOverlap(e)) throw e;
           return errPage(e?.stack || e?.message || String(e));
         }
       }

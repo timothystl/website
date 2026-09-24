@@ -3,198 +3,47 @@ name: Deploy TLC Website
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Hold the lock across ALL production writes, including versioning. Never
+# cancel halfway through a release. Pending runs may be reordered by GitHub;
+# prepare-release.sh rejects any whose checkout is no longer current main.
+concurrency:
+  group: website-production-release
+  cancel-in-progress: false
 
 jobs:
-
-  # ── PRODUCTION ────────────────────────────────────────────────────────────
-  # Deploys all production workers on push to main or manual trigger.
-
-  deploy-site:
-    name: Deploy main site (timothystl.org)
+  release:
+    name: Release Site, Admin, and Links from one revision
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy main site worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler-site.toml
-
-  deploy-admin:
-    name: Deploy newsletter admin (admin.timothystl.org)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Create R2 image bucket (if not exists)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler r2 bucket create tlc-news-images 2>&1 || true
-
-      - name: Deploy admin worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy
-
-  deploy-links:
-    name: Deploy links page (links.timothystl.org)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy links worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler-links.toml
-
-  bump-version:
-    name: Bump admin version number
-    needs: [deploy-site, deploy-admin, deploy-links]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # ⚠ NOT THE DEFAULT SHALLOW CLONE. actions/checkout fetches depth 1,
-          # so `origin/main^` does not exist in the runner — and the
-          # already-set-the-version guard below asks for exactly that. Its
-          # first condition then short-circuits, the guard never fires, and the
-          # bump lands on top of a version somebody chose. That is precisely
-          # what happened on the merge that ADDED the guard (v5.7.0 → v5.7.1):
-          # it was verified in a full clone, where the parent is present, and
-          # the one difference in CI is the depth.
-          #
-          # 0 rather than 2: this job also re-reads main on every retry, and a
-          # shallow repo makes each of those a special case for no gain on a
-          # repository this size.
+          ref: ${{ github.sha }}
           fetch-depth: 0
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Increment version, commit, and redeploy admin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare immutable release and skip superseded runs
+        id: release
+        run: bash .github/scripts/prepare-release.sh
+      - name: Install Wrangler
+        if: steps.release.outputs.deploy == 'true'
+        run: npm install -g wrangler@4.130.0
+      - name: Deploy all production Workers from the recorded revision
+        if: steps.release.outputs.deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
-          set -u
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # ⚠ THIS JOB RACES ITSELF, and used to lose. It deployed, committed
-          # the bump and pushed — and a plain `git push` is rejected whenever
-          # another merge reached main while this run was working. On
-          # 2026-08-06 that happened on three consecutive merges (#407, #408,
-          # #411): every deploy SUCCEEDED, every job went red on the push, and
-          # because the bump commit never landed, the next run read the same
-          # stale number and re-bumped to the same value. Three merges, three
-          # red runs, and a version stuck at v4.26.1 — which is what somebody
-          # reads to tell whether their change is live.
-          #
-          # So the number is computed from ORIGIN/MAIN rather than from the
-          # tree this run checked out, and a rejected push is retried rather
-          # than being the end of it. Recomputing is the part that matters: a
-          # bare retry would keep proposing a number that main has already
-          # used.
-          for attempt in 1 2 3 4 5; do
-            git fetch --quiet origin main
-
-            # Start each attempt from what is actually on main. Anything that
-            # merged while we worked is code we WANT deployed under the new
-            # number — this job's whole purpose is to make the live worker
-            # match main with the version baked in.
-            git reset --quiet --hard origin/main
-
-            # ⚠ DO NOT BUMP OVER A NUMBER SOMEBODY CHOSE. The auto-bump used to
-            # fire unconditionally, which had two costs and the smaller one was
-            # the annoying one:
-            #
-            #  1. It OVERWROTE THE RELEASE THE MOMENT IT SHIPPED. Merge a PR
-            #     that cuts v5.5.0 and this turned it into v5.5.1 within the
-            #     minute, so the minor number a release was cut under was never
-            #     the number anyone read.
-            #  2. It made every feature PR conflict. The bump lands on main, the
-            #     branch already changed the same line, and the next merge stops
-            #     for a hand resolution that always went the same way.
-            #
-            # So: if the newest commit on main already set VERSION, a person set
-            # it deliberately and this leaves it alone. The deploy jobs above
-            # have already shipped that number, so the live worker is correct
-            # and there is nothing left to do.
-            #
-            # First-parent diff, so this reads the same whether main takes
-            # squash merges (it does) or true merge commits.
-            if git rev-parse --quiet --verify origin/main^ >/dev/null &&
-               git diff origin/main^ origin/main -- admin/helpers.js |
-                 grep -qE "^\+export const VERSION = "; then
-              echo "main's newest commit already set the version — leaving it alone."
-              exit 0
-            fi
-
-            # Read the current version from helpers.js (e.g. 'v1.76.3').
-            # Auto-bump is patch-only; major and minor are intentionally
-            # manual so the version number means something. To cut a minor or
-            # major release, edit admin/helpers.js by hand before merging.
-            # [^']* (not .*) so this stops at the version string's closing
-            # quote instead of greedily running to the last quote on the line
-            # — a trailing comment containing an apostrophe (e.g. "Brevo's")
-            # used to make .* swallow past the real value and break the sed
-            # below with an unbalanced delimiter.
-            CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*VERSION = '\([^']*\)'.*/\1/")
-
-            # Strip leading 'v' and split on '.'. If the current version is
-            # still in the old two-segment form (e.g. 'v1.76'), treat it as
-            # 'v1.76.0' so we land on 'v1.76.1' the first run.
-            STRIPPED=${CURRENT#v}
-            MAJOR=$(echo "$STRIPPED" | awk -F. '{print $1+0}')
-            MINOR=$(echo "$STRIPPED" | awk -F. '{print $2+0}')
-            PATCH=$(echo "$STRIPPED" | awk -F. '{print ($3=="" ? 0 : $3+0)}')
-            NEW_PATCH=$((PATCH + 1))
-            NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
-
-            sed -i "s/export const VERSION = '${CURRENT}'/export const VERSION = '${NEW_VERSION}'/" admin/helpers.js
-
-            # Refuse to push a no-op. If the sed matched nothing the file is
-            # unchanged, and committing nothing then pushing would report
-            # success while the version silently never moved.
-            if git diff --quiet -- admin/helpers.js; then
-              echo "::error::Could not rewrite the VERSION line (read '${CURRENT}') — nothing was bumped."
-              exit 1
-            fi
-
-            echo "Attempt ${attempt}: bumping ${CURRENT} → ${NEW_VERSION}"
-
-            # Deploy BEFORE pushing, so the repo never claims a version that
-            # was never served. The reverse failure — the worker serving a
-            # number the repo has not recorded — is the harmless direction,
-            # and the next run corrects it.
-            wrangler deploy
-
-            git add admin/helpers.js
-            git commit --quiet -m "Bump version to ${NEW_VERSION} [skip ci]"
-
-            if git push --quiet origin HEAD:main; then
-              echo "Pushed ${NEW_VERSION}"
-              exit 0
-            fi
-
-            echo "Push rejected — main moved while this run was working. Recomputing."
-            # Sleep a little longer each time so two runs racing each other do
-            # not keep colliding in lockstep.
-            sleep $((attempt * 5))
-          done
-
-          echo "::error::Could not push the version bump after 5 attempts. The deploy itself succeeded — the live worker is current; only the version commit is missing."
-          exit 1
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test -z "$(git status --porcelain)"
+          wrangler deploy --config wrangler-site.toml
+          wrangler deploy --config wrangler.toml
+          wrangler deploy --config wrangler-links.toml
+          echo "Released Site, Admin, and Links from $RELEASE_SHA" >> "$GITHUB_STEP_SUMMARY"

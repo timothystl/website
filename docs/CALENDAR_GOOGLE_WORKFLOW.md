@@ -56,7 +56,9 @@ stops if Google cannot confirm them or a selected event has been cancelled.
 Draft writing and promotional-content editing remain available using the last
 confirmed dates during an outage; those edits cannot overwrite linked scheduling.
 Already sent or scheduled Brevo emails are snapshots, not live calendar views;
-cancel an existing schedule before scheduling an updated issue.
+use Reschedule to update the same saved campaign with the latest issue and time.
+Concurrent requests are serialized, and an uncertain provider response retains
+the campaign ID for retry or cancellation rather than creating a second send.
 
 Failure leaves the editor open with its input and an explicit error. Sync errors
 also appear in the calendar. An unavailable Google event is not interpreted as a
