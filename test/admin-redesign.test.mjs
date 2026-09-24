@@ -1374,10 +1374,10 @@ group('the editor can schedule a send, with a date and a time');
   const scheduleAt = edit.indexOf('action="/schedule-email/22"');
   ok(scheduleAt > nlFormEnd, 'and it is not nested inside the editor form');
 
-  // A pending schedule says so — booking a second one does not move the first.
+  // A pending schedule says so; rescheduling moves that same campaign.
   db.prepare("UPDATE newsletters SET scheduled_send_at='2099-01-01T15:00:00.000Z', scheduled_list_type='all' WHERE id=22").run();
   const booked = await (await call(env, '/edit/22', { cookie })).text();
-  has(booked, 'Already scheduled with Brevo', 'a booked issue says so');
+  has(booked, 'Scheduled with Brevo', 'a booked issue says so');
   has(booked, 'Reschedule', 'and the button changes accordingly');
 }
 
@@ -1730,7 +1730,7 @@ group('gym rentals ships both layouts');
     .run(`${month}-24`, now);
   const clash = await (await call(env, '/gym-rentals?view=queue', { cookie })).text();
   has(clash, 'Blocked date', 'a hold on a blocked date says so in the Conflicts column');
-  has(clash, 'will double-book the gym', 'and grows a warning row saying what approving it would do');
+  has(clash, 'Resolve this conflict before approving.', 'and grows a warning row saying what approving it would do');
 
   // Calendar first is the DEFAULT — the month is what somebody wants to see
   // before deciding anything, so a bare /gym-rentals must land on it.
@@ -7747,6 +7747,40 @@ group('Bible classes: one calendar slot, and possible matches');
   eq(db.prepare('SELECT not_matches FROM bible_classes WHERE id = ?').get(ids[1]).not_matches, 'Choir', '“Not the same” is remembered');
   const edit = await (await call(env, `/christian-education/edit/${ids[0]}`, { cookie })).text();
   has(edit, 'name="calendar_group" list="ce-groups" value="Christian Education"', 'the edit form shows the group');
+}
+
+group('scheduling routes reuse the saved campaign and block alternate sends until cancellation');
+{
+  const { db, env } = await boot(); const { cookie } = signIn(db);
+  env.BREVO_LIST_ID = '1';
+  db.prepare("INSERT INTO newsletters(id,subject,pastor_note,format,status,published_at) VALUES(901,'Fixture','<p>Fixture</p>','weekly','draft','2099-10-01')").run();
+  const beforeFetch = globalThis.fetch, requests = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith('https://api.brevo.com/v3/emailCampaigns')) {
+      requests.push({ url, method: init.method, body: init.body && JSON.parse(init.body) });
+      return init.method === 'POST' ? Response.json({ id: 9011 }) : new Response(null, { status: 204 });
+    }
+    return beforeFetch(url, init);
+  };
+  try {
+    for (const day of ['01','02']) {
+      const res = await call(env, '/schedule-email/901', { cookie, method: 'POST', form: { list_type:'all', scheduled_at:`2099-10-${day}T15:00:00Z` } });
+      has(res.headers.get('location'), 'scheduled=1', 'schedule confirmed');
+    }
+    eq(requests.filter(r => r.method === 'POST').length, 1, 'only one campaign created');
+    eq(requests.filter(r => r.method === 'PUT').length, 2, 'both dates use same campaign');
+    const edit = await (await call(env, '/edit/901', { cookie })).text();
+    has(edit, 'Rescheduling updates this same campaign', 'editor explains reuse');
+    lacks(edit, 'A sent issue is read-only', 'future scheduled issue is not marked sent');
+    const direct = await call(env, '/send-email/901', { cookie, method:'POST', form:{list_type:'all'} });
+    has(direct.headers.get('location'), 'emailerr=', 'direct send blocked while scheduled');
+    eq((await call(env, '/delete/901', { cookie, method:'POST', form:{} })).status, 409, 'cannot orphan a scheduled campaign by deleting issue');
+    eq(requests.filter(r => r.method === 'POST').length, 1, 'no alternate campaign sent');
+    const cancelled = await call(env, '/newsletter/cancel-schedule/901', { cookie, method:'POST', form:{} });
+    has(cancelled.headers.get('location'), 'scheduled=cancelled', 'cancel succeeds');
+    eq(db.prepare('SELECT brevo_campaign_id FROM newsletters WHERE id=901').get().brevo_campaign_id, null, 'campaign cleared only after cancellation');
+    eq(requests.filter(r => r.method === 'DELETE').length, 1, 'one provider cancellation');
+  } finally { globalThis.fetch = beforeFetch; }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -16,7 +16,8 @@ import { renderFormSection, renderListSection, statusPill, valueChip, valueChips
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { valueByKey, normalizeValue } from './values.js';
 import { churchDate, churchDatePlus } from './when.js';
-import { sendBrevoNewsletter, buildEmailHtml, cancelBrevoCampaign, getBrevoListCount } from './email.js';
+import { scheduleNewsletter, cancelNewsletterSchedule, withScheduleOperation } from './newsletter-schedule.js';
+import { sendBrevoNewsletter, buildEmailHtml, getBrevoListCount } from './email.js';
 import { pushToAllSubscribers } from './webpush.js';
 import { sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './gym.js';
 import { mergedCategories, activeCategories, normalizeClock, fetchGoogleEvents, parseCalendarIds, findCalendarMatches, findGroupSuggestions, parseTitleList } from './calendar.js';
@@ -182,7 +183,12 @@ export function isSent(row) {
   if (!row) return false;
   if (row.status === 'sent') return true;
   if (row.sent_at) return true;
-  if (row.beehiiv_id || row.brevo_campaign_id) return true;
+  if (row.beehiiv_id) return true;
+  if (row.brevo_campaign_id) {
+    if (row.schedule_state === 'pending') return false;
+    if (row.scheduled_send_at) return Date.parse(row.scheduled_send_at) <= Date.now();
+    return true; // Historical campaign without scheduling metadata.
+  }
   return false;
 }
 
@@ -1066,7 +1072,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       const lockId = form.get('newsletter_id');
       if (lockId) {
         const existing = await env.DB.prepare(
-          'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id, updated_at, updated_by, ministry_content, ministry_type FROM newsletters WHERE id = ?'
+          'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id, scheduled_send_at, schedule_state, updated_at, updated_by, ministry_content, ministry_type FROM newsletters WHERE id = ?'
         ).bind(lockId).first();
         existingBeforeSave = existing;
         const verdict = canEdit(existing);
@@ -1267,22 +1273,20 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
         emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
         const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading);
-        const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
-        emailSuffix = result.success
-          ? `&emailed=${emailSend}`
-          : `&emailerr=${encodeURIComponent(result.error)}`;
-        // sent_at/sent_count are what isSent() and the list's "Sent" pill
-        // read — without this the email genuinely goes out but the row
-        // keeps reading Draft, same as the dedicated /send-email/:id route.
-        // The count is the real Brevo list size, not the local signup
-        // table — that table only holds website-form signups and badly
-        // undercounts an audience also built from Breeze imports/manual adds.
-        if (emailSend === 'all' && result.success) {
-          const recipients = await getBrevoListCount(env, listId);
-          await env.DB.prepare(
-            "UPDATE newsletters SET sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
-          ).bind(new Date().toISOString(), recipients, newsletterId).run();
-        }
+        const result = await withScheduleOperation(env, newsletterId, async current => {
+          if (current.brevo_campaign_id || current.scheduled_send_at || current.sent_at) {
+            return { error: 'This issue already has a campaign or has been sent. Use Reschedule for the existing campaign, or cancel its schedule first.' };
+          }
+          const sent = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
+          if (emailSend === 'all' && sent.success) {
+            const recipients = await getBrevoListCount(env, listId);
+            await env.DB.prepare(
+              "UPDATE newsletters SET sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
+            ).bind(new Date().toISOString(), recipients, newsletterId).run();
+          }
+          return sent;
+        });
+        emailSuffix = result.success ? `&emailed=${emailSend}` : `&emailerr=${encodeURIComponent(result.error)}`;
       }
     }
 
@@ -1717,13 +1721,11 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     const nlLocked = !canEdit(row).ok;
     const nlBlocks = parseBlocks(row.blocks);
     // ── Schedule send ──
-    // A pending schedule is worth stating outright: Brevo already holds a campaign, and
-    // scheduling again REPLACES nothing — it creates a second one — so somebody needs to
-    // see that one is already booked before they book another.
+    // Rescheduling updates the same saved Brevo campaign.
     const schedAt = row.scheduled_send_at ? new Date(row.scheduled_send_at) : null;
     const schedPending = schedAt && !isNaN(schedAt.getTime()) && schedAt.getTime() > Date.now();
     const scheduledNote = schedPending
-      ? `<div class="alert alert-info" style="margin-bottom:10px;">Already scheduled with Brevo for <strong>${escapeHtml(schedAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short', timeZone: 'America/Chicago' }))}</strong> (${escapeHtml(row.scheduled_list_type === 'test' ? 'test list' : 'members')}). Scheduling again adds a second campaign rather than moving this one &mdash; cancel the first in <a href="https://app.brevo.com" target="_blank">Brevo</a> if that is not what you want.</div>`
+      ? `<div class="alert alert-info" style="margin-bottom:10px;">${row.schedule_state === 'pending' ? 'Requested schedule (not yet confirmed)' : 'Scheduled with Brevo'} for <strong>${escapeHtml(schedAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short', timeZone: 'America/Chicago' }))}</strong> (${escapeHtml(row.scheduled_list_type === 'test' ? 'test list' : 'members')}). Rescheduling updates this same campaign with the saved issue and new send time.</div>`
       : '';
     // Default the picker to the issue's own publish date at 9am, which is when this
     // newsletter actually goes out — a blank datetime field is a small chore every time.
@@ -1993,6 +1995,7 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
     <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:10px;">
       Hand the issue to Brevo now and have it go out at a set date and time. Save your changes first &mdash; Brevo builds the email from the saved issue, not from what is on screen.
     </div>
+    ${row.schedule_state === 'pending' ? '<p role="alert">Brevo has not confirmed the last schedule change. Retry or cancel the saved campaign; check Brevo before assuming it will send at the displayed time.</p>' : ''}
     ${scheduledNote}
     <button type="button" class="btn btn-secondary" onclick="toggleSchedule(${row.id})">${row.scheduled_send_at ? 'Reschedule&hellip;' : 'Schedule send&hellip;'}</button>
     <div id="sched-row-${row.id}" style="display:none;margin-top:12px;">
@@ -2131,21 +2134,19 @@ ${classesJs}
     let payload;try{payload=await buildNewsletterEmailPayload(env,id);}catch(error){return html('<p>Calendar details could not be confirmed. Nothing was sent or scheduled. Review the linked events in Calendar, then retry.</p><a href="/calendar-workspace">Open Calendar</a>','Calendar needs attention');}
     if (!payload) return new Response('Not found', { status: 404 });
     const { row, emailHtml } = payload;
-    const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
-
-    // Sending to all = publish the newsletter so it appears on the website,
-    // and record what actually went out. sent_at is what locks the issue from
-    // then on, and sent_count is what the list shows instead of guessing —
-    // "Sent 24 July to 609 subscribers" is a fact, not an estimate. The count
-    // comes from the real Brevo list, not the local signup table — that table
-    // only holds website-form signups and badly undercounts an audience also
-    // built from Breeze imports/manual adds.
-    if (listType === 'all' && result.success) {
-      const recipients = await getBrevoListCount(env, listId);
-      await env.DB.prepare(
-        "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?), sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
-      ).bind(currentUser.username, churchDate(), new Date().toISOString(), recipients, id).run();
-    }
+    const result = await withScheduleOperation(env, id, async current => {
+      if (current.brevo_campaign_id || current.scheduled_send_at || current.sent_at) {
+        return { error: 'This issue already has a campaign or has been sent. Cancel its schedule first, or duplicate a sent issue.' };
+      }
+      const sent = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
+      if (listType === 'all' && sent.success) {
+        const recipients = await getBrevoListCount(env, listId);
+        await env.DB.prepare(
+          "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?), sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
+        ).bind(currentUser.username, churchDate(), new Date().toISOString(), recipients, id).run();
+      }
+      return sent;
+    });
 
     const suffix = result.success
       ? `&emailed=${listType}`
@@ -2186,12 +2187,9 @@ ${classesJs}
     let payload;try{payload=await buildNewsletterEmailPayload(env,id);}catch(error){return html('<p>Calendar details could not be confirmed. Nothing was sent or scheduled. Review the linked events in Calendar, then retry.</p><a href="/calendar-workspace">Open Calendar</a>','Calendar needs attention');}
     if (!payload) return new Response('Not found', { status: 404 });
     const { row, emailHtml } = payload;
-    const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId], scheduledAt: scheduledAtIso });
+    const result = await scheduleNewsletter(env, id, { subject: row.subject, htmlContent: emailHtml, listIds: [listId], scheduledAt: scheduledAtIso, listType });
 
     if (result.success) {
-      await env.DB.prepare(
-        'UPDATE newsletters SET scheduled_send_at = ?, scheduled_list_type = ?, brevo_campaign_id = ? WHERE id = ?'
-      ).bind(scheduledAtIso, listType, String(result.campaignId), id).run();
 
       // There's no Brevo→worker callback for "campaign actually sent", and no
       // Workers Cron in this project to poll for it — publish now (like an
@@ -2219,21 +2217,10 @@ ${classesJs}
   if (path.startsWith('/newsletter/cancel-schedule/') && method === 'POST') {
     if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
     const id = path.split('/').pop();
-    const row = await env.DB.prepare('SELECT brevo_campaign_id FROM newsletters WHERE id = ?').bind(id).first();
-    if (!row) return new Response('Not found', { status: 404 });
-
-    if (row.brevo_campaign_id) {
-      const result = await cancelBrevoCampaign(env, row.brevo_campaign_id);
-      if (!result.success) {
-        return new Response('', {
-          status: 302,
-          headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
-        });
-      }
-    }
-    await env.DB.prepare(
-      'UPDATE newsletters SET scheduled_send_at = NULL, scheduled_list_type = NULL, brevo_campaign_id = NULL WHERE id = ?'
-    ).bind(id).run();
+    const result = await cancelNewsletterSchedule(env, id);
+    if (!result.success) return new Response('', { status: 302, headers: {
+      Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent(result.error)}`
+    } });
     return new Response('', { status: 302, headers: { Location: `/newsletters?msg=emailed&scheduled=cancelled` } });
   }
 
@@ -2298,12 +2285,18 @@ ${classesJs}
   // ── DELETE ──
   if (path.startsWith('/delete/') && method === 'POST') {
     const id = path.split('/').pop();
-    const toDelete = await env.DB.prepare('SELECT status FROM newsletters WHERE id = ?').bind(id).first();
-    if (toDelete && toDelete.status !== 'draft' && !hasPermission(currentUser, 'newsletter_approve')) {
-      return new Response('Access denied. Only admins can delete published newsletters.', { status: 403 });
-    }
-    await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(id).run();
-    await env.DB.prepare('DELETE FROM newsletters WHERE id = ?').bind(id).run();
+    const result = await withScheduleOperation(env, id, async toDelete => {
+      if (toDelete.brevo_campaign_id) return { error: 'Cancel the scheduled campaign before deleting this issue.', status: 409 };
+      if (toDelete.status !== 'draft' && !hasPermission(currentUser, 'newsletter_approve')) {
+        return { error: 'Access denied. Only admins can delete published newsletters.', status: 403 };
+      }
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM newsletters WHERE id = ?').bind(id),
+      ]);
+      return { success: true };
+    });
+    if (!result.success) return new Response(result.error, { status: result.status || 409 });
     // Back to the newsletter list, which is where the issue lived — News &
     // Events is a different section now.
     return new Response('', { status: 302, headers: { Location: '/newsletters?msg=deleted' } });

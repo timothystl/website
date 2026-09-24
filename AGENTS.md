@@ -71,7 +71,9 @@ editor changes also need the TinyMCE asset and self-hosted boot checks.
 Do not use Connect's nonexistent-in-this-repo built-scripts command as a release requirement.
 
 Every push to main triggers `.github/workflows/deploy.yml`, deploying Site, Admin, and Links.
-A version job may increment the Admin patch version, redeploy Admin, and push a skip-CI commit.
+One serialized release records an Admin version-only commit, then deploys all three Workers
+from the same revision. Superseded runs skip; failed releases can resume their own version
+commit. The completed workflow, rather than the version commit alone, confirms deployment.
 Merge completed work after applicable checks and verify that automatic release; no extra
 permission is needed merely because a merge deploys. For Markdown-only changes, the same
 automatic workflow may run, but do not add a manual redeploy or version bump.
