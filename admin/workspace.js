@@ -5,7 +5,7 @@ import { html, sidebarShell, escapeHtml as esc } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { parseBlocks, sanitizeBlocks, BLOCK_DEFS } from './blocks.js';
 import { churchDate } from './when.js';
-import { GOOGLE_COLORS, mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents } from './calendar.js';
+import { GOOGLE_COLORS, mergedCategories, parseCalendarIds, fetchGoogleEvents, readNewsEvents, readGymBookings, readLocalIntakeEvents, readBibleClassEvents } from './calendar.js';
 import { getGCalAccessToken } from './gym.js';
 import { ROOMS, TYPES } from './intake.js';
 import { WORKSPACE_CLIENT, WORKSPACE_CSS } from './workspace-client.js';
@@ -89,12 +89,12 @@ export async function handleWorkspaceRoutes(request,env,path,method,user,url,bad
     const [catRows,idRow]=await Promise.all([env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories').all(),env.DB.prepare("SELECT value FROM site_settings WHERE key = 'calendar_google_ids'").first()]);
     const cats=mergedCategories(catRows.results||[]);
     const links=(await env.DB.prepare("SELECT * FROM calendar_event_links").all()).results||[];
-    const [google,news,building,local]=await Promise.all([fetchGoogleEvents(env,{ids:parseCalendarIds(idRow?.value),from,to,getToken:getGCalAccessToken,cats,includeEditLinks:true}),readNewsEvents(env,from,to,cats,{strict:true}),readGymBookings(env,from,to,{strict:true}),readLocalIntakeEvents(env,from,to,cats,{strict:true})]);
+    const [google,news,building,local,classes]=await Promise.all([fetchGoogleEvents(env,{ids:parseCalendarIds(idRow?.value),from,to,getToken:getGCalAccessToken,cats,includeEditLinks:true}),readNewsEvents(env,from,to,cats,{strict:true}),readGymBookings(env,from,to,{strict:true}),readLocalIntakeEvents(env,from,to,cats,{strict:true}),readBibleClassEvents(env,from,to,cats)]);
     // Only unlinked sources remain separate. A linked post is publishing metadata for Google.
     for(const ev of [...news,...local]){const link=links.find(l=>l.source_key===ev.id);if(link)ev.googleLink=link;}
     for(const ev of google.events){const link=links.find(l=>l.calendar_id===ev.googleCalendarId&&l.event_id===ev.googleEventId&&l.source_key.startsWith('n:'));if(link)ev.newsId=link.source_key.slice(2);}
     const linked=new Set(links.filter(l=>['synced','cancelled','error'].includes(l.state)).map(l=>l.source_key));
-    return json({events:[...google.events,...news.filter(e=>!linked.has(e.id)),...building,...local.filter(e=>!linked.has(e.id))].filter(e=>e.start.slice(0,10)<=to&&(e.end||e.start).slice(0,10)>=from),categories:cats,google:google.ok,googleReason:google.reason,syncErrors:links.filter(l=>l.last_error).map(l=>({sourceKey:l.source_key,error:l.last_error}))});
+    return json({events:[...google.events,...news.filter(e=>!linked.has(e.id)),...building,...local.filter(e=>!linked.has(e.id)),...classes].filter(e=>e.start.slice(0,10)<=to&&(e.end||e.start).slice(0,10)>=from),categories:cats,google:google.ok,googleReason:google.reason,syncErrors:links.filter(l=>l.last_error).map(l=>({sourceKey:l.source_key,error:l.last_error}))});
    }catch(e){console.error('Admin calendar read failed',e);return json({error:'The calendar could not be loaded. Retry before making changes.'},503);}
   }
   const localMatch=path.match(/^\/calendar-workspace\/local\/(\d+)$/);

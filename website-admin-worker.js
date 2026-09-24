@@ -2146,6 +2146,13 @@ export default {
     // longer any way to create another one.
     try { await env.DB.prepare('ALTER TABLE events ADD COLUMN news_item_id INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
+    // A class's meeting pattern as data, so the church calendar can draw it.
+    // See admin/class-schedule.js. `schedule` stays as the display line and is
+    // composed from these on save.
+    for (const col of ['meet_days TEXT', 'weeks TEXT', 'start_time TEXT', 'end_time TEXT',
+                       'start_date TEXT', 'end_date TEXT', 'schedule_note TEXT', 'updated_at TEXT']) {
+      try { await env.DB.prepare(`ALTER TABLE bible_classes ADD COLUMN ${col}`).run(); } catch (_) {}
+    }
     // Menu visibility, separate from published state. Taking a ministry out of
     // the header must not unpublish it — the page stays live at its address,
     // it just stops being listed. The old admin conflated the two.
@@ -3139,7 +3146,13 @@ export default {
       const localStamp = await env.DB.prepare(
         "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS t FROM event_intake WHERE source_kind = 'local'"
       ).first().catch(() => null);
-      const localV = localStamp ? `${localStamp.n}-${localStamp.t}` : '0-';
+      // A Bible class edit changes every week it meets, so it gets the same
+      // fingerprint rather than waiting out the cache window.
+      const classStamp = await env.DB.prepare(
+        "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS t FROM bible_classes WHERE active = 1"
+      ).first().catch(() => null);
+      const localV = (localStamp ? `${localStamp.n}-${localStamp.t}` : '0-')
+        + (classStamp ? `.${classStamp.n}-${classStamp.t}` : '');
 
       // ⚠ THE FILTER IS PART OF THE CACHE KEY. Without it whichever filter was
       // asked for first would be served to every other subscriber for ten

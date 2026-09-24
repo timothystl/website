@@ -21,6 +21,8 @@
 // rather than constructing a Date from them. Do not "fix" this by making them
 // instants — that is the bug, not the omission.
 
+import { classDates, cleanTime } from './class-schedule.js';
+
 // ── CATEGORIES ──────────────────────────────────────────────────────────────
 // ⚠ A GOOGLE EVENT HAS NO CATEGORY FIELD, so the event's COLOR is the category.
 // Whoever enters the event picks a color once in Google and the site draws its
@@ -412,7 +414,7 @@ const dayOf = (iso) => String(iso || '').slice(0, 10);
 // place. A News record is the richest — it has the description, the photo and
 // the sign-up — then a building booking, which at least knows it is a booking,
 // then Google. The CLOCK is a separate question and is answered below.
-const SOURCE_RANK = { news: 3, building: 2, gcal: 1, both: 0 };
+const SOURCE_RANK = { news: 3, class: 2, building: 2, gcal: 1, both: 0 };
 const rankOf = (e) => SOURCE_RANK[e.source] || 0;
 
 export function dedupeEvents(events) {
@@ -653,13 +655,14 @@ export async function fetchGoogleEvents(env, { ids, from, to, getToken, cats, in
 export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, cats }) {
   let linked=new Set();
   try{linked=new Set(((await env.DB.prepare("SELECT source_key FROM calendar_event_links WHERE state IN ('synced','cancelled','error')").all()).results||[]).map(l=>l.source_key));}catch(e){console.warn('Calendar link refresh unavailable');}
-  const [google, news, building, local] = await Promise.all([
+  const [google, news, building, local, classes] = await Promise.all([
     fetchGoogleEvents(env, { ids: calendarIds, from, to, getToken, cats }),
     readNewsEvents(env, from, to, cats),
     readGymBookings(env, from, to),
     readLocalIntakeEvents(env, from, to, cats),
+    readBibleClassEvents(env, from, to, cats),
   ]);
-  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news.filter(e=>!linked.has(e.id)), building, local.filter(e=>!linked.has(e.id))))));
+  const merged = sortEvents(dedupeEvents(sortEvents(google.events.concat(news.filter(e=>!linked.has(e.id)), building, local.filter(e=>!linked.has(e.id)), classes))));
   // Trimmed to the requested window AFTER the merge, so an event that reaches
   // into the window from outside it is kept while one that only touched the
   // padding is not.
@@ -740,6 +743,43 @@ export function normalizeLocalIntakeEvent(row, cats) {
   };
   if (!start) return { ...base, start: row.local_event_date, end: lastDay, allDay: true };
   return { ...base, start, end: newsEnd(row.local_event_date, lastDay, start, row.local_end_time), allDay: false };
+}
+
+// ── BIBLE CLASSES ───────────────────────────────────────────────────────────
+// A running class with a weekday and a start time (see admin/class-schedule.js)
+// appears on every date it meets, so the office no longer has to re-enter a
+// weekly class in Google. A paused class is off the calendar for the same
+// reason it is off /education. If the same class IS also in Google under the
+// same title, dedupeEvents() collapses the pair as it does News & Google.
+export async function readBibleClassEvents(env, from, to, cats, { strict = false } = {}) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, title, description, leader, location, meet_days, weeks, start_time, end_time, start_date, end_date
+         FROM bible_classes
+        WHERE active = 1 AND meet_days IS NOT NULL AND meet_days != '' AND start_time IS NOT NULL AND start_time != ''
+        LIMIT 100`
+    ).all();
+    return (rows.results || []).flatMap((r) => normalizeBibleClass(r, from, to, cats));
+  } catch (error) { if (strict) throw error; return []; }
+}
+
+export function normalizeBibleClass(row, from, to, cats) {
+  const title = String((row && row.title) || '').trim();
+  const start = cleanTime(row && row.start_time);
+  if (!title || !start) return [];
+  const end = cleanTime(row.end_time);
+  const live = activeCategories(cats);
+  const category = live.some((c) => c.key === 'learn') ? 'learn' : NEUTRAL_CATEGORY;
+  const leader = String(row.leader || '').trim();
+  const description = [plainText(row.description || ''), leader ? `Led by ${leader}` : ''].filter(Boolean).join('\n\n');
+  return classDates(row, from, to).map((ymd) => ({
+    id: `c:${row.id}:${ymd}`,
+    start: `${ymd}T${start}:00`,
+    end: end && end > start ? `${ymd}T${end}:00` : `${ymd}T${start}:00`,
+    allDay: false,
+    title, location: String(row.location || '').trim(),
+    description, category, source: 'class', url: '/education',
+  }));
 }
 
 // ── BUILDING RENTALS ────────────────────────────────────────────────────────

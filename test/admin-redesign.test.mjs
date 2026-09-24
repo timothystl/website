@@ -7671,5 +7671,36 @@ group('Google calendar routes keep authorization and linked schedule ownership')
  try{const response=await call(env,'/send-email/702',{cookie,method:'POST',form:{list_type:'test'}});eq(response.status,302,'verified Google schedule can prepare a mocked send');ok(mailed.includes('11:00')||mailed.includes('11:00am'),'mocked newsletter uses refreshed Google time');eq(db.prepare('SELECT event_date FROM events WHERE newsletter_id=702').get().event_date,'2026-10-02','hosted newsletter snapshot matches prepared email scheduling');}finally{globalThis.fetch=beforeFetch;}
 }
 
+group('a Bible class meets on real dates the calendar draws');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const saved = await call(env, '/christian-education/create', { cookie, method: 'POST', form: {
+    title: 'Junior & Senior High Bible Class', label: 'Sunday mornings', leader: 'Gary Krekow',
+    location: '3rd Floor Youth Room', meet_days: ['0'], weeks: '', start_time: '09:30', end_time: '10:30',
+    start_date: '2026-10-01', end_date: '', schedule_note: '', active: ['0', '1'], accent: 'mid', sort_order: '0' } });
+  eq(saved.status, 302, 'the class saves');
+  const row = db.prepare("SELECT * FROM bible_classes WHERE title = 'Junior & Senior High Bible Class'").get();
+  eq(row.meet_days, '0', 'the weekday is stored as data');
+  eq(row.start_time, '09:30', 'and the start time');
+  eq(row.schedule, 'Sundays · 9:30–10:30 AM', 'the website line is composed from them');
+  const feed = await (await call(env, '/api/calendar?month=2026-10', { fresh: true })).json();
+  const hits = feed.events.filter((e) => e.title === 'Junior & Senior High Bible Class');
+  eq(hits.length, 4, 'it lands on every Sunday in October');
+  eq(hits[0].start, '2026-10-04T09:30:00', 'at the church wall-clock time');
+  eq(hits[0].category, 'learn', 'filed under Learn / Bible study');
+  const sept = await (await call(env, '/api/calendar?month=2026-09', { fresh: true })).json();
+  ok(!sept.events.some((e) => e.title === 'Junior & Senior High Bible Class'), 'nothing before its first class');
+  await call(env, `/christian-education/toggle/${row.id}`, { cookie, method: 'POST' });
+  const paused = await (await call(env, '/api/calendar?month=2026-10', { fresh: true })).json();
+  ok(!paused.events.some((e) => e.title === 'Junior & Senior High Bible Class'), 'a paused class leaves the calendar');
+  const legacy = db.prepare('SELECT id FROM bible_classes WHERE title = ?').get("Men's Bible Class");
+  const form = await (await call(env, `/christian-education/edit/${legacy.id}`, { cookie })).text();
+  has(form, 'Previously entered as', 'an old free-text schedule is shown for checking');
+  ok(/name="meet_days" value="6" checked/.test(form), 'and its Saturday is prefilled');
+  has(form, '<option value="1,3" selected>', 'with its 1st & 3rd weeks');
+  has(form, 'name="start_time" value="08:00"', 'and its 8:00 AM start');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
