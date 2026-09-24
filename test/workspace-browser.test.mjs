@@ -80,17 +80,17 @@ try {
  await page.getByRole('button',{name:'Save to Google Calendar'}).click();
  await page.getByText('Google did not confirm the save. Retry.',{exact:true}).waitFor();
  assert.equal(await page.locator('#google-event-form [name=title]').inputValue(),'Choir practice');
- await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.locator('#google-event-form').waitFor({state:'hidden'});await page.locator('.ws-day').first().waitFor();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
  assert.equal(googleSaves[0].requestId,googleSaves[1].requestId,'failed save retry keeps the same identity');assert.equal(googleSaves[1].calendarId,'church@test');assert.equal(googleSaves[1].repeat,'WEEKLY');
  await page.locator('[data-event="g:occurrence"]').click();await page.getByRole('button',{name:'Edit entire series instead'}).click();
  await page.getByText('Editing the entire series.',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Save to Google Calendar'}).click();await page.locator('#google-event-form').waitFor({state:'hidden'});await page.locator('.ws-day').first().waitFor();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
  assert.equal(googleSaves.at(-1).eventId,'series');assert.equal(googleSaves.at(-1).etag,'"live"');
  await page.locator('[data-event="n:7"]').click();await page.getByRole('button',{name:'Publish / link to Google',exact:true}).click();
- await page.locator('[name=linkEventId]').selectOption('occurrence');await page.getByRole('button',{name:'Publish / link to Google',exact:true}).click();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
+ await page.locator('[name=linkEventId]').selectOption('occurrence');await page.getByRole('button',{name:'Publish / link to Google',exact:true}).click();await page.locator('#google-event-form').waitFor({state:'hidden'});await page.locator('.ws-day').first().waitFor();await page.getByText('Saved to Google Calendar.',{exact:true}).waitFor();
  assert.equal(googleSaves.at(-1).sourceKey,'n:7');assert.equal(googleSaves.at(-1).linkEventId,'occurrence');
  await page.locator('#calendar-room').selectOption('Hall');assert.equal(await page.locator('[data-event]').count(),2);
- await page.emulateMedia({media:'print'});assert.equal(await page.locator('.sidebar').isVisible(),false);assert.equal(await page.locator('.ws-day').first().isVisible(),true);await page.emulateMedia({media:'screen'});
+ await page.emulateMedia({media:'print'});assert.equal(await page.locator('.sidebar').isVisible(),false);await page.locator('.ws-day').first().waitFor({state:'visible'});assert.equal(await page.locator('.ws-day').first().isVisible(),true);await page.emulateMedia({media:'screen'});
  assert.deepEqual(errors,[]);
  console.log('Bundled calendar and services browser interactions passed.');
 } finally {await browser?.close();await rm(dir,{recursive:true,force:true});}
