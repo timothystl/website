@@ -59,6 +59,23 @@ for (const s of ['wp-login.php', 'index.php', 'admin.php', 'xmlrpc.php', '.env',
                  'actuator/env', 'solr/admin/info'])
   ok(isJunkPath(s), `scanner probe /${s} must be refused`);
 
+group('Apple Pay domain verification is served verbatim');
+{
+  const { APPLE_PAY_DOMAIN_ASSOCIATION } = await import('../apple-pay-domain-association.js');
+  let assetsHit = false;
+  const env = { ASSETS: { fetch: async () => { assetsHit = true; return new Response('<html>'); } } };
+  const res = await worker.fetch(
+    new Request('https://timothystl.org/.well-known/apple-developer-merchantid-domain-association'),
+    env, { waitUntil() {} });
+  const body = await res.text();
+  ok(res.status === 200, `answers 200 (got ${res.status})`);
+  ok(body === APPLE_PAY_DOMAIN_ASSOCIATION, 'body is the Square file, byte for byte');
+  ok(/^[0-9A-F]+$/.test(body) && JSON.parse(Buffer.from(body, 'hex').toString()).pspId,
+     'the file decodes to Apple\'s association JSON');
+  ok(!assetsHit, 'never falls through to the SPA');
+  ok((res.headers.get('content-type') || '').startsWith('text/plain'), 'served as plain text');
+}
+
 group('vendor is not a prefix match');
 // /christmasmarket/vendors is a real, published page with no hardcoded
 // fallback behind it — a prefix rule here would take the Christmas Market off
