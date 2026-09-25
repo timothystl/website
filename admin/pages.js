@@ -22,6 +22,10 @@ import { TINYMCE_HEAD } from './db.js';
 // build step website-admin-worker.js gets but this file does not. It arrives via editorShared
 // instead, the same way sharedEditorApi/editorPageData/etc. do.
 
+// Shown while the page editor boots; see the note at the editor screen route.
+const LP_BOOT_VEIL_CSS='body:not(.lp-ready) #root{visibility:hidden}'
+  +'body:not(.lp-ready)::after{content:"Loading the editor\\2026";position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:600 15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#4A4860;pointer-events:none}';
+
 export const PAGE_FILTERS = ['all', 'published', 'drafts'];
 
 // The design's own pill vocabulary for this list, in one place so the screen
@@ -796,11 +800,17 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, badge
     if (!owns(exists)) return denied();
     // Every canonical page uses the same editor; opening it never converts stored blocks.
     const visual = true;
-    const source = visual ? editorShared.MINISTRY_EDITOR_HTML.replace('paletteOpen: true','paletteOpen: false').replace('desktop: 900','desktop: 1080').replace('boot();',VISUAL_EDITOR_JS+'\nboot().then(lpBoot);') : editorShared.MINISTRY_EDITOR_HTML;
+    // ⚠ The shell below is the older editor, and lpBoot() rebuilds it into the
+    // current one only after boot()'s page fetch returns — so without the
+    // veil the old interface painted first and then visibly swapped. #root is
+    // hidden with visibility (not display) so fitPaper() can still measure it,
+    // and `finally` reveals it even when boot or lpBoot fails, so the "Could
+    // not load this page" message is never hidden behind the veil.
+    const source = visual ? editorShared.MINISTRY_EDITOR_HTML.replace('paletteOpen: true','paletteOpen: false').replace('desktop: 900','desktop: 1080').replace('boot();',VISUAL_EDITOR_JS+'\nboot().then(lpBoot).finally(()=>document.body.classList.add(\'lp-ready\'));') : editorShared.MINISTRY_EDITOR_HTML;
     return new Response(source
       .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
       .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
-      .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD+(visual?'<style>'+VISUAL_CSS+VISUAL_EDITOR_CSS+'</style><script>'+VISUAL_RUNTIME+'</script>':'')), { headers: EDITOR_HEADERS });
+      .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD+(visual?'<style>'+LP_BOOT_VEIL_CSS+VISUAL_CSS+VISUAL_EDITOR_CSS+'</style><script>'+VISUAL_RUNTIME+'</script>':'')), { headers: EDITOR_HEADERS });
   }
 
   // ── The editor's API ──

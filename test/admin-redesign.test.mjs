@@ -7590,7 +7590,12 @@ group('Visual editor rollout: every canonical page, without content conversion')
  for(const page of before){
   const response=await call(env,'/pages/'+encodeURIComponent(page.id)+'/edit',{cookie});
   eq(response.status,200,page.id+' opens visual editor');
-  has(await response.text(),'boot().then(lpBoot)',page.id+' has shared visual controls');
+  const html=await response.text();
+  has(html,'boot().then(lpBoot)',page.id+' has shared visual controls');
+  // The older shell must not paint before lpBoot() replaces it, and the veil
+  // must lift even when boot fails, or the load error would be hidden.
+  has(html,'body:not(.lp-ready) #root{visibility:hidden}',page.id+' hides the editor until it is built');
+  has(html,".finally(()=>document.body.classList.add('lp-ready'))",page.id+' always lifts the loading veil');
  }
  eq(JSON.stringify(db.prepare('SELECT id,blocks,published_blocks,template FROM pages ORDER BY id').all()),JSON.stringify(before),'opening every editor preserves draft, published content and templates exactly');
  const owner=signIn(db,['pages_edit_own'],'rollout-owner');
