@@ -1,20 +1,38 @@
 :root {
-  /* Primary — Navy (deep, desaturated blue) */
-  --steel:#1E2D4A;--steel-dk:#2A3F60;--steel-dk2:#111E32;
-  /* Teal — links, sky, active states */
-  --mid:#2E7EA6;--sky:#5BA3C4;--ice:#C4CEDF;--mist:#EDF2F7;
-  /* Gold (warm accent, nav CTA, eyebrows) */
-  --amber:#C9973A;--amber-dk:#B0821E;--honey:#E8C070;--pale-gold:#F5E4C0;
-  /* Moss (acceptance / green accent) */
-  --sage:#4A5E3A;--soft-sage:#7A8F6A;--pale-sage:#C2CEBC;
-  /* Additional ministry accent colors */
-  --teal:#2E7EA6;--teal-light:#5BA3C4;--teal-pale:#C0D8E4;
+  /* ── DEEP SEA & SUN (Timothy Website Design System, Sept 2026) ─────────────
+     The canonical tokens come first; the site's older names below are kept
+     and re-pointed at them, because hundreds of rules (and inline styles in
+     index.html) already read --steel/--amber/--sage/--warm. Renaming those
+     would be churn; re-pointing them is the whole palette change in one place.
+     The Website Admin and page editor do not load this sheet, so their own
+     chrome is untouched by it. */
+  --primary:#0B3C5C;--primary-hover:#1565A0;--accent:#F2C14E;
+  --page:#F7F9FB;--surface:#FFFFFF;--text:#1A1A2A;--muted:#4A4860;--tint:#E6F0F7;
+  --success:#1A5C3E;--success-bg:#EAF5EF;--warning:#7A5A00;--warning-bg:#FFF8E1;
+  --error:#A12B24;--error-bg:#FDEEE8;--info:#0B3C5C;--info-bg:#EDF2F7;
+  --control-border:#747B89;--link:#246582;--focus:#0B3C5C;--brand-ink:#0B2238;
+  /* Four values — bright fills that always carry navy (--value-ink) text.
+     Never white text on a value color. */
+  --value-welcome:#F2C14E;--value-welcome-soft:#FEF6DC;
+  --value-receive:#B9A3E3;--value-receive-soft:#F1ECFA;
+  --value-grow:#7FCB94;--value-grow-soft:#E6F5EA;
+  --value-go:#F08A74;--value-go-soft:#FDECE8;
+  --value-ink:#0B2238;
+  /* Legacy names, re-pointed. Navy/steel is the primary action color,
+     gold/amber is the sun accent, moss/sage (the old primary) is now deep sea. */
+  --steel:var(--primary);--steel-dk:var(--primary-hover);--steel-dk2:var(--brand-ink);
+  --mid:var(--link);--sky:#6FA8CF;--ice:#C9D6E3;--mist:var(--tint);
+  /* ⚠ The new gold is bright: it is a FILL, a rule, or text on a dark field.
+     Gold text on a light surface uses --amber-ink (the design's dark gold). */
+  --amber:var(--accent);--amber-dk:#D9A63A;--honey:#F7D57E;--pale-gold:#FEF6DC;--amber-ink:#7A5A00;
+  --sage:var(--primary);--soft-sage:#1565A0;--pale-sage:#C9D6E3;
+  --teal:var(--link);--teal-light:#6FA8CF;--teal-pale:#C9D6E3;
   --slate:#3A4E5C;--slate-light:#6A8090;--slate-pale:#C0CED4;
   --plum-light:#8A6A8A;--stone:#8C8880;
   /* Backgrounds */
-  --warm:#F7F3EC;--linen:#EDE9E0;--white:#FBF8F3;
+  --warm:var(--page);--linen:#EEF2F6;--white:var(--surface);
   /* Text & borders */
-  --border:#DDE3ED;--charcoal:#1A1A2A;--gray:#4A4860;--text-muted:#8A8898;
+  --border:#DCE1E7;--charcoal:var(--text);--gray:var(--muted);--text-muted:#6B6A7E;
   /* Fonts & shape
      ── THE TYPEFACE IS A SETTING, AND THESE THREE ARE WHERE IT LANDS ────────
      --font-heading / --font-body / --font-ui are re-pointed at runtime by
@@ -47,7 +65,7 @@
      copy's 1.22 is 78px, which pushes the first paragraph off the screen. */
   --tlc-text-scale:1;--tlc-head-scale:1;
   --r-sm:8px;--r-md:12px;--r-lg:20px;
-  --shadow:0 2px 12px rgba(30,45,74,.08);--shadow-lift:0 6px 32px rgba(30,45,74,.14);
+  --shadow:0 2px 12px rgba(11,60,92,.08);--shadow-lift:0 6px 32px rgba(11,60,92,.14);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 /* Z-INDEX SCALE
@@ -62,7 +80,7 @@ body{font-family:var(--font-body);color:var(--charcoal);background:var(--warm);l
 body::before{content:'';position:absolute;inset:0;background-image:url("/images/noise.svg?v=20260328");pointer-events:none;z-index:1000;opacity:0.5;}
 img{display:block;max-width:100%;}
 a{color:var(--mid);text-decoration:none;}
-a:hover{color:var(--steel);}
+a:hover{color:var(--primary-hover);}
 /* Keyboard-only focus ring — mouse/touch clicks never trigger :focus-visible,
    so this only ever shows for someone tabbing through the page. Amber reads
    clearly against every section background on the site, light or dark. */
@@ -77,11 +95,11 @@ textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{
 .section--linen{background:var(--linen);}
 .section--white{background:var(--white);}
 .section--mist{background:var(--mist);}
-.eyebrow{font-family:var(--font-ui);font-size:calc(11px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;display:block;}
+.eyebrow{font-family:var(--font-ui);font-size:calc(11px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber-ink);margin-bottom:8px;display:block;}
 .eyebrow--sage{color:var(--sage);}
-.eyebrow--sky{color:var(--sky);}
+.eyebrow--sky{color:var(--link);}
 .eyebrow--light{color:var(--honey);}
-h1,h2,h3,h4{font-family:var(--font-heading);color:var(--steel);}
+h1,h2,h3,h4{font-family:var(--font-heading);color:var(--brand-ink);}
 h1{font-size:clamp(calc(30px * var(--tlc-head-scale, 1)),calc(4.5vw * var(--tlc-head-scale, 1)),calc(52px * var(--tlc-head-scale, 1)));font-weight:700;line-height:1.15;}
 h2{font-size:clamp(calc(24px * var(--tlc-head-scale, 1)),calc(3.5vw * var(--tlc-head-scale, 1)),calc(36px * var(--tlc-head-scale, 1)));font-weight:700;line-height:1.2;margin-bottom:16px;}
 h3{font-size:calc(20px * var(--tlc-text-scale, 1));font-weight:700;margin-bottom:8px;}
@@ -121,7 +139,7 @@ p:last-child{margin-bottom:0;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;flex-shrink:0;}
 .nav-links button,.nav-links a{font-family:var(--font-body);font-size:calc(14px * var(--tlc-text-scale, 1));font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;white-space:nowrap;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);opacity:1;}
-.nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,white) !important;opacity:1 !important;
+.nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,var(--brand-ink)) !important;opacity:1 !important;
   font-family:var(--font-ui) !important;font-size:calc(13px * var(--tlc-text-scale, 1)) !important;padding:12px 19px !important;font-weight:800 !important;border-radius:999px !important;}
 .nav-cta:hover{filter:brightness(.92);}
 .nav-toggle{display:none;background:none;border:none;cursor:pointer;color:var(--nav-ink,white);font-size:calc(22px * var(--tlc-text-scale, 1));padding:8px;}
@@ -165,7 +183,7 @@ p:last-child{margin-bottom:0;}
 .btn-primary{background:var(--steel);color:white;}
 .btn-primary:hover{background:var(--steel-dk);color:white;}
 .btn-secondary{background:var(--amber);color:var(--steel);}
-.btn-secondary:hover{background:var(--amber-dk);color:white;}
+.btn-secondary:hover{background:var(--amber-dk);color:var(--brand-ink);}
 .btn-outline{background:transparent;color:var(--steel);border:1.5px solid var(--steel);}
 .btn-outline:hover{background:var(--steel);color:white;}
 .btn-ghost{background:transparent;color:white;border:1.5px solid rgba(255,255,255,.35);}
@@ -174,13 +192,13 @@ p:last-child{margin-bottom:0;}
 
 /* HERO */
 .hero{background:var(--steel);padding:72px 28px 80px;position:relative;overflow:hidden;}
-.hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(201,151,58,.10) 0%,transparent 65%);pointer-events:none;}
-.hero::after{content:'';position:absolute;bottom:-60px;left:10%;width:360px;height:360px;background:radial-gradient(circle,rgba(46,126,166,.18) 0%,transparent 65%);pointer-events:none;}
+.hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(242,193,78,.10) 0%,transparent 65%);pointer-events:none;}
+.hero::after{content:'';position:absolute;bottom:-60px;left:10%;width:360px;height:360px;background:radial-gradient(circle,rgba(36,101,130,.18) 0%,transparent 65%);pointer-events:none;}
 .hero-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr 300px;gap:48px;align-items:center;position:relative;z-index:1;}
 .hero h1{color:white;margin-bottom:20px;}
 .hero-sub{font-size:calc(17px * var(--tlc-text-scale, 1));font-weight:300;color:rgba(255,255,255,.88);line-height:1.8;margin-bottom:32px;max-width:500px;}
 .hero-card{background:white;border:none;border-radius:var(--r-lg);padding:28px;box-shadow:0 8px 40px rgba(0,0,0,.35);}
-.hero-card-label{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;}
+.hero-card-label{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber-ink);margin-bottom:10px;}
 .hero-card-time{font-family:var(--serif);font-size:calc(24px * var(--tlc-text-scale, 1));color:var(--steel);margin-bottom:4px;}
 .hero-card-day{font-family:var(--sans);font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:400;color:var(--charcoal);margin-bottom:18px;}
 .hero-card hr{border:none;border-top:1px solid var(--border);margin-bottom:14px;}
@@ -242,7 +260,7 @@ p:last-child{margin-bottom:0;}
 .mdo-strip{background:var(--warm);border-top:3px solid var(--amber);padding:36px 28px;}
 .mdo-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:28px;flex-wrap:wrap;}
 .mdo-text{flex:1;min-width:240px;}
-.mdo-eye{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;}
+.mdo-eye{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber-ink);margin-bottom:4px;}
 .mdo-title{font-family:var(--serif);font-size:calc(20px * var(--tlc-text-scale, 1));color:var(--steel);margin-bottom:6px;}
 .mdo-desc{font-family:var(--sans);font-size:calc(13px * var(--tlc-text-scale, 1));font-weight:300;color:var(--gray);line-height:1.65;}
 
@@ -260,16 +278,16 @@ p:last-child{margin-bottom:0;}
 .staff-bio-content p{margin:0 0 8px;}.staff-bio-content p:last-child{margin-bottom:0;}
 .staff-bio-quote{font-style:italic;color:var(--mid);margin-top:10px;font-size:calc(12px * var(--tlc-text-scale, 1));}
 .bio-more{background:none;border:none;color:var(--steel);font-family:var(--sans);font-size:calc(11px * var(--tlc-text-scale, 1));font-weight:700;cursor:pointer;padding:5px 0 0;display:block;letter-spacing:.03em;}
-.bio-more:hover{color:var(--amber);}
+.bio-more:hover{color:var(--amber-ink);}
 .staff-email{display:block;margin-top:12px;font-family:var(--sans);font-size:calc(12px * var(--tlc-text-scale, 1));font-weight:600;color:var(--mid);}
 
 /* ABOUT VALUES — Worship/Gold, Acceptance/Moss, Education/Teal, Outreach/Slate */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
 .about-values{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px;}
-.value-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;border-left:3px solid var(--amber);}
-.value-card:nth-child(2){border-left-color:var(--sage);}
-.value-card:nth-child(3){border-left-color:var(--teal);}
-.value-card:nth-child(4){border-left-color:var(--slate);}
+.value-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;border-left:6px solid var(--value-welcome);}
+.value-card:nth-child(2){border-left-color:var(--value-receive);}
+.value-card:nth-child(3){border-left-color:var(--value-grow);}
+.value-card:nth-child(4){border-left-color:var(--value-go);}
 .value-card h4{font-size:calc(15px * var(--tlc-text-scale, 1));margin-bottom:6px;}
 .value-card p{font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--gray);margin:0;}
 
@@ -278,13 +296,13 @@ p:last-child{margin-bottom:0;}
 .form-group{margin-bottom:20px;}
 .form-label{display:block;font-family:var(--sans);font-size:calc(11px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;}
 .form-input{width:100%;background:var(--white);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px;font-family:var(--sans);font-size:calc(14px * var(--tlc-text-scale, 1));color:var(--charcoal);outline:none;transition:border-color .2s,box-shadow .2s;}
-.form-input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(212,146,42,.12);}
+.form-input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(242,193,78,.12);}
 textarea.form-input{min-height:120px;resize:vertical;}
 .contact-info-card{background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;}
 .contact-info-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px;}
 .contact-info-row:last-child{margin-bottom:0;}
 .contact-icon{width:36px;height:36px;border-radius:10px;background:var(--ice);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.ci-label{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:3px;}
+.ci-label{font-family:var(--sans);font-size:calc(10px * var(--tlc-text-scale, 1));font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber-ink);margin-bottom:3px;}
 .ci-val{font-family:var(--sans);font-size:calc(14px * var(--tlc-text-scale, 1));color:var(--charcoal);line-height:1.6;}
 .ci-val a{color:var(--mid);}
 .social-row{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
@@ -313,7 +331,7 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .page-hero h1{color:white;}
 .page-hero p{font-size:calc(17px * var(--tlc-text-scale, 1));color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;}
 .page-hero--photo{background-size:cover;background-position:center;position:relative;}
-.page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));}
+.page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(11,60,92,.82),rgba(11,34,56,.92));}
 .page-cta-bar{background:var(--warm-white);border-top:1px solid var(--border);padding:32px 28px;text-align:center;}
 .page-cta-bar h3{color:var(--steel);font-family:var(--serif);font-size:clamp(calc(18px * var(--tlc-head-scale, 1)),calc(2.5vw * var(--tlc-head-scale, 1)),calc(24px * var(--tlc-head-scale, 1)));margin-bottom:8px;}
 .page-cta-bar p{color:var(--gray);font-size:calc(15px * var(--tlc-text-scale, 1));margin-bottom:20px;max-width:540px;margin-left:auto;margin-right:auto;}
@@ -368,7 +386,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
    Everything the three-step card needs that the site did not already have.
    Colors, radii, shadows and type are the existing tokens throughout — the
    design handoff's mocks write the hex values inline only because a prototype
-   has no stylesheet, and the mocks were read as "use --steel", not "#1E2D4A".
+   has no stylesheet, and the mocks were read as "use --steel", not "#0B3C5C".
 
    ⚠ Scoped to .mkt-, not added to the shared primitives. A step tab, a choice
    pill and a running-total panel appear on exactly one page; putting them in
@@ -378,7 +396,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 /* The same decorative device as .hero::before. pointer-events:none matters —
    it sits over the buttons. */
 .mkt-hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;
-  background:radial-gradient(circle,rgba(201,151,58,.10) 0%,transparent 65%);pointer-events:none;}
+  background:radial-gradient(circle,rgba(242,193,78,.10) 0%,transparent 65%);pointer-events:none;}
 .mkt-hero-inner{max-width:1080px;margin:0 auto;position:relative;z-index:1;
   display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:40px;align-items:center;}
 .mkt-hero h1{color:white;margin-bottom:20px;}
@@ -421,7 +439,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 .mkt-panel .form-group{margin-bottom:0;}
 .mkt-pair{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 .mkt-csz{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;}
-.mkt-req{color:var(--amber);}
+.mkt-req{color:var(--amber-ink);}
 .mkt-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;padding-top:6px;}
 .mkt-foot--end{justify-content:flex-end;}
 textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body);}
@@ -565,7 +583,7 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 
 /* Newsletter signup — white-on-dark input placeholders */
 #newsletter-signup-form input::placeholder { color: rgba(255,255,255,.45); }
-#newsletter-signup-form input:focus { border-color: var(--amber) !important; box-shadow: 0 0 0 3px rgba(201,151,58,.25); }
+#newsletter-signup-form input:focus { border-color: var(--amber) !important; box-shadow: 0 0 0 3px rgba(242,193,78,.25); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    THE CHURCH CALENDAR — /calendar, and the strip on /news
@@ -584,7 +602,7 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 :root{
   /* Out-of-month wash, the today wash, the print rule, and the muted print
      header fill. Only the calendar uses these. */
-  --cal-out:#F4F1EA;--cal-today:#FDF6E7;--cal-print-line:#C9C5BD;--cal-print-head:#F1EFEA;
+  --cal-out:#F1F4F7;--cal-today:#FEF6DC;--cal-print-line:#C9D0D8;--cal-print-head:#EEF2F6;
 }
 
 .tlc-cal{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);
@@ -681,14 +699,14 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   border-bottom:1px solid var(--border);padding:9px 9px 12px;display:flex;
   flex-direction:column;gap:5px;background:#fff;}
 .tlc-cal-day--out{background:var(--cal-out);}
-.tlc-cal-day--out .tlc-cal-num{color:#B8B4AC;}
+.tlc-cal-day--out .tlc-cal-num{color:#A9B0BA;}
 .tlc-cal-day--today{background:var(--cal-today);}
-.tlc-cal-day--today .tlc-cal-num{color:var(--amber);}
+.tlc-cal-day--today .tlc-cal-num{color:var(--amber-ink);}
 .tlc-cal-dayhd{display:flex;align-items:center;gap:6px;min-width:0;}
 .tlc-cal-num{font-family:var(--font-ui);font-size:calc(13px * var(--tlc-text-scale, 1));
   font-weight:700;color:var(--steel);}
 .tlc-cal-todaytag{font-family:var(--font-ui);font-size:calc(9px * var(--tlc-text-scale, 1));
-  font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);}
+  font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--amber-ink);}
 
 /* ── An event chip ───────────────────────────────────────────────────────── */
 /* ⚠ TIME ABOVE TITLE, never beside it. Beside it, the title gets whatever is
@@ -721,14 +739,14 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
   font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);}
 .tlc-cal-weekhd span{font-size:calc(14px * var(--tlc-text-scale, 1));color:var(--text-muted);}
 .tlc-cal-listday{display:grid;grid-template-columns:96px 1fr;gap:22px;padding:18px 32px;
-  border-bottom:1px solid #E6E2D8;}
+  border-bottom:1px solid #DCE1E7;}
 .tlc-cal-listdate{display:flex;flex-direction:column;align-items:flex-start;min-width:0;}
 .tlc-cal-listdate .dw{font-family:var(--font-ui);font-size:calc(11px * var(--tlc-text-scale, 1));
   font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);}
 .tlc-cal-listdate .dn{font-family:var(--font-ui);font-size:calc(32px * var(--tlc-head-scale, 1));
   font-weight:700;line-height:1.1;color:var(--steel);}
 .tlc-cal-listdate .dm{font-size:calc(13px * var(--tlc-text-scale, 1));color:var(--text-muted);}
-.tlc-cal-listday--today .dw,.tlc-cal-listday--today .dn{color:var(--amber);}
+.tlc-cal-listday--today .dw,.tlc-cal-listday--today .dn{color:var(--amber-ink);}
 .tlc-cal-listevs{display:flex;flex-direction:column;gap:10px;min-width:0;}
 /* ⚠ minmax(88px, max-content), not a fixed 88px — tlcCalSpan() prints a
    START-END RANGE ("10:00 AM – 12:00 PM"), not the single start time the
@@ -753,7 +771,7 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
 .tlc-cal-empty span{font-size:calc(15px * var(--tlc-text-scale, 1));color:var(--text-muted);}
 /* A skeleton rather than a spinner: the grid is already the right shape, so
    nothing jumps when the events land in it. */
-.tlc-cal-skel{background:linear-gradient(90deg,var(--linen),#F4F1EA,var(--linen));
+.tlc-cal-skel{background:linear-gradient(90deg,var(--linen),#F1F4F7,var(--linen));
   background-size:200% 100%;border-radius:7px;height:34px;}
 @media(prefers-reduced-motion:no-preference){
   .tlc-cal-skel{animation:tlcCalPulse 1.4s ease-in-out infinite;}
@@ -840,7 +858,7 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
    and because the sheet is display:none anywhere but print. */
 .tlc-print-cell--out{background:var(--cal-print-head);}
 .tlc-print-cell .n{font-family:var(--font-ui);font-size:11px;font-weight:700;line-height:1.15;color:var(--steel);}
-.tlc-print-cell--out .n{color:#B8B4AC;}
+.tlc-print-cell--out .n{color:#A9B0BA;}
 .tlc-print-ev{display:grid;grid-template-columns:3px 1fr;gap:4px;min-width:0;}
 .tlc-print-ev .bar{border-radius:2px;}
 .tlc-print-ev .tx{font-family:var(--font-body);font-size:9.5px;line-height:1.22;
@@ -918,3 +936,21 @@ textarea.form-input{line-height:1.6;resize:vertical;font-family:var(--font-body)
     grid-template-rows:auto repeat(var(--tlc-print-weeks, 6), minmax(0, 1fr));}
   .tlc-print-cell{height:auto;min-height:0;}
 }
+
+/* ── FOUR VALUES (Timothy Website Design System) ─────────────────────────────
+   Welcome · Receive · Grow · Go. Bright fills always carry navy ink
+   (--value-ink); never white text on a value color. Buttons stay --primary.
+     <span class="value-tag grow">Grow</span>
+     <span class="value-tag soft go">Go · Outreach</span>
+     <div class="values"><a class="value-card welcome" href="…">
+       <span class="eyebrow">Acceptance</span><h3>Welcome</h3><p>…</p></a>…</div>
+   The modifier classes restyle .value-card completely, so the older
+   unmodified .value-card list above keeps working as it is. */
+.value-tag{display:inline-flex;align-items:baseline;gap:8px;padding:4px 12px;border-radius:8px;border:1px solid transparent;color:var(--value-ink);font:700 calc(14px * var(--tlc-text-scale, 1))/1.5 var(--font-ui);white-space:nowrap}
+.value-tag.welcome{background:var(--value-welcome)}.value-tag.receive{background:var(--value-receive)}.value-tag.grow{background:var(--value-grow)}.value-tag.go{background:var(--value-go)}
+.value-tag.soft.welcome{background:var(--value-welcome-soft);border-color:var(--value-welcome)}.value-tag.soft.receive{background:var(--value-receive-soft);border-color:var(--value-receive)}.value-tag.soft.grow{background:var(--value-grow-soft);border-color:var(--value-grow)}.value-tag.soft.go{background:var(--value-go-soft);border-color:var(--value-go)}
+.values{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:16px}
+.value-card.welcome,.value-card.receive,.value-card.grow,.value-card.go{display:block;padding:20px;border:0;border-top:6px solid;border-radius:0 0 12px 12px;color:var(--value-ink);text-decoration:none}
+.value-card.welcome{background:var(--value-welcome-soft);border-color:var(--value-welcome)}.value-card.receive{background:var(--value-receive-soft);border-color:var(--value-receive)}.value-card.grow{background:var(--value-grow-soft);border-color:var(--value-grow)}.value-card.go{background:var(--value-go-soft);border-color:var(--value-go)}
+.value-card.welcome h3,.value-card.receive h3,.value-card.grow h3,.value-card.go h3{font:700 calc(28px * var(--tlc-head-scale, 1))/1.2 var(--font-heading);margin:6px 0 8px;color:var(--value-ink)}
+.value-card .eyebrow,.value-card.welcome p,.value-card.receive p,.value-card.grow p,.value-card.go p{color:var(--value-ink)}

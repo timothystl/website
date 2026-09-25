@@ -1119,7 +1119,7 @@ group('the header is drafted before it is published');
   eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get().value).bar,
      'navy', 'now the live row has it');
   const apiAfter = await (await call(env, '/api/pages', { fresh: true })).json();
-  eq(apiAfter.details.appearance.bar, '#1E2D4A', 'and visitors get it, resolved to a real color');
+  eq(apiAfter.details.appearance.bar, '#0B3C5C', 'and visitors get it, resolved to a real color');
 
   // Discarding is the other direction, and it must not touch what is live.
   await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { bar: 'plum', nl_show: '0' } });
