@@ -61,10 +61,10 @@ import { churchInstant } from './when.js';
 // gold-shadow one. Leaving those to a second control would let somebody
 // assemble a gold eyebrow on a gold field. One decision, not four.
 export const BG = [
-  { name: 'Parchment', c: '#FBF8F3', dark: false },
-  { name: 'Sand',      c: '#F7F3EC', dark: false },
-  { name: 'Mist',      c: '#EDF2F7', dark: false },
-  { name: 'Navy',      c: '#1E2D4A', dark: true },
+  { name: 'Parchment', c: '#FFFFFF', dark: false },
+  { name: 'Sand',      c: '#F7F9FB', dark: false },
+  { name: 'Mist',      c: '#E6F0F7', dark: false },
+  { name: 'Navy',      c: '#0B3C5C', dark: true },
   // ⚠ EACH CARRIES A GRADIENT, AND THAT IS THE POINT. The handoff is blunt
   // about it: "Flat navy and flat sand are a large part of why the old pages
   // read as dead. Every large field in this language now carries a shallow
@@ -75,17 +75,17 @@ export const BG = [
   // `c` stays the flat color and is still what the ink guardrail and the
   // inspector's contrast maths read; `grad` is what actually gets painted.
   // Copy these declarations verbatim — they are authored, not sampled.
-  { name: 'Paper',     c: '#F5F0E6', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#FFFDF8',
-    grad: 'linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%)' },
-  { name: 'White',     c: '#FFFDF8', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#F5F0E6',
-    grad: 'linear-gradient(180deg,#FFFDF8 0%,#F7F2E6 100%)' },
-  { name: 'Ink navy',  c: '#101B2E', dark: true,  lang: '1b', head: '#FFFFFF', eyebrow: '#E4A93C', link: '#E4A93C', rule: 'rgba(245,240,230,.14)', chip: 'rgba(245,240,230,.08)',
-    grad: 'linear-gradient(135deg,#101B2E 0%,#1B2C4A 52%,#2A3E66 100%)' },
-  // ⚠ Gold ink is #3B2E12 on this field for EVERYTHING — body, headings and
-  // eyebrows alike. The README's "gold shadow" moved from #7A4E12 to #3B2E12
-  // between handoff revisions; this is the later value.
-  { name: 'Gold',      c: '#E4A93C', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#3B2E12', link: '#101B2E', rule: 'rgba(16,27,46,.18)', chip: '#FFFDF8',
-    grad: 'linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)' },
+  { name: 'Paper',     c: '#F7F9FB', dark: false, lang: '1b', head: '#0B2238', eyebrow: '#1565A0', link: '#246582', rule: '#DCE1E7', chip: '#FFFFFF',
+    grad: 'linear-gradient(180deg,#F7F9FB 0%,#EEF3F7 100%)' },
+  { name: 'White',     c: '#FFFFFF', dark: false, lang: '1b', head: '#0B2238', eyebrow: '#1565A0', link: '#246582', rule: '#DCE1E7', chip: '#F7F9FB',
+    grad: 'linear-gradient(180deg,#FFFFFF 0%,#F7F9FB 100%)' },
+  { name: 'Ink navy',  c: '#0B2238', dark: true,  lang: '1b', head: '#FFFFFF', eyebrow: '#F2C14E', link: '#F2C14E', rule: 'rgba(247,249,251,.14)', chip: 'rgba(247,249,251,.08)',
+    grad: 'linear-gradient(135deg,#0B2238 0%,#0E3050 52%,#124A70 100%)' },
+  // ⚠ Gold ink is #0B2238 (navy) on this field for EVERYTHING — body,
+  // headings and eyebrows alike. Deep sea & sun (Sept 2026): value and accent
+  // fills always carry navy text, never white and never a brown.
+  { name: 'Gold',      c: '#F2C14E', dark: false, lang: '1b', head: '#0B2238', eyebrow: '#0B2238', link: '#0B2238', rule: 'rgba(11,34,56,.18)', chip: '#FFFFFF',
+    grad: 'linear-gradient(120deg,#F2C14E 0%,#F7D57E 52%,#E8B23A 100%)' },
   // Three more, added 2026-08-17 at Dinger's ask for wider background choice
   // on ordinary boxes (the Give/Newsletter/Signup panels). Plain, like Navy —
   // no 1b fields, because these are not a second design language, just three
@@ -95,8 +95,8 @@ export const BG = [
   // Christmas Market, Moss for the nav header/Stephen Ministry, Slate for
   // Food Pantry. Each is dark enough that the ink guardrail forces Cream or
   // Gold ink, never a dark one, the same as Navy already does.
-  { name: 'Teal',  c: '#2E7EA6', dark: true },
-  { name: 'Moss',  c: '#4A5E3A', dark: true },
+  { name: 'Teal',  c: '#246582', dark: true },
+  { name: 'Moss',  c: '#1A5C3E', dark: true },
   { name: 'Slate', c: '#3A4E5C', dark: true },
 ];
 
@@ -106,12 +106,12 @@ export const BG = [
 // own answer is a near-black brown.
 export const INK = [
   { name: 'Ink',      c: '#3A3A4A', onDark: false },
-  { name: 'Navy',     c: '#1E2D4A', onDark: false },
-  { name: 'Slate',    c: '#6A6858', onDark: false },
-  { name: 'Cream',    c: '#F3EDE1', onDark: true },
-  { name: 'Gold',     c: '#C9973A', onDark: true },
-  { name: 'Body ink', c: '#453F30', onDark: false },
-  { name: 'Gold ink', c: '#3B2E12', onDark: false },
+  { name: 'Navy',     c: '#0B3C5C', onDark: false },
+  { name: 'Slate',    c: '#4A4860', onDark: false },
+  { name: 'Cream',    c: '#F7F9FB', onDark: true },
+  { name: 'Gold',     c: '#F2C14E', onDark: true },
+  { name: 'Body ink', c: '#1A1A2A', onDark: false },
+  { name: 'Gold ink', c: '#0B2238', onDark: false },
 ];
 
 export const SIZES = [
@@ -128,9 +128,9 @@ export const SPLITS = [
 ];
 
 export const TONES = [
-  { name: 'Gold',  bg: '#C9973A', fg: '#1B1608' },
-  { name: 'Navy',  bg: '#1E2D4A', fg: '#F5E4C0' },
-  { name: 'Green', bg: '#4A5E3A', fg: '#F0F5EC' },
+  { name: 'Gold',  bg: '#F2C14E', fg: '#0B2238' },
+  { name: 'Navy',  bg: '#0B3C5C', fg: '#FEF6DC' },
+  { name: 'Green', bg: '#1A5C3E', fg: '#F0F5EC' },
 ];
 
 export const STAMP_PRESETS = ['New', 'Upcoming', 'Take note', 'Registration open', 'Registration closed', 'Cancelled'];
@@ -222,8 +222,8 @@ export const IMG_POSITIONS = [
 // `rgb` is the same color as `bg`, spelled as a comma triple, because the
 // overlay is painted with `rgba()` and CSS has no way to pull channels out of
 // a hex custom property.
-// ⚠ 'navy' is the ORIGINAL hardcoded hero color, byte-for-byte (#1E2D4A /
-// 30,45,74) — it is the default, so an untouched hero renders exactly as it
+// ⚠ 'navy' is the ORIGINAL hardcoded hero color, byte-for-byte (#0B3C5C /
+// 11,60,92) — it is the default, so an untouched hero renders exactly as it
 // always has.
 // ⚠ The overlay's BOTTOM stop stays the fixed near-black it has always been,
 // for every color here — see the comment on .tlcb-hero::before. Only the top
@@ -247,21 +247,21 @@ export const IMG_POSITIONS = [
 // pairing a light color with a photo and shading is the office's own call;
 // the inspector note says so.
 export const HERO_COLORS = [
-  { key: 'navy', label: 'Navy', bg: '#1E2D4A', rgb: '30,45,74', dark: true },
-  { key: 'ink', label: 'Ink', bg: '#101B2E', rgb: '16,27,46', dark: true },
-  { key: 'moss', label: 'Moss', bg: '#4A5E3A', rgb: '74,94,58', dark: true },
-  { key: 'teal', label: 'Teal', bg: '#2E7EA6', rgb: '46,126,166', dark: true },
+  { key: 'navy', label: 'Navy', bg: '#0B3C5C', rgb: '11,60,92', dark: true },
+  { key: 'ink', label: 'Ink', bg: '#0B2238', rgb: '11,34,56', dark: true },
+  { key: 'moss', label: 'Moss', bg: '#1A5C3E', rgb: '26,92,62', dark: true },
+  { key: 'teal', label: 'Teal', bg: '#246582', rgb: '36,101,130', dark: true },
   { key: 'slate', label: 'Slate', bg: '#3A4E5C', rgb: '58,78,92', dark: true },
   // The site's own Gold, at the exact TONES pairing already proven readable
-  // (bg #C9973A / ink #1B1608) — one ink for eyebrow, title and subtitle
+  // (bg #F2C14E / ink #0B2238) — one ink for eyebrow, title and subtitle
   // alike, the same "gold ink is for EVERYTHING" rule the BG palette's own
   // Gold field already follows.
-  { key: 'gold', label: 'Gold', bg: '#C9973A', rgb: '201,151,58', dark: false,
-    title: '#1B1608', eyebrow: '#1B1608', sub: 'rgba(27,22,8,.78)' },
+  { key: 'gold', label: 'Gold', bg: '#F2C14E', rgb: '242,193,78', dark: false,
+    title: '#0B2238', eyebrow: '#0B2238', sub: 'rgba(11,34,56,.78)' },
   // The site's own Parchment, with the Paper/White 1b fields' own two-tone
   // ink (a near-black navy heading, a warm terracotta eyebrow).
-  { key: 'parchment', label: 'Parchment', bg: '#FBF8F3', rgb: '251,248,243', dark: false,
-    title: '#101B2E', eyebrow: '#B44A2E', sub: 'rgba(16,27,46,.72)' },
+  { key: 'parchment', label: 'Parchment', bg: '#FFFFFF', rgb: '255,255,255', dark: false,
+    title: '#0B2238', eyebrow: '#1565A0', sub: 'rgba(11,34,56,.72)' },
 ];
 
 // What a countdown counts down to. Shared between the standalone Countdown
@@ -389,10 +389,10 @@ export const APPEAR_KEYS = APPEARS.map((a) => a.key);
 // that changes, and it is somebody's decision rather than a side effect.
 export const BTNS = [
   { key: 'default', label: 'Default', note: 'Navy with cream lettering, the site’s own button. Nothing is stored, so this is exactly what the page renders today.' },
-  { key: 'gold', label: 'Gold', bg: '#C9973A', ink: '#1B1608', bd: '#C9973A', note: 'Gold with near-black lettering, about 7:1. The gold used everywhere else on the site, with ink dark enough to read on it.' },
-  { key: 'ink', label: 'Ink navy', bg: '#101B2E', ink: '#F5E4C0', bd: '#101B2E', note: 'The deepest navy with cream lettering. Right on a pale field where the standard navy is not quite separate enough.' },
-  { key: 'teal', label: 'Teal', bg: '#2E7EA6', ink: '#FFFFFF', bd: '#2E7EA6', note: 'The site’s teal with white lettering, about 4.6:1. Reads as a second action beside a navy or gold one.' },
-  { key: 'cream', label: 'Cream', bg: '#F5E4C0', ink: '#1B1608', bd: '#F5E4C0', note: 'Cream with near-black lettering. For a dark field, where a pale button is the one that stands out.' },
+  { key: 'gold', label: 'Gold', bg: '#F2C14E', ink: '#0B2238', bd: '#F2C14E', note: 'Gold with near-black lettering, about 7:1. The gold used everywhere else on the site, with ink dark enough to read on it.' },
+  { key: 'ink', label: 'Ink navy', bg: '#0B2238', ink: '#FEF6DC', bd: '#0B2238', note: 'The deepest navy with cream lettering. Right on a pale field where the standard navy is not quite separate enough.' },
+  { key: 'teal', label: 'Teal', bg: '#246582', ink: '#FFFFFF', bd: '#246582', note: 'The site’s teal with white lettering, about 4.6:1. Reads as a second action beside a navy or gold one.' },
+  { key: 'cream', label: 'Cream', bg: '#FEF6DC', ink: '#0B2238', bd: '#FEF6DC', note: 'Cream with near-black lettering. For a dark field, where a pale button is the one that stands out.' },
   { key: 'outline', label: 'Outline', bg: 'transparent', ink: 'currentColor', bd: 'currentColor', note: 'No fill — a hairline and the surrounding text color. Right for the quieter of two buttons side by side.' },
 ];
 export const BTN_KEYS = BTNS.map((b) => b.key);
@@ -2449,7 +2449,7 @@ export const BLOCK_CSS_RAW = `
   --tlcb-sans:var(--font-body,'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif);
   --tlcb-ui:var(--font-ui,'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif);
   font-family:var(--tlcb-sans);}
-.tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
+.tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FFFFFF);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);
   /* On every block, not just ones with a jump-to name — the nav is 64px plus
@@ -2477,31 +2477,31 @@ export const BLOCK_CSS_RAW = `
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
 .tlcb-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#C9973A);margin-bottom:8px;}
+  color:var(--tlcb-eyebrow-ink,#F2C14E);margin-bottom:8px;}
 .tlcb-head{font-family:var(--tlcb-serif);font-weight:800;line-height:1.05;letter-spacing:-.02em;margin:0;
-  font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#1E2D4A);}
+  font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-prose{font-size:var(--tlcb-body,15px);font-weight:300;line-height:1.6;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
 .tlcb-prose h2{font-family:var(--tlcb-serif);font-weight:700;line-height:1.2;margin:0 0 16px;
-  font-size:var(--tlcb-head,30px);color:var(--tlcb-head-ink,#1E2D4A);}
+  font-size:var(--tlcb-head,30px);color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-prose h3{font-family:var(--tlcb-serif);font-weight:700;line-height:1.25;margin:0 0 12px;
-  font-size:calc(var(--tlcb-head,30px) * .72);color:var(--tlcb-head-ink,#1E2D4A);}
+  font-size:calc(var(--tlcb-head,30px) * .72);color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-prose h4{font:600 calc(var(--tlcb-body,15px) * 1.15)/1.35 var(--tlcb-ui);margin:0 0 8px;
-  color:var(--tlcb-head-ink,#1E2D4A);}
-.tlcb-prose blockquote{margin:0 0 .8em;padding-left:16px;border-left:3px solid #C9973A;color:#4A4860;}
+  color:var(--tlcb-head-ink,#0B3C5C);}
+.tlcb-prose blockquote{margin:0 0 .8em;padding-left:16px;border-left:3px solid #F2C14E;color:#4A4860;}
 .tlcb-prose > :first-child{margin-top:0;}
 .tlcb-prose > :last-child{margin-bottom:0;}
 .tlcb-prose p{margin:0 0 .8em;}
-.tlcb-prose a{color:#2E7EA6;}
+.tlcb-prose a{color:#246582;}
 .tlcb-prose ul,.tlcb-prose ol{margin:0 0 .8em;padding-left:1.3em;}
 .tlcb-prose img{max-width:100%;height:auto;border-radius:8px;}
 /* A lead paragraph — the opening line, set larger and a shade darker than the
    copy under it. Scales off the body size like everything else, so it follows
    the site's text-size setting rather than pinning a number. */
 .tlcb-prose p.tlcb-lead{font-size:calc(var(--tlcb-body,15px) * 1.22);line-height:1.5;font-weight:400;
-  color:var(--tlcb-head-ink,#1E2D4A);margin:0 0 .7em;}
+  color:var(--tlcb-head-ink,#0B3C5C);margin:0 0 .7em;}
 /* A rule between passages. It takes the surface's own hairline, so it is
    visible on a pale field and on a dark one without a second declaration. */
-.tlcb-prose hr{border:0;border-top:1px solid var(--tlcb-rule,#E7DFD1);margin:1.4em 0;}
+.tlcb-prose hr{border:0;border-top:1px solid var(--tlcb-rule,#DCE1E7);margin:1.4em 0;}
 /* Footnote marks. Without the reduced line-height a superscript pushes its own
    line taller than the ones around it, which shows up as uneven leading in a
    paragraph that has one. */
@@ -2517,17 +2517,17 @@ export const BLOCK_CSS_RAW = `
    text each card carries. That is the whole reason for the flex column and
    the margin-top:auto on the foot. */
 .tlcb-cg-grid{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:24px;align-items:stretch;margin-top:8px;}
-.tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:20px;padding:28px 26px;
+.tlcb-cg-card{display:flex;flex-direction:column;background:#FFFFFF;border:1px solid #DCE1E7;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
   transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
 /* Bible classes, read from the Christian Ed screen. auto-fit inside the chosen
    column count so a row of two on a narrow page does not leave a lone card. */
 .tlcb-cl{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:20px;align-items:stretch;margin-top:6px;}
 .tlcb-cl-card{display:flex;flex-direction:column;gap:6px;padding:24px 22px;border-radius:14px;
-  border:1px solid var(--tlcb-rule,#E7DFD1);background:rgba(255,255,255,.55);}
+  border:1px solid var(--tlcb-rule,#DCE1E7);background:rgba(255,255,255,.55);}
 .tlcb-cl-eyebrow{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.13em;text-transform:uppercase;}
 .tlcb-cl-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .7);
-  line-height:1.2;color:var(--tlcb-head-ink,#1E2D4A);}
+  line-height:1.2;color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-cl-d{margin:0;font-family:var(--tlcb-sans);font-size:calc(14px * var(--tlcb-scale, 1));
   line-height:1.55;color:var(--tlcb-body,#4A4860);}
 .tlcb-cl-m{font-family:var(--tlcb-sans);font-size:calc(13px * var(--tlcb-scale, 1));color:var(--tlcb-body,#4A4860);}
@@ -2536,30 +2536,30 @@ export const BLOCK_CSS_RAW = `
 .tlcb-cl-w span{font-weight:400;color:var(--tlcb-body,#8A8898);}
 /* The sermon library: series that fold open, and their sermons inside. */
 .tlcb-sl{display:flex;flex-direction:column;gap:10px;margin-top:6px;}
-.tlcb-sl-set{border:1px solid var(--tlcb-rule,#E7DFD1);border-radius:12px;background:rgba(255,255,255,.5);}
+.tlcb-sl-set{border:1px solid var(--tlcb-rule,#DCE1E7);border-radius:12px;background:rgba(255,255,255,.5);}
 .tlcb-sl-sum{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;
   padding:14px 18px;cursor:pointer;list-style:none;}
 .tlcb-sl-sum::-webkit-details-marker{display:none;}
 /* The caret, drawn rather than shipped as a glyph so it turns with the state. */
 .tlcb-sl-sum::after{content:'';width:7px;height:7px;flex:none;margin-left:auto;
-  border-right:2px solid var(--tlcb-eyebrow-ink,#C9973A);border-bottom:2px solid var(--tlcb-eyebrow-ink,#C9973A);
+  border-right:2px solid var(--tlcb-eyebrow-ink,#F2C14E);border-bottom:2px solid var(--tlcb-eyebrow-ink,#F2C14E);
   transform:rotate(45deg);transition:transform .15s ease;}
 .tlcb-sl-set[open] > .tlcb-sl-sum::after{transform:rotate(-135deg);}
 .tlcb-sl-name{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .72);
-  line-height:1.2;color:var(--tlcb-head-ink,#1E2D4A);}
+  line-height:1.2;color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-sl-c{font:700 11.5px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#2E7EA6);}
+  color:var(--tlcb-eyebrow-ink,#246582);}
 .tlcb-sl-d{margin:0 18px 4px;font-family:var(--tlcb-sans);font-size:calc(14px * var(--tlcb-scale, 1));
   color:var(--tlcb-body,#4A4860);line-height:1.5;}
 .tlcb-sl-rows{display:flex;flex-direction:column;padding:0 18px 10px;}
 .tlcb-sl-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
-  padding:10px 0;border-top:1px solid var(--tlcb-rule,#E7DFD1);}
+  padding:10px 0;border-top:1px solid var(--tlcb-rule,#DCE1E7);}
 .tlcb-sl-b{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .tlcb-sl-t{font-family:var(--tlcb-sans);font-weight:600;font-size:calc(15px * var(--tlcb-scale, 1));
   color:var(--tlcb-ink,#1A1A2A);}
 .tlcb-sl-m{font-family:var(--tlcb-ui);font-size:calc(12.5px * var(--tlcb-scale, 1));color:var(--tlcb-body,#8A8898);}
 .tlcb-sl-go{flex:none;font:800 12px/1 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;
-  color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
+  color:var(--tlcb-link-ink,#246582);text-decoration:none;}
 a.tlcb-sl-go:hover{text-decoration:underline;}
 /* Contact details. A label column wide enough for "Instagram" and a value
    column that takes the rest, so the addresses line up under each other rather
@@ -2567,9 +2567,9 @@ a.tlcb-sl-go:hover{text-decoration:underline;}
 .tlcb-ct{display:flex;flex-direction:column;gap:2px;margin-top:6px;}
 .tlcb-ct-row{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:baseline;padding:7px 0;}
 .tlcb-ct-row--sub{padding-top:0;}
-.tlcb-ct-l{font:800 11.5px/1.5 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#2E7EA6);}
+.tlcb-ct-l{font:800 11.5px/1.5 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#246582);}
 .tlcb-ct-v{font-family:var(--tlcb-sans);font-size:var(--tlcb-body,16px);color:var(--tlcb-ink,#1A1A2A);}
-.tlcb-ct-a{color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
+.tlcb-ct-a{color:var(--tlcb-link-ink,#246582);text-decoration:none;}
 .tlcb-ct-a:hover{text-decoration:underline;}
 /* ⚠ The label column collapses on a phone. 96px of it beside a long address in
    390px leaves the value about 200px, which wraps an email onto three lines. */
@@ -2580,7 +2580,7 @@ a.tlcb-sl-go:hover{text-decoration:underline;}
    shadow traces a hard rectangle around a surface whose own corners are round,
    and the two disagree by about 20px at each corner. */
 .tlcb--sh-soft{border-radius:14px;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);}
-.tlcb--sh-lifted{border-radius:14px;box-shadow:0 18px 44px rgba(16,27,46,.18);}
+.tlcb--sh-lifted{border-radius:14px;box-shadow:0 18px 44px rgba(11,34,56,.18);}
 
 /* ── Appear ───────────────────────────────────────────────────────────────
    ⚠ GATED POSITIVELY, TWICE OVER, AND THE NESTING ORDER IS THE WHOLE SAFETY
@@ -2602,7 +2602,7 @@ a.tlcb-sl-go:hover{text-decoration:underline;}
     @keyframes tlcb-ap-rise{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;}}
   }
 }
-.tlcb--sh-lined{border-radius:14px;border:1px solid var(--tlcb-rule,#E7DFD1);}
+.tlcb--sh-lined{border-radius:14px;border:1px solid var(--tlcb-rule,#DCE1E7);}
 /* ⚠ In whole-page mode a block is a full-bleed band, so a rounded, shadowed box
    inside it would read as a card floating in a section rather than as the
    section itself. The separation there is the band's own background — which is
@@ -2614,7 +2614,7 @@ a.tlcb-sl-go:hover{text-decoration:underline;}
    The lift is on --link ONLY. A card that lifts under the pointer promises
    that clicking it does something, and a card with no address cannot keep
    that promise. */
-.tlcb-cg-card--link:hover{box-shadow:0 18px 40px rgba(16,27,46,.16);transform:translateY(-4px);}
+.tlcb-cg-card--link:hover{box-shadow:0 18px 40px rgba(11,34,56,.16);transform:translateY(-4px);}
 /* The card is an anchor on the public page, so every word inside it would
    otherwise take the browser's link color and underline. The heading, body and
    eyebrow keep their own; only the label at the foot reads as a link. */
@@ -2622,13 +2622,13 @@ a.tlcb-cg-card{color:inherit;text-decoration:none;}
 a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-cg-img{margin-bottom:14px;}
 .tlcb-cg-img img{display:block;max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;}
-.tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#2E7EA6);margin-bottom:6px;}
+.tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#246582);margin-bottom:6px;}
 .tlcb-cg-eyebrow:empty{display:none;}
-.tlcb-cg-head{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.15;letter-spacing:-.01em;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-cg-head{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.15;letter-spacing:-.01em;color:#0B3C5C;margin-bottom:8px;}
 .tlcb-cg-body{margin-bottom:14px;}
 .tlcb-cg-foot{margin-top:auto;}
 .tlcb-cg-foot:empty{display:none;}
-.tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
+.tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:var(--tlcb-link-ink,#246582);text-decoration:none;}
 .tlcb-cg-link:hover{text-decoration:underline;}
 /* A label the office typed on a card with no address. It is not a link, so it
    does not get the link's color or its underline — otherwise it is a dead link
@@ -2639,7 +2639,7 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-cg-intro:empty{display:none;}
 /* The colored hairline across the card top on /ministries. It is switched on
    for the whole grid rather than picked per card — one decision, not eight. */
-.tlcb-cg--rule .tlcb-cg-card{border-top:3px solid #2E7EA6;}
+.tlcb-cg--rule .tlcb-cg-card{border-top:3px solid #246582;}
 .tlcb-cg--center{text-align:center;}
 .tlcb-cg--center .tlcb-cg-img img{margin:0 auto;}
 .tlcb-cg--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
@@ -2707,9 +2707,9 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 /* Matches .page-hero in public/styles.css — this is the page banner, so it has
    to be the same thing whether the page draws it or a block does. */
 .tlcb-hero{border-radius:8px;padding:56px 28px;position:relative;
-  background:var(--tlcb-hero-bg,#1E2D4A) var(--tlcb-hero-img,none) var(--tlcb-hero-pos,center)/cover;}
+  background:var(--tlcb-hero-bg,#0B3C5C) var(--tlcb-hero-img,none) var(--tlcb-hero-pos,center)/cover;}
 /* ⚠ THE TOP STOP IS THE ONLY THING "Photo shading" AND "Banner color" MOVE.
-   The bottom stop stays fixed at rgb(17,30,50)/.92 regardless of either — that
+   The bottom stop stays fixed at rgb(11,34,56)/.92 regardless of either — that
    is what keeps the headline legible on any photograph or any color choice,
    and is not somebody's decision to weaken, the same rule Photo banner's own
    veil follows. Default landed at .82, between Photo banner's Medium (.72)
@@ -2719,9 +2719,9 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    is the fallback, commas included, so the three-channel rgb fallback below
    reads as one value rather than three separate arguments. */
 .tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
-  background:linear-gradient(135deg,rgba(var(--tlcb-hero-veil-top-rgb,30,45,74),var(--tlcb-hero-veil-top,.82)),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
+  background:linear-gradient(135deg,rgba(var(--tlcb-hero-veil-top-rgb,11,60,92),var(--tlcb-hero-veil-top,.82)),rgba(11,34,56,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
-.tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--tlcb-hero-eyebrow-ink,#E8C070);margin-bottom:8px;}
+.tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--tlcb-hero-eyebrow-ink,#F7D57E);margin-bottom:8px;}
 .tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:var(--tlcb-hero-title-ink,#fff);margin:0;}
 /* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
    own base) already puts this flush left; a flex item's own horizontal auto
@@ -2729,16 +2729,16 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    what let the subtitle alone drift centered even in "left" mode before Hero
    had a real Alignment control. .tlcb--center.tlcb--hero below restores them. */
 .tlcb-hero-sub{font-size:17px;color:var(--tlcb-hero-sub-ink,rgba(255,255,255,.72));max-width:600px;margin:12px 0 0;font-weight:300;line-height:1.5;}
-.tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#1E2D4A;}
+.tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#0B3C5C;}
 .tlcb-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-.tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;}
+.tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FFFFFF;font-size:30px;}
 .tlcb-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.tlcb-gallery span,.tlcb-gallery img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:7px;background:#DDE3ED;}
+.tlcb-gallery span,.tlcb-gallery img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:7px;background:#DCE1E7;}
 /* The tile is a button on the public page so a photograph can be opened from
    the keyboard. It has to give up every default a button carries or the grid
    grows borders and padding it never had. */
 .tlcb-gal-open{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;border-radius:7px;}
-.tlcb-gal-open:focus-visible{outline:3px solid #C9973A;outline-offset:2px;}
+.tlcb-gal-open:focus-visible{outline:3px solid #F2C14E;outline-offset:2px;}
 
 /* ── The photo viewer ─────────────────────────────────────────────────────
    Appended to the body rather than drawn inside the block, so it is not
@@ -2750,7 +2750,7 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-lb[hidden]{display:none;}
 .tlcb-lb-fig{margin:0;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:min(1100px,100%);max-height:100%;}
 .tlcb-lb-fig img{max-width:100%;max-height:78vh;width:auto;height:auto;border-radius:10px;
-  box-shadow:0 24px 70px rgba(0,0,0,.5);background:#1E2D4A;}
+  box-shadow:0 24px 70px rgba(0,0,0,.5);background:#0B3C5C;}
 /* ⚠ --font-ui, not --tlcb-ui. The viewer is appended to the body, so it sits
    outside .tlcb-page and none of the --tlcb-* properties reach it — but
    --font-ui is declared on :root in styles.css and re-pointed by the
@@ -2762,12 +2762,12 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
   color:rgba(247,243,236,.86);text-align:center;}
 .tlcb-lb-of{color:rgba(247,243,236,.55);font-size:13px;}
 .tlcb-lb-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border:0;border-radius:50%;
-  background:rgba(247,243,236,.12);color:#F7F3EC;font-size:26px;line-height:1;cursor:pointer;}
+  background:rgba(247,243,236,.12);color:#F7F9FB;font-size:26px;line-height:1;cursor:pointer;}
 .tlcb-lb-nav{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:rgba(247,243,236,.12);
-  color:#F7F3EC;font-size:28px;line-height:1;cursor:pointer;}
+  color:#F7F9FB;font-size:28px;line-height:1;cursor:pointer;}
 .tlcb-lb-nav[hidden]{display:none;}
 .tlcb-lb-x:hover,.tlcb-lb-nav:hover{background:rgba(247,243,236,.22);}
-.tlcb-lb-x:focus-visible,.tlcb-lb-nav:focus-visible{outline:3px solid #C9973A;outline-offset:2px;}
+.tlcb-lb-x:focus-visible,.tlcb-lb-nav:focus-visible{outline:3px solid #F2C14E;outline-offset:2px;}
 /* ⚠ GATED POSITIVELY, never by an override further down. A reduced-motion
    visitor is not given the animation to begin with, so there is no later
    declaration that has to win a cascade argument to take it away. */
@@ -2780,22 +2780,22 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
   .tlcb-lb-fig img{max-height:66vh;}
 }
 .tlcb-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.tlcb-cards .tlcb-card{border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px;}
-.tlcb-card-t{font:600 12.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-cards .tlcb-card{border:1px solid #DCE1E7;border-radius:8px;background:#F7F9FB;padding:11px;display:flex;flex-direction:column;gap:6px;}
+.tlcb-card-t{font:600 12.5px/1.3 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-card-m{font-size:11px;color:#8A8898;}
 .tlcb-rows{display:flex;flex-direction:column;gap:8px;}
-.tlcb-row{display:flex;align-items:center;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
-.tlcb-row-d{flex:none;width:60px;text-align:center;font:700 12.5px/1.3 var(--tlcb-ui);color:#1E2D4A;letter-spacing:.03em;}
+.tlcb-row{display:flex;align-items:center;gap:14px;padding:11px 13px;border:1px solid #DCE1E7;border-radius:8px;background:#F7F9FB;}
+.tlcb-row-d{flex:none;width:60px;text-align:center;font:700 12.5px/1.3 var(--tlcb-ui);color:#0B3C5C;letter-spacing:.03em;}
 .tlcb-row-b{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
-.tlcb-row-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-row-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-row-m{font-size:12px;color:#8A8898;}
 .tlcb-times{display:flex;flex-direction:column;}
-.tlcb-time{display:grid;grid-template-columns:1.2fr 1.3fr 1fr;gap:12px;padding:10px 2px;border-bottom:1px solid #EDE9E0;font-size:13.5px;}
-.tlcb-time b{font-weight:600;color:#1E2D4A;}
+.tlcb-time{display:grid;grid-template-columns:1.2fr 1.3fr 1fr;gap:12px;padding:10px 2px;border-bottom:1px solid #EEF2F6;font-size:13.5px;}
+.tlcb-time b{font-weight:600;color:#0B3C5C;}
 .tlcb-time i{font-style:normal;color:#4A4860;}
 .tlcb-time u{text-decoration:none;color:#8A8898;}
-.tlcb-faq{padding:12px 14px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
-.tlcb-faq summary{font:600 13.5px/1.35 var(--tlcb-ui);color:#1E2D4A;cursor:pointer;list-style:none;
+.tlcb-faq{padding:12px 14px;border:1px solid #DCE1E7;border-radius:8px;background:#F7F9FB;}
+.tlcb-faq summary{font:600 13.5px/1.35 var(--tlcb-ui);color:#0B3C5C;cursor:pointer;list-style:none;
   display:flex;align-items:center;gap:10px;justify-content:space-between;}
 .tlcb-faq summary::-webkit-details-marker{display:none;}
 .tlcb-faq summary::after{content:'⌄';color:#8A8898;font-size:13px;}
@@ -2807,23 +2807,23 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    lines rather than fourteen essays. The week marker sits before the title
    because that is what somebody scans for when they are looking for the one
    they missed. */
-.tlcb-lesson{border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:8px;padding:12px 14px;background:var(--tlcb-chip-bg,rgba(0,0,0,.02));}
+.tlcb-lesson{border:1px solid var(--tlcb-rule,#DCE1E7);border-radius:8px;padding:12px 14px;background:var(--tlcb-chip-bg,rgba(0,0,0,.02));}
 .tlcb-lesson + .tlcb-lesson{margin-top:8px;}
 .tlcb-lesson > summary{cursor:pointer;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;
-  font:600 15px/1.4 var(--tlcb-ui);color:var(--tlcb-head-ink,#1E2D4A);list-style:none;}
+  font:600 15px/1.4 var(--tlcb-ui);color:var(--tlcb-head-ink,#0B3C5C);list-style:none;}
 .tlcb-lesson > summary::-webkit-details-marker{display:none;}
 /* The caret is drawn rather than left to the browser, so it is the same mark
    on every engine and turns with the disclosure. */
 .tlcb-lesson > summary::before{content:'';flex:none;width:7px;height:7px;margin-right:2px;
-  border-right:2px solid var(--tlcb-eyebrow-ink,#C9973A);border-bottom:2px solid var(--tlcb-eyebrow-ink,#C9973A);
+  border-right:2px solid var(--tlcb-eyebrow-ink,#F2C14E);border-bottom:2px solid var(--tlcb-eyebrow-ink,#F2C14E);
   transform:rotate(-45deg);transition:transform .12s ease;}
 .tlcb-lesson[open] > summary::before{transform:rotate(45deg);}
 .tlcb-lesson-w{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#C9973A);flex:none;}
+  color:var(--tlcb-eyebrow-ink,#F2C14E);flex:none;}
 .tlcb-lesson-t{flex:1;min-width:0;}
 .tlcb-lesson .tlcb-prose{margin-top:10px;}
 .tlcb-lesson-dl{display:inline-block;margin-top:10px;font:700 12.5px/1 var(--tlcb-ui);
-  color:var(--tlcb-link-ink,#2E7EA6);}
+  color:var(--tlcb-link-ink,#246582);}
 /* A reduced-motion visitor gets the caret without the turn. Granted only where
    motion is welcome, rather than granted and then taken away. */
 @media (prefers-reduced-motion: reduce){
@@ -2832,25 +2832,25 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 
 /* ── Member portal ────────────────────────────────────────────────────── */
 .tlcb-portal{display:flex;flex-direction:column;gap:10px;align-items:flex-start;
-  padding:22px 24px;border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:12px;
+  padding:22px 24px;border:1px solid var(--tlcb-rule,#DCE1E7);border-radius:12px;
   background:var(--tlcb-chip-bg,rgba(0,0,0,.02));}
 .tlcb-portal .tlcb-btns{margin-top:4px;}
-.tlcb-callout{padding:18px 20px;border-radius:10px;background:#FDF8EC;border:1px solid #F0DCB0;display:flex;flex-direction:column;gap:7px;}
-.tlcb-callout-tag{align-self:flex-start;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;
+.tlcb-callout{padding:18px 20px;border-radius:10px;background:#FEF6DC;border:1px solid #FBE5A8;display:flex;flex-direction:column;gap:7px;}
+.tlcb-callout-tag{align-self:flex-start;padding:2px 8px;border-radius:5px;background:#F2C14E;color:#0B2238;
   font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;}
-.tlcb-callout-t{font:600 16px/1.35 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-callout-t{font:600 16px/1.35 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-btns{display:flex;gap:10px;flex-wrap:wrap;}
 /* ⚠ THE FALLBACKS ARE THE SITE AS IT ALWAYS LOOKED. A block with no button
    color chosen emits none of these properties, so each var() falls through to
    the literal that has been here since the button existed. Nothing repaints
    until somebody picks a color on a particular block. */
 .tlcb-btn{display:inline-block;padding:15px 22px;border-radius:999px;font:800 14px/1 var(--tlcb-ui);text-decoration:none;
-  background:var(--tlcb-btn-bg,#1E2D4A);color:var(--tlcb-btn-ink,#F5E4C0);border:1px solid var(--tlcb-btn-bd,#1E2D4A);}
+  background:var(--tlcb-btn-bg,#0B3C5C);color:var(--tlcb-btn-ink,#FEF6DC);border:1px solid var(--tlcb-btn-bd,#0B3C5C);}
 /* The ghost variant keeps its own transparent fill — it is the quiet button
    beside a loud one, so taking the chosen color would make the pair identical
    and lose the distinction the variant exists for. It follows the chosen INK
    only, so the two still read as a set. */
-.tlcb-btn--ghost{background:transparent;color:var(--tlcb-btn-bd,#1E2D4A);border:1px solid var(--tlcb-btn-bd,#C4CEDF);}
+.tlcb-btn--ghost{background:transparent;color:var(--tlcb-btn-bd,#0B3C5C);border:1px solid var(--tlcb-btn-bd,#C9D6E3);}
 /* ⚠ THE PANEL FOLLOWS THE BLOCK'S OWN BACKGROUND. It used to carry two
    hardcoded colors — mist for the Newsletter block, cream for the Signup form —
    so a block had TWO surfaces and the inspector's Background swatch reached
@@ -2860,14 +2860,14 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    ⚠ --tlcb-bg-flat, not --tlcb-bg. The latter is a GRADIENT on the redesign
    surfaces, and a gradient drawn again inside a smaller box repeats the ramp at
    a different scale — two versions of the same field, visibly disagreeing.
-   The rule follows the block too: a hardcoded #DDE3ED hairline is invisible on
+   The rule follows the block too: a hardcoded #DCE1E7 hairline is invisible on
    a pale field and glaring on a dark one, and --tlcb-rule already carries the
    right answer for both. The panel--form variant's separate cream override is
    gone with it — the block's own background is the one true answer now, so a
    second hardcoded fill for one block type would just be the same bug with a
    narrower blast radius. */
 .tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;
-  border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:9px;background:var(--tlcb-bg-flat,#EDF2F7);}
+  border:1px solid var(--tlcb-rule,#DCE1E7);border-radius:9px;background:var(--tlcb-bg-flat,#E6F0F7);}
 .tlcb-field{height:38px;border:1px solid #C7CEDA;border-radius:7px;background:#fff;padding:0 12px;font-size:13px;width:100%;}
 .tlcb-inline{display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
 .tlcb-inline .tlcb-field{flex:1;min-width:180px;}
@@ -2882,47 +2882,47 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    background were ever picked — see the .give type's bg:3/ink:3 default
    above for why an untouched block still opens looking exactly as before. */
 .tlcb-give{display:flex;flex-direction:column;gap:11px;padding:20px;border-radius:10px;
-  border:1px solid var(--tlcb-rule,rgba(245,240,230,.14));background:var(--tlcb-bg-flat,#1E2D4A);}
-.tlcb-give-note{font-size:14px;line-height:1.7;color:var(--tlcb-ink,#C4CEDF);}
+  border:1px solid var(--tlcb-rule,rgba(247,249,251,.14));background:var(--tlcb-bg-flat,#0B3C5C);}
+.tlcb-give-note{font-size:14px;line-height:1.7;color:var(--tlcb-ink,#C9D6E3);}
 /* ⚠ QUALIFIED, AND IT HAS TO STAY QUALIFIED. This selector was bare, and so was
    the Coming-up strip's own chip 385 lines below — two components, one class
    name, equal specificity, so source order decided and the later one won. The
    Give button lost its gold fill to that rule's chip-bg background and kept
-   its near-black ink, which on the Ink navy field is #1B1608 on 8% cream over
+   its near-black ink, which on the Ink navy field is #0B2238 on 8% cream over
    navy: about 1.3:1, and reported as "the background of the box blends into
    the give button".
 
    This is the same defect as the two duplicate card declarations fixed in
    v4.5.0. Two rules for one class name is worth grepping for. */
-.tlcb-give .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
+.tlcb-give .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F7F9FB;
   font:600 13px/1 var(--tlcb-ui);text-decoration:none;}
 /* ⚠ THE SAME PAIRED --tlcb-btn-* VARIABLES EVERY OTHER BUTTON READS, with the
    original gold as the fallback so an untouched Give block repaints by not one
    pixel. This selector stays more specific than the generic .tlcb-btn rule on
    purpose — the chip's own padding/radius/weight are its own geometry, not the
    pill every other button draws — only the three colors are shared. */
-.tlcb-give .tlcb-chip--go{background:var(--tlcb-btn-bg,#C9973A);color:var(--tlcb-btn-ink,#1B1608);
-  border-color:var(--tlcb-btn-bd,#C9973A);padding:10px 18px;font-weight:700;}
+.tlcb-give .tlcb-chip--go{background:var(--tlcb-btn-bg,#F2C14E);color:var(--tlcb-btn-ink,#0B2238);
+  border-color:var(--tlcb-btn-bd,#F2C14E);padding:10px 18px;font-weight:700;}
 /* ── The giving widget ── the one block that takes money. Its colors are
    fixed rather than following the block's Theme colors palette: this is the
    most-clicked control on the church website and a staff member trying a
    background on it is one pick away from an invisible Give button. The
    wording around it is fully editable; the button is not. */
-.tlcb-gv{display:flex;flex-direction:column;padding:26px 24px;border:1px solid #DDE3ED;border-radius:11px;background:#FBF8F3;}
-.tlcb-gv-title{font:600 27px/1.2 var(--tlcb-serif);color:#1E2D4A;}
-.tlcb-gv-tag{font:italic 400 15.5px/1.4 var(--tlcb-serif);color:#2E7EA6;margin-top:4px;}
+.tlcb-gv{display:flex;flex-direction:column;padding:26px 24px;border:1px solid #DCE1E7;border-radius:11px;background:#FFFFFF;}
+.tlcb-gv-title{font:600 27px/1.2 var(--tlcb-serif);color:#0B3C5C;}
+.tlcb-gv-tag{font:italic 400 15.5px/1.4 var(--tlcb-serif);color:#246582;margin-top:4px;}
 .tlcb-gv-lab{font:800 11px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#6B6A5F;margin:24px 0 9px;}
-.tlcb-gv-fund{width:100%;background:#fff;border:1px solid #DDE3ED;border-radius:9px;padding:12px 14px;
-  font:600 15px/1 var(--tlcb-ui);color:#1E2D4A;cursor:pointer;}
+.tlcb-gv-fund{width:100%;background:#fff;border:1px solid #DCE1E7;border-radius:9px;padding:12px 14px;
+  font:600 15px/1 var(--tlcb-ui);color:#0B3C5C;cursor:pointer;}
 .tlcb-gv-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .tlcb-gv-chip{border-radius:8px;font:700 17px/1 var(--tlcb-ui);text-align:center;padding:14px 0;
-  background:#fff;color:#1E2D4A;border:1px solid #DDE3ED;cursor:pointer;transition:all .15s;}
-.tlcb-gv-chip.is-on{background:#1E2D4A;color:#fff;border-color:#1E2D4A;}
-.tlcb-gv-other{margin-top:10px;background:#fff;border:1px solid #DDE3ED;border-radius:9px;padding:12px 14px;
+  background:#fff;color:#0B3C5C;border:1px solid #DCE1E7;cursor:pointer;transition:all .15s;}
+.tlcb-gv-chip.is-on{background:#0B3C5C;color:#fff;border-color:#0B3C5C;}
+.tlcb-gv-other{margin-top:10px;background:#fff;border:1px solid #DCE1E7;border-radius:9px;padding:12px 14px;
   display:flex;align-items:center;gap:8px;font:400 19px/1 var(--tlcb-serif);color:#8C8880;}
-.tlcb-gv-other input{border:none;outline:none;font:400 15px/1 var(--tlcb-ui);color:#1E2D4A;flex:1;min-width:0;background:transparent;}
-.tlcb-gv-err{font-size:12.5px;color:#B0821E;margin:6px 0 0;}
-.tlcb-gv-cta{margin-top:22px;display:block;text-align:center;background:#C9973A;color:#1E2D4A;
+.tlcb-gv-other input{border:none;outline:none;font:400 15px/1 var(--tlcb-ui);color:#0B3C5C;flex:1;min-width:0;background:transparent;}
+.tlcb-gv-err{font-size:12.5px;color:#D9A63A;margin:6px 0 0;}
+.tlcb-gv-cta{margin-top:22px;display:block;text-align:center;background:#F2C14E;color:#0B3C5C;
   font:800 21px/1 var(--tlcb-ui);padding:20px;border-radius:10px;text-decoration:none;}
 .tlcb-gv-trust{margin-top:16px;font-size:12.5px;line-height:1.55;color:#6B6A5F;}
 .tlcb-gv-trust p{margin:0;}
@@ -2944,10 +2944,10 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    /api/pages response, so the public page gets these rules either way.
 
    Literal hex for the same reason every rule around it uses literal hex —
-   --amber #C9973A, --white #FBF8F3, --border #DDE3ED, --steel #1E2D4A,
+   --amber #F2C14E, --white #FFFFFF, --border #DCE1E7, --steel #0B3C5C,
    --text-muted #8A8898, --shadow — none of which is defined inside the canvas. */
-.jump-bar{background:#FBF8F3;border-top:3px solid #C9973A;border-bottom:1px solid #DDE3ED;
-  box-shadow:0 2px 12px rgba(30,45,74,.08);}
+.jump-bar{background:#FFFFFF;border-top:3px solid #F2C14E;border-bottom:1px solid #DCE1E7;
+  box-shadow:0 2px 12px rgba(11,60,92,.08);}
 /* ⚠ top is the site nav's own height (64px plus its 3px rule), NOT 0. The nav
    is sticky at z-index 100, so a bar stuck at 0 slides underneath it and
    disappears. Below the nav, never over it. */
@@ -2955,11 +2955,11 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .jump-inner{max-width:1080px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .jump-label{font:700 10px/1 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#8A8898;flex:none;}
 .jump-scroll{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;}
-.jump-link{display:inline-flex;align-items:center;font:700 12.5px/1 var(--tlcb-ui);color:#1E2D4A;
-  background:#fff;border:1px solid #DDE3ED;border-radius:999px;padding:9px 16px;min-height:44px;
+.jump-link{display:inline-flex;align-items:center;font:700 12.5px/1 var(--tlcb-ui);color:#0B3C5C;
+  background:#fff;border:1px solid #DCE1E7;border-radius:999px;padding:9px 16px;min-height:44px;
   text-decoration:none;white-space:nowrap;}
-.jump-link:hover{border-color:#C9973A;}
-.jump-cta{margin-left:auto;background:#C9973A;border-color:#C9973A;font-weight:800;flex:none;}
+.jump-link:hover{border-color:#F2C14E;}
+.jump-cta{margin-left:auto;background:#F2C14E;border-color:#F2C14E;font-weight:800;flex:none;}
 /* ⚠ Alignment has to move the flex row, not the text inside it. The generic
    .tlcb--center rule is text-align, which a flex container ignores — a
    control that looks live and does nothing is worse than no control. */
@@ -2984,23 +2984,23 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 }
 /* The facts band on the apply page. Four label/value pairs, every value read
    from the market settings — see the marketfacts branch in renderInner. */
-.tlcb-mktfacts{display:flex;flex-wrap:wrap;gap:30px 44px;padding:16px 0;border-bottom:1px solid #DDE3ED;}
+.tlcb-mktfacts{display:flex;flex-wrap:wrap;gap:30px 44px;padding:16px 0;border-bottom:1px solid #DCE1E7;}
 .tlcb-mktfacts-cell{display:flex;flex-direction:column;gap:5px;}
 .tlcb-mktfacts-l{font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#6B6A5F;}
-.tlcb-mktfacts-v{font:800 15px/1.2 var(--tlcb-ui);color:#1E2D4A;}
-.tlcb-mktfacts-v--mail a{color:#2E7EA6;text-decoration:none;}
+.tlcb-mktfacts-v{font:800 15px/1.2 var(--tlcb-ui);color:#0B3C5C;}
+.tlcb-mktfacts-v--mail a{color:#246582;text-decoration:none;}
 .tlcb-mktfacts-v--mail a:hover{text-decoration:underline;}
-.tlcb-mktapp-closed{padding:20px 22px;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:10px;background:#FBF8F3;}
+.tlcb-mktapp-closed{padding:20px 22px;border:1px solid #DCE1E7;border-left:3px solid #F2C14E;border-radius:10px;background:#FFFFFF;}
 .tlcb-mktapp-closed p{margin:0;font-size:14.5px;line-height:1.6;color:#4A4860;}
-.tlcb-mktapp-card{max-width:760px;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:16px;
-  box-shadow:0 6px 32px rgba(30,45,74,.14);overflow:hidden;}
-.tlcb-mktapp-steps{display:flex;border-bottom:1px solid #DDE3ED;background:#EDF2F7;}
-.tlcb-mktapp-step{flex:1;background:#EDF2F7;border:none;border-bottom:3px solid transparent;padding:16px 14px;
+.tlcb-mktapp-card{max-width:760px;background:#FFFFFF;border:1px solid #DCE1E7;border-radius:16px;
+  box-shadow:0 6px 32px rgba(11,60,92,.14);overflow:hidden;}
+.tlcb-mktapp-steps{display:flex;border-bottom:1px solid #DCE1E7;background:#E6F0F7;}
+.tlcb-mktapp-step{flex:1;background:#E6F0F7;border:none;border-bottom:3px solid transparent;padding:16px 14px;
   text-align:left;cursor:pointer;font-family:var(--tlcb-ui);min-height:44px;}
 .tlcb-mktapp-step span{display:block;font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#8A8898;}
 .tlcb-mktapp-step b{display:block;font:800 13.5px/1.3 var(--tlcb-ui);color:#8A8898;margin-top:2px;}
-.tlcb-mktapp-step[aria-selected="true"]{background:#FBF8F3;border-bottom-color:#C9973A;}
-.tlcb-mktapp-step[aria-selected="true"] b{color:#1E2D4A;}
+.tlcb-mktapp-step[aria-selected="true"]{background:#FFFFFF;border-bottom-color:#F2C14E;}
+.tlcb-mktapp-step[aria-selected="true"] b{color:#0B3C5C;}
 .tlcb-mktapp-form{padding:30px 30px 26px;}
 .tlcb-mktapp-panel{display:none;flex-direction:column;gap:20px;}
 .tlcb-mktapp-panel.is-on{display:flex;}
@@ -3011,42 +3011,42 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-mktapp-lead{font-size:14.5px;color:#4A4860;line-height:1.65;margin:0;}
 .tlcb-mktapp-field{display:flex;flex-direction:column;gap:6px;}
 .tlcb-mktapp-field>label,.tlcb-mktapp-field>span{font:700 10.5px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#4A4860;}
-.tlcb-mktapp-field input,.tlcb-mktapp-field textarea{width:100%;background:#fff;border:1px solid #DDE3ED;border-radius:8px;
+.tlcb-mktapp-field input,.tlcb-mktapp-field textarea{width:100%;background:#fff;border:1px solid #DCE1E7;border-radius:8px;
   padding:11px 13px;font:400 14.5px/1.5 var(--tlcb-serif);color:#1A1A2A;min-height:44px;}
 .tlcb-mktapp-field textarea{min-height:96px;resize:vertical;font-family:var(--tlcb-serif);}
-.tlcb-mktapp-field input:focus,.tlcb-mktapp-field textarea:focus{outline:none;border-color:#C9973A;box-shadow:0 0 0 3px rgba(201,151,58,.15);}
-.tlcb-mktapp-req{color:#C9973A;}
+.tlcb-mktapp-field input:focus,.tlcb-mktapp-field textarea:focus{outline:none;border-color:#F2C14E;box-shadow:0 0 0 3px rgba(242,193,78,.15);}
+.tlcb-mktapp-req{color:#7A5A00;}
 .tlcb-mktapp-opt{font-weight:400;text-transform:none;letter-spacing:0;color:#8A8898;font-family:var(--tlcb-serif);}
 .tlcb-mktapp-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 .tlcb-mktapp-csz{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-top:8px;}
 .tlcb-mktapp-choice{display:flex;gap:8px;flex-wrap:wrap;}
-.tlcb-mktapp-pill,.tlcb-mktapp-tbtn{background:#fff;border:1px solid #DDE3ED;color:#1A1A2A;cursor:pointer;min-height:44px;
+.tlcb-mktapp-pill,.tlcb-mktapp-tbtn{background:#fff;border:1px solid #DCE1E7;color:#1A1A2A;cursor:pointer;min-height:44px;
   font-family:var(--tlcb-serif);transition:background .15s,border-color .15s,color .15s;}
 .tlcb-mktapp-pill{border-radius:999px;padding:9px 16px;font-size:13.5px;}
 .tlcb-mktapp-tbtn{border-radius:10px;padding:14px 10px;font:800 14px/1 var(--tlcb-ui);}
-.tlcb-mktapp-pill[aria-pressed="true"],.tlcb-mktapp-tbtn[aria-pressed="true"]{background:#1E2D4A;border-color:#1E2D4A;color:#fff;}
+.tlcb-mktapp-pill[aria-pressed="true"],.tlcb-mktapp-tbtn[aria-pressed="true"]{background:#0B3C5C;border-color:#0B3C5C;color:#fff;}
 .tlcb-mktapp-tables{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:10px;}
-.tlcb-mktapp-check{display:flex;gap:10px;align-items:flex-start;background:#EDF2F7;border:1px solid #C4CEDF;border-radius:10px;padding:14px;cursor:pointer;}
-.tlcb-mktapp-check input{width:18px;height:18px;margin-top:2px;accent-color:#4A5E3A;flex-shrink:0;}
+.tlcb-mktapp-check{display:flex;gap:10px;align-items:flex-start;background:#E6F0F7;border:1px solid #C9D6E3;border-radius:10px;padding:14px;cursor:pointer;}
+.tlcb-mktapp-check input{width:18px;height:18px;margin-top:2px;accent-color:#1A5C3E;flex-shrink:0;}
 .tlcb-mktapp-check span{font-size:13.5px;line-height:1.55;color:#1A1A2A;}
-.tlcb-mktapp-drop{background:#EDF2F7;border:2px dashed #C4CEDF;border-radius:10px;padding:22px 18px;text-align:center;
+.tlcb-mktapp-drop{background:#E6F0F7;border:2px dashed #C9D6E3;border-radius:10px;padding:22px 18px;text-align:center;
   cursor:pointer;display:block;}
-.tlcb-mktapp-drop b{display:block;font:700 13.5px/1 var(--tlcb-ui);color:#1E2D4A;margin-bottom:4px;}
+.tlcb-mktapp-drop b{display:block;font:700 13.5px/1 var(--tlcb-ui);color:#0B3C5C;margin-bottom:4px;}
 .tlcb-mktapp-drop span{font-size:12.5px;color:#4A4860;}
 .tlcb-mktapp-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
-.tlcb-mktapp-thumbs img{width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #DDE3ED;cursor:pointer;}
-.tlcb-mktapp-total{background:#1E2D4A;border-radius:14px;padding:20px;}
-.tlcb-mktapp-total-lab{font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#E8C070;margin-bottom:12px;}
+.tlcb-mktapp-thumbs img{width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #DCE1E7;cursor:pointer;}
+.tlcb-mktapp-total{background:#0B3C5C;border-radius:14px;padding:20px;}
+.tlcb-mktapp-total-lab{font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#F7D57E;margin-bottom:12px;}
 .tlcb-mktapp-total-rows{display:grid;gap:9px;font:400 14px/1.4 var(--tlcb-serif);color:rgba(255,255,255,.85);}
 .tlcb-mktapp-total-rows>div{display:flex;justify-content:space-between;gap:14px;}
 .tlcb-mktapp-total-rows hr{border:none;border-top:1px solid rgba(255,255,255,.18);margin:3px 0;}
 .tlcb-mktapp-total-due{font:800 18px/1 var(--tlcb-ui);color:#fff;}
 .tlcb-mktapp-total p{font-size:12.5px;color:rgba(255,255,255,.7);line-height:1.6;margin:12px 0 0;}
-.tlcb-mktapp-agree{background:#EDE9E0;border:1px solid #DDE3ED;border-radius:10px;padding:18px;max-height:190px;overflow:auto;
+.tlcb-mktapp-agree{background:#EEF2F6;border:1px solid #DCE1E7;border-radius:10px;padding:18px;max-height:190px;overflow:auto;
   font-size:13.5px;color:#4A4860;line-height:1.7;}
 .tlcb-mktapp-agree p{margin:0 0 9px;}
 .tlcb-mktapp-agree p:last-child{margin-bottom:0;}
-.tlcb-mktapp-agree strong{font-family:var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-mktapp-agree strong{font-family:var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-mktapp-clause{margin:0 0 9px;}
 .tlcb-mktapp-clause:last-child{margin-bottom:0;}
 .tlcb-mktapp-fine{font-size:12.5px;color:#8A8898;line-height:1.6;margin:0;}
@@ -3054,12 +3054,12 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-mktapp-foot--end{justify-content:flex-end;}
 .tlcb-mktapp-alert{display:none;padding:11px 14px;border-radius:8px;font-size:13.5px;line-height:1.5;}
 .tlcb-mktapp-alert--err{display:block;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
-.tlcb-mktapp-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #4A5E3A;color:#1a3d1f;}
+.tlcb-mktapp-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #1A5C3E;color:#1a3d1f;}
 @media(max-width:640px){
   .tlcb-mktapp-pair,.tlcb-mktapp-csz{grid-template-columns:1fr;}
   .tlcb-mktapp-steps{flex-direction:column;}
   .tlcb-mktapp-step{border-bottom-width:1px;border-left:3px solid transparent;}
-  .tlcb-mktapp-step[aria-selected="true"]{border-bottom-color:#DDE3ED;border-left-color:#C9973A;}
+  .tlcb-mktapp-step[aria-selected="true"]{border-bottom-color:#DCE1E7;border-left-color:#F2C14E;}
   .tlcb-mktapp-form{padding:20px 18px;}
 }
 
@@ -3070,32 +3070,32 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    meant for this one, or the reverse, just because a selector happened to
    match both. */
 .tlcb-reg-facts{font:400 13.5px/1.5 var(--tlcb-serif);color:#4A4860;margin:0 0 18px;}
-.tlcb-reg-closed{padding:20px 22px;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:10px;background:#FBF8F3;}
+.tlcb-reg-closed{padding:20px 22px;border:1px solid #DCE1E7;border-left:3px solid #F2C14E;border-radius:10px;background:#FFFFFF;}
 .tlcb-reg-closed p{margin:0;font-size:14.5px;line-height:1.6;color:#4A4860;}
 .tlcb-reg-form{display:flex;flex-direction:column;gap:18px;max-width:560px;
-  background:#FBF8F3;border:1px solid #DDE3ED;border-radius:16px;padding:28px;
-  box-shadow:0 6px 32px rgba(30,45,74,.14);}
+  background:#FFFFFF;border:1px solid #DCE1E7;border-radius:16px;padding:28px;
+  box-shadow:0 6px 32px rgba(11,60,92,.14);}
 .tlcb-reg-field{display:flex;flex-direction:column;gap:6px;}
 .tlcb-reg-field>label{font:700 10.5px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#4A4860;}
 .tlcb-reg-field input,.tlcb-reg-field textarea,.tlcb-reg-field select{width:100%;background:#fff;
-  border:1px solid #DDE3ED;border-radius:8px;padding:11px 13px;font:400 14.5px/1.5 var(--tlcb-serif);
+  border:1px solid #DCE1E7;border-radius:8px;padding:11px 13px;font:400 14.5px/1.5 var(--tlcb-serif);
   color:#1A1A2A;min-height:44px;}
 .tlcb-reg-field textarea{min-height:96px;resize:vertical;font-family:var(--tlcb-serif);}
 .tlcb-reg-field input:focus,.tlcb-reg-field textarea:focus,.tlcb-reg-field select:focus{
-  outline:none;border-color:#C9973A;box-shadow:0 0 0 3px rgba(201,151,58,.15);}
-.tlcb-reg-req{color:#C9973A;}
+  outline:none;border-color:#F2C14E;box-shadow:0 0 0 3px rgba(242,193,78,.15);}
+.tlcb-reg-req{color:#7A5A00;}
 .tlcb-reg-hint{margin:0;font-size:12px;color:#8A8898;line-height:1.5;}
-.tlcb-reg-check{display:flex;gap:10px;align-items:flex-start;background:#EDF2F7;border:1px solid #C4CEDF;
+.tlcb-reg-check{display:flex;gap:10px;align-items:flex-start;background:#E6F0F7;border:1px solid #C9D6E3;
   border-radius:10px;padding:14px;cursor:pointer;}
-.tlcb-reg-check input{width:18px;height:18px;margin-top:2px;accent-color:#4A5E3A;flex-shrink:0;}
+.tlcb-reg-check input{width:18px;height:18px;margin-top:2px;accent-color:#1A5C3E;flex-shrink:0;}
 .tlcb-reg-check span{font-size:13.5px;line-height:1.55;color:#1A1A2A;font-family:var(--tlcb-serif);
   text-transform:none;letter-spacing:0;font-weight:400;}
-.tlcb-reg-total{background:#1E2D4A;border-radius:14px;padding:18px 20px;}
+.tlcb-reg-total{background:#0B3C5C;border-radius:14px;padding:18px 20px;}
 .tlcb-reg-total-due{display:flex;justify-content:space-between;gap:14px;font:800 18px/1 var(--tlcb-ui);color:#fff;}
 .tlcb-reg-foot{display:flex;justify-content:flex-end;}
 .tlcb-reg-alert{display:none;padding:11px 14px;border-radius:8px;font-size:13.5px;line-height:1.5;}
 .tlcb-reg-alert--err{display:block;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
-.tlcb-reg-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #4A5E3A;color:#1a3d1f;}
+.tlcb-reg-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #1A5C3E;color:#1a3d1f;}
 @media(max-width:640px){.tlcb-reg-form{padding:20px 18px;}}
 
 /* ── The amount ladder ── one row per "$X /period does Y". Follows the
@@ -3114,16 +3114,16 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    that variable on the wrapper without re-rendering, so anything keyed off a
    CLASS instead would not follow until the next structural change. */
 .tlcb-am-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
-  background:color-mix(in srgb, var(--tlcb-bg,#FBF8F3) 82%, #fff);
-  border:1px solid color-mix(in srgb, var(--tlcb-ink,#1E2D4A) 18%, transparent);
+  background:color-mix(in srgb, var(--tlcb-bg,#FFFFFF) 82%, #fff);
+  border:1px solid color-mix(in srgb, var(--tlcb-ink,#0B3C5C) 18%, transparent);
   border-radius:10px;padding:14px 16px;}
 .tlcb-am-l{flex:1;min-width:220px;}
 .tlcb-am-amt{display:flex;align-items:baseline;gap:1px;}
-.tlcb-am-n{font:700 19px/1.2 var(--tlcb-serif);color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-am-n{font:700 19px/1.2 var(--tlcb-serif);color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-am-p{font:400 12px/1 var(--tlcb-ui);color:var(--tlcb-ink,#8C8880);opacity:.75;}
 .tlcb-am-o{font-size:13px;line-height:1.5;color:var(--tlcb-ink,#4A4860);margin-top:2px;max-width:420px;}
 .tlcb-am-o p{margin:0;}
-.tlcb-am-cta{background:#C9973A;color:#1B1608;font:800 13px/1 var(--tlcb-ui);
+.tlcb-am-cta{background:#F2C14E;color:#0B2238;font:800 13px/1 var(--tlcb-ui);
   padding:11px 16px;border-radius:8px;white-space:nowrap;text-decoration:none;}
 /* Follows the block's own ink so it is readable on the pale ministry ladder
    and on the navy leadership panel alike — the same reason the row card is
@@ -3134,17 +3134,17 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    page's top row, and two different ways of labeling a list of amounts on one
    screen reads as two different kinds of thing. */
 .tlcb-am-lab{margin:22px 0 0;font:800 12px/1.3 var(--tlcb-ui);letter-spacing:.1em;
-  text-transform:uppercase;color:var(--tlcb-head-ink,#1E2D4A);opacity:.85;}
+  text-transform:uppercase;color:var(--tlcb-head-ink,#0B3C5C);opacity:.85;}
 .tlcb-am-lab + .tlcb-am-list{margin-top:10px;}
-.tlcb-dl{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;}
-.tlcb-dl-i{flex:none;width:38px;height:46px;border-radius:5px;background:#FBF8F3;border:1px solid #C4CEDF;display:flex;
+.tlcb-dl{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #DCE1E7;border-radius:9px;background:#F7F9FB;}
+.tlcb-dl-i{flex:none;width:38px;height:46px;border-radius:5px;background:#FFFFFF;border:1px solid #C9D6E3;display:flex;
   align-items:center;justify-content:center;font:700 10px/1 var(--tlcb-ui);color:#8A8898;}
 .tlcb-dl-b{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;}
-.tlcb-dl-t{font:600 14px/1.35 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-dl-t{font:600 14px/1.35 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-dl-m{font-size:12px;color:#8A8898;}
 .tlcb-logos{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-.tlcb-logo{height:56px;border:1px solid #DDE3ED;border-radius:7px;background:#F7F3EC;display:flex;align-items:center;
-  justify-content:center;font-size:11px;color:#6A6858;letter-spacing:.06em;text-align:center;padding:6px;overflow:hidden;text-decoration:none;}
+.tlcb-logo{height:56px;border:1px solid #DCE1E7;border-radius:7px;background:#F7F9FB;display:flex;align-items:center;
+  justify-content:center;font-size:11px;color:#4A4860;letter-spacing:.06em;text-align:center;padding:6px;overflow:hidden;text-decoration:none;}
 .tlcb-logo img{max-width:100%;max-height:100%;object-fit:contain;}
 .tlcb-spacer{height:var(--tlcb-height,48px);}
 .tlcb-note{font-size:11.5px;color:#8A8898;}
@@ -3152,23 +3152,23 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb [contenteditable="true"]{min-height:1em;}
 
 /* ── Site-wide blocks ─────────────────────────────────────────────────────── */
-.tlcb-alert{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:8px;background:#FDF8EC;border:1px solid #F0DCB0;
+.tlcb-alert{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:8px;background:#FEF6DC;border:1px solid #FBE5A8;
   font-size:13.5px;color:#4A4860;flex-wrap:wrap;}
-.tlcb-alert-tag{flex:none;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;
+.tlcb-alert-tag{flex:none;padding:2px 8px;border-radius:5px;background:#F2C14E;color:#0B2238;
   font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;}
 .tlcb-alert-body{flex:1;min-width:120px;}
-.tlcb-alert-link{flex:none;color:#2E7EA6;font-family:var(--tlcb-ui);font-weight:800;text-decoration:none;}
+.tlcb-alert-link{flex:none;color:#246582;font-family:var(--tlcb-ui);font-weight:800;text-decoration:none;}
 .tlcb-slide{position:relative;border-radius:10px;overflow:hidden;padding:64px 40px;display:flex;flex-direction:column;
   align-items:flex-start;gap:14px;min-height:300px;justify-content:center;
   background:#43536F var(--tlcb-slide-img,none) center/cover;}
-.tlcb-slide::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(17,30,50,.86),rgba(30,45,74,.55));}
+.tlcb-slide::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(11,34,56,.86),rgba(11,60,92,.55));}
 .tlcb-slide > *{position:relative;z-index:1;}
 .tlcb-slide-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:#fff;margin:0;max-width:16em;}
 .tlcb-slide-sub{font-size:16px;line-height:1.55;color:rgba(255,255,255,.8);margin:0;max-width:34em;font-weight:300;}
-.tlcb-btn--ghost-light{background:transparent;color:#F3EDE1;border:1px solid rgba(245,228,192,.5);}
+.tlcb-btn--ghost-light{background:transparent;color:#F7F9FB;border:1px solid rgba(245,228,192,.5);}
 .tlcb-dots{display:flex;gap:6px;margin-top:4px;}
 .tlcb-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);}
-.tlcb-dots span.on{background:#E8C070;}
+.tlcb-dots span.on{background:#F7D57E;}
 /* ── THE INFO CARD ────────────────────────────────────────────────────────
    A slot on a banner, not a block. When it is on, the banner becomes two
    columns and the text column narrows to make room — the card never overlaps
@@ -3191,9 +3191,9 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    prototype, and all three things the first build flattened. The card is the
    most-photographed element of this design (it sits on the Home banner) and a
    flat white box with a hairline is not what it is. */
-aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);border-radius:22px;padding:34px 32px;box-shadow:0 20px 50px rgba(16,27,46,.40);
+aside.tlcb-card{background:linear-gradient(180deg,#FFFFFF 0%,#F7F9FB 100%);border-radius:22px;padding:34px 32px;box-shadow:0 20px 50px rgba(11,34,56,.40);
   display:flex;flex-direction:column;position:relative;z-index:1;}
-.tlcb-card-eyebrow{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;}
+.tlcb-card-eyebrow{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:#1565A0;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
 /* ⚠ NO BORDER PER ROW. The spec's own row list carries an explicit
    { rule: true } between the times and the address, which only makes sense if
@@ -3206,79 +3206,79 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    across the card — the prototype's own declaration. A flat 1px line is what
    the first build drew and it reads as a divider in a form; this reads as
    part of the card. */
-.tlcb-card-rule{height:2px;background:linear-gradient(90deg,#E4A93C,rgba(228,169,60,0));margin:16px 0;border:0;}
+.tlcb-card-rule{height:2px;background:linear-gradient(90deg,#F2C14E,rgba(228,169,60,0));margin:16px 0;border:0;}
 .tlcb-card-row--tight .tlcb-card-link{margin-top:5px;}
 .tlcb-card-free{display:block;font-size:14.5px;line-height:1.65;}
 .tlcb-card-free p{margin:0 0 8px;}
 .tlcb-card-free p:last-child{margin-bottom:0;}
-.tlcb-card-free a{color:#2E7EA6;}
+.tlcb-card-free a{color:#246582;}
 .tlcb-card-row:last-child{border-bottom:0;padding-bottom:0;}
 .tlcb-card-body > :first-child{padding-top:20px;}
-.tlcb-card-1{font:400 24px/1.15 var(--tlcb-serif);color:#1E2D4A;}
+.tlcb-card-1{font:400 24px/1.15 var(--tlcb-serif);color:#0B3C5C;}
 .tlcb-card-2{font:400 13.5px/1.5 var(--tlcb-ui);color:#4A4860;}
-.tlcb-card-link{font:600 15px/1.5 var(--tlcb-ui);color:#2E7EA6;text-decoration:none;}
+.tlcb-card-link{font:600 15px/1.5 var(--tlcb-ui);color:#246582;text-decoration:none;}
 .tlcb-card-link:hover{text-decoration:underline;}
 .tlcb-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-.tlcb-tile{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;
+.tlcb-tile{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #DCE1E7;border-radius:9px;background:#FFFFFF;
   text-decoration:none;color:inherit;}
-.tlcb-tile:hover{border-color:#2E7EA6;}
-.tlcb-tile-i{font-size:17px;color:#2E7EA6;}
-.tlcb-tile-t{font:600 13.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-tile:hover{border-color:#246582;}
+.tlcb-tile-i{font-size:17px;color:#246582;}
+.tlcb-tile-t{font:600 13.5px/1.3 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-svcs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.tlcb-svc{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;}
+.tlcb-svc{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #DCE1E7;border-radius:9px;background:#FFFFFF;}
 .tlcb-svc-d{font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#8A8898;}
-.tlcb-svc-t{font-family:var(--tlcb-serif);font-weight:700;font-size:21px;color:#1E2D4A;line-height:1.2;}
-.tlcb-svc-n{font-size:12.5px;color:#6A6858;}
+.tlcb-svc-t{font-family:var(--tlcb-serif);font-weight:700;font-size:21px;color:#0B3C5C;line-height:1.2;}
+.tlcb-svc-n{font-size:12.5px;color:#4A4860;}
 .tlcb-sermon{display:grid;grid-template-columns:var(--tlcb-cols,4fr 6fr);gap:var(--tlcb-gap,32px);align-items:center;}
 .tlcb-sermon--text{grid-template-columns:1fr;}
-.tlcb-sermon-play{position:relative;aspect-ratio:16/9;border-radius:8px;background:#1E2D4A center/cover;display:flex;
+.tlcb-sermon-play{position:relative;aspect-ratio:16/9;border-radius:8px;background:#0B3C5C center/cover;display:flex;
   align-items:center;justify-content:center;order:var(--tlcb-media-order,0);text-decoration:none;}
-.tlcb-sermon-play--audio{aspect-ratio:auto;min-height:96px;background:#1E2D4A;}
-.tlcb-sermon-play span{width:46px;height:46px;border-radius:50%;background:rgba(251,248,243,.92);color:#1E2D4A;
+.tlcb-sermon-play--audio{aspect-ratio:auto;min-height:96px;background:#0B3C5C;}
+.tlcb-sermon-play span{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.92);color:#0B3C5C;
   display:flex;align-items:center;justify-content:center;font-size:17px;}
 .tlcb-sermon-b{display:flex;flex-direction:column;gap:6px;min-width:0;}
-.tlcb-sermon-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,30px) * .78);line-height:1.25;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-sermon-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,30px) * .78);line-height:1.25;color:var(--tlcb-head-ink,#0B3C5C);}
 .tlcb-sermon-m{font-size:13px;color:#8A8898;}
-.tlcb-sermon-all{font-size:13px;color:#2E7EA6;text-decoration:none;font-weight:600;}
-.tlcb-news{display:flex;align-items:baseline;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
+.tlcb-sermon-all{font-size:13px;color:#246582;text-decoration:none;font-weight:600;}
+.tlcb-news{display:flex;align-items:baseline;gap:14px;padding:11px 13px;border:1px solid #DCE1E7;border-radius:8px;background:#F7F9FB;}
 .tlcb-news-d{flex:none;width:56px;font:700 12px/1.4 var(--tlcb-ui);color:#8A8898;letter-spacing:.03em;}
-.tlcb-news-t{flex:1;font:600 13.5px/1.35 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-news-t{flex:1;font:600 13.5px/1.35 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-nf-list{display:flex;flex-direction:column;gap:10px;}
-.tlcb-nf-item{background:#fff;border:1px solid #E4E0D4;border-radius:18px;overflow:hidden;}
+.tlcb-nf-item{background:#fff;border:1px solid #DCE1E7;border-radius:18px;overflow:hidden;}
 .tlcb-nf-item summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
 .tlcb-nf-item summary::-webkit-details-marker{display:none;}
 .tlcb-nf-head{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.tlcb-nf-pin{align-self:flex-start;font:800 10px/1.4 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:#C9973A;}
+.tlcb-nf-pin{align-self:flex-start;font:800 10px/1.4 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:#7A5A00;}
 .tlcb-nf-date{font:600 12px/1.4 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;color:#8A8898;}
-.tlcb-nf-title{font-family:var(--tlcb-serif);font-weight:700;font-size:19px;line-height:1.2;letter-spacing:-.01em;color:#1E2D4A;}
+.tlcb-nf-title{font-family:var(--tlcb-serif);font-weight:700;font-size:19px;line-height:1.2;letter-spacing:-.01em;color:#0B3C5C;}
 .tlcb-nf-chev{flex:none;width:12px;height:12px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);transition:transform .15s;}
 .tlcb-nf-item[open] .tlcb-nf-chev{transform:rotate(-135deg);}
 .tlcb-nf-body{padding:0 18px 18px;}
-.tlcb-nf-body img{width:100%;max-height:340px;object-fit:contain;background:#F7F3EC;border-radius:8px;margin-bottom:12px;}
+.tlcb-nf-body img{width:100%;max-height:340px;object-fit:contain;background:#F7F9FB;border-radius:8px;margin-bottom:12px;}
 .tlcb-nf-body p{font-size:14px;line-height:1.7;color:#3A3A4A;margin:0 0 8px;}
 .tlcb-nl-list{display:flex;flex-direction:column;gap:10px;}
-.tlcb-nl-item{background:#fff;border:1px solid #E4E0D4;border-radius:12px;padding:20px;}
-.tlcb-nl-date{display:block;font:700 11px/1.4 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#C9973A;margin-bottom:4px;}
-.tlcb-nl-subj{display:block;font-family:var(--tlcb-serif);font-size:19px;color:#1E2D4A;margin-bottom:8px;}
-.tlcb-nl-note{font-size:14px;line-height:1.7;color:#6A6858;margin:0 0 10px;}
-.tlcb-nl-link{font:700 13px var(--tlcb-ui);color:#2E7EA6;text-decoration:none;}
-.tlcb-nl-row{display:flex;align-items:baseline;gap:14px;padding:10px 13px;border:1px solid #E4E0D4;border-radius:8px;text-decoration:none;}
+.tlcb-nl-item{background:#fff;border:1px solid #DCE1E7;border-radius:12px;padding:20px;}
+.tlcb-nl-date{display:block;font:700 11px/1.4 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#7A5A00;margin-bottom:4px;}
+.tlcb-nl-subj{display:block;font-family:var(--tlcb-serif);font-size:19px;color:#0B3C5C;margin-bottom:8px;}
+.tlcb-nl-note{font-size:14px;line-height:1.7;color:#4A4860;margin:0 0 10px;}
+.tlcb-nl-link{font:700 13px var(--tlcb-ui);color:#246582;text-decoration:none;}
+.tlcb-nl-row{display:flex;align-items:baseline;gap:14px;padding:10px 13px;border:1px solid #DCE1E7;border-radius:8px;text-decoration:none;}
 .tlcb-nl-row-d{flex:none;width:64px;font:700 11px/1.4 var(--tlcb-ui);color:#8A8898;letter-spacing:.03em;}
-.tlcb-nl-row-t{flex:1;font:600 13.5px/1.35 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-nl-row-t{flex:1;font:600 13.5px/1.35 var(--tlcb-ui);color:#0B3C5C;}
 /* A closed month reads as one row, the same weight as a letter row, so the
    list stays a list rather than becoming a stack of panels. */
-.tlcb-nl-month{border:1px solid #E4E0D4;border-radius:8px;background:#fff;}
-.tlcb-nl-msum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;cursor:pointer;font:700 13px/1.35 var(--tlcb-ui);color:#1E2D4A;list-style:none;}
+.tlcb-nl-month{border:1px solid #DCE1E7;border-radius:8px;background:#fff;}
+.tlcb-nl-msum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;cursor:pointer;font:700 13px/1.35 var(--tlcb-ui);color:#0B3C5C;list-style:none;}
 .tlcb-nl-msum::-webkit-details-marker{display:none;}
 /* The caret is drawn here and turns on open, so the control says which way it
    goes without needing a word for it. */
 .tlcb-nl-msum::after{content:'';flex:none;width:7px;height:7px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);margin-right:3px;transition:transform .15s;}
 .tlcb-nl-month[open] > .tlcb-nl-msum::after{transform:rotate(-135deg);}
-.tlcb-nl-mcount{margin-left:auto;font:700 11px/1 var(--tlcb-ui);color:#6A6858;background:#F2EFE7;border-radius:999px;padding:4px 8px;}
+.tlcb-nl-mcount{margin-left:auto;font:700 11px/1 var(--tlcb-ui);color:#4A4860;background:#EEF2F6;border-radius:999px;padding:4px 8px;}
 .tlcb-nl-mlist{display:flex;flex-direction:column;gap:8px;padding:0 13px 13px;}
 /* Inside a month the rows are already fenced by the month's own border, so a
    second border on each one reads as a box in a box. */
-.tlcb-nl-mlist .tlcb-nl-row{border:0;padding:7px 0;border-top:1px solid #EFEBE1;border-radius:0;}
+.tlcb-nl-mlist .tlcb-nl-row{border:0;padding:7px 0;border-top:1px solid #EEF2F6;border-radius:0;}
 /* A row needs a wrapper of its own so its expanded panel has somewhere to sit
    below it — the row itself stays the same flex line it always was. */
 .tlcb-nl-rowwrap{display:flex;flex-direction:column;}
@@ -3286,47 +3286,47 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    it — never a modal. The panel is a plain descendant of the block wrapper
    the script found it in, so --tlcb-ui still resolves by inheritance same
    as everywhere else in this block. */
-.tlcb-nl-full{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;}
-.tlcb-nl-full-date{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;}
-.tlcb-nl-full-heading{font-family:var(--tlcb-serif);font-size:16px;font-weight:600;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-nl-full{margin-top:14px;padding-top:14px;border-top:1px solid #DCE1E7;}
+.tlcb-nl-full-date{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#7A5A00;margin-bottom:8px;}
+.tlcb-nl-full-heading{font-family:var(--tlcb-serif);font-size:16px;font-weight:600;color:#0B3C5C;margin-bottom:8px;}
 .tlcb-nl-full-body{font-size:15px;line-height:1.8;color:#1A1A2A;}
-.tlcb-nl-full-events{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-events{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;}
 .tlcb-nl-full-ev{font-size:13px;line-height:1.7;color:#3A3A4A;padding:4px 0;}
 /* The rest of the letter — secondary note, featured news, WOL/LASM, the
    tertiary note and CTA, extra notes, Bible classes. Same section order
    buildEmailHtml() (admin/email.js) uses, and the same neighboring style
    the overlay reader in public/index.html already carries, so a letter
    reads the same whichever surface opened it. */
-.tlcb-nl-full-sec{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;font-size:14px;line-height:1.7;color:#3A3A4A;}
-.tlcb-nl-full-eyebrow{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;}
-.tlcb-nl-full-news{margin-top:16px;padding-top:14px;border-top:2px solid #C9973A;}
-.tlcb-nl-full-news + .tlcb-nl-full-news{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;border-top-width:1px;}
-.tlcb-nl-full-news-t{font-family:var(--tlcb-serif);font-size:16px;color:#1E2D4A;margin-bottom:4px;}
+.tlcb-nl-full-sec{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;font-size:14px;line-height:1.7;color:#3A3A4A;}
+.tlcb-nl-full-eyebrow{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#7A5A00;margin-bottom:8px;}
+.tlcb-nl-full-news{margin-top:16px;padding-top:14px;border-top:2px solid #F2C14E;}
+.tlcb-nl-full-news + .tlcb-nl-full-news{margin-top:14px;padding-top:14px;border-top:1px solid #DCE1E7;border-top-width:1px;}
+.tlcb-nl-full-news-t{font-family:var(--tlcb-serif);font-size:16px;color:#0B3C5C;margin-bottom:4px;}
 .tlcb-nl-full-news-s{font-size:13px;line-height:1.65;color:#3A3A4A;}
-.tlcb-nl-full-more{margin-top:14px;padding-top:14px;border-top:1px solid #E4E0D4;}
-.tlcb-nl-full-more-item{padding:7px 0;border-top:1px solid #EFEBE1;}
+.tlcb-nl-full-more{margin-top:14px;padding-top:14px;border-top:1px solid #DCE1E7;}
+.tlcb-nl-full-more-item{padding:7px 0;border-top:1px solid #EEF2F6;}
 .tlcb-nl-full-more-item:first-child{border-top:0;}
-.tlcb-nl-full-ministry{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.tlcb-nl-full-ministry{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .tlcb-nl-full-ministry--one{grid-template-columns:1fr;max-width:340px;}
-.tlcb-nl-full-ministry-block{background:#F7F3EC;border-left:3px solid #4A5E3A;border-radius:0 8px 8px 0;padding:12px;}
-.tlcb-nl-full-ministry-label{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#4A5E3A;margin-bottom:6px;}
+.tlcb-nl-full-ministry-block{background:#F7F9FB;border-left:3px solid #1A5C3E;border-radius:0 8px 8px 0;padding:12px;}
+.tlcb-nl-full-ministry-label{font:700 10px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#1A5C3E;margin-bottom:6px;}
 .tlcb-nl-full-ministry-body{font-size:13px;line-height:1.65;color:#3A3A4A;}
-.tlcb-nl-full-tertiary{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
-.tlcb-nl-full-tertiary-panel{background:#F7F3EC;border-left:3px solid #C9973A;border-radius:0 8px 8px 0;padding:14px 16px;}
+.tlcb-nl-full-tertiary{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;}
+.tlcb-nl-full-tertiary-panel{background:#F7F9FB;border-left:3px solid #F2C14E;border-radius:0 8px 8px 0;padding:14px 16px;}
 .tlcb-nl-full-tertiary-body{font-size:13px;line-height:1.7;color:#3A3A4A;}
-.tlcb-nl-full-cta{display:inline-block;margin-top:12px;background:#C9973A;color:#1E2D4A;font:700 13px var(--tlcb-ui);padding:9px 20px;border-radius:6px;text-decoration:none;}
-.tlcb-nl-full-extra{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-cta{display:inline-block;margin-top:12px;background:#F2C14E;color:#0B3C5C;font:700 13px var(--tlcb-ui);padding:9px 20px;border-radius:6px;text-decoration:none;}
+.tlcb-nl-full-extra{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;}
 .tlcb-nl-full-extra-body{font-size:13px;line-height:1.7;color:#3A3A4A;}
-.tlcb-nl-full-bible{margin-top:16px;padding-top:14px;border-top:1px solid #E4E0D4;}
+.tlcb-nl-full-bible{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;}
 .tlcb-nl-full-bible-item{font-size:13px;line-height:1.65;color:#3A3A4A;padding:4px 0;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
 /* The tile clips, the photo fills it. overflow:hidden is what keeps a zoomed
    face inside its own tile instead of spilling over the name beside it. */
-.tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED;overflow:hidden;
+.tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DCE1E7;overflow:hidden;
   position:relative;display:block;}
 .tlcb-person-p img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-.tlcb-person-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-person-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-person-r{font-size:12px;color:#8A8898;}
 .tlcb-map{min-height:230px;overflow:hidden;}
 .tlcb-map-f{width:100%;height:100%;min-height:230px;border:0;display:block;}
@@ -3335,11 +3335,11 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 /* The half-width map: one card carrying the address, the link out and the map
    beneath. Same card geometry as everything else on a page — 12 radius, the
    sand edge — so it reads as part of the site rather than as a widget. */
-.tlcb-mapc{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:22px 22px 18px;
+.tlcb-mapc{background:#FFFFFF;border:1px solid #DCE1E7;border-radius:12px;padding:22px 22px 18px;
   display:flex;flex-direction:column;gap:7px;}
-.tlcb-mapc-name{font:700 15px/1.4 var(--tlcb-sans);color:#1E2D4A;}
+.tlcb-mapc-name{font:700 15px/1.4 var(--tlcb-sans);color:#0B3C5C;}
 .tlcb-mapc-line{font:400 14px/1.5 var(--tlcb-sans);color:#4A4860;}
-.tlcb-mapc-link{font:700 14px/1.5 var(--tlcb-sans);color:#2E7EA6;text-decoration:none;margin-top:3px;}
+.tlcb-mapc-link{font:700 14px/1.5 var(--tlcb-sans);color:#246582;text-decoration:none;margin-top:3px;}
 .tlcb-mapc-link:hover{text-decoration:underline;}
 /* The map sits inside the card's padding rather than bleeding to its edges —
    the screenshot shows the card's cream around it on all four sides. */
@@ -3347,17 +3347,17 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-mapc-frame .tlcb-map-f{min-height:300px;}
 .tlcb-stamp{position:absolute;z-index:4;bottom:14px;padding:7px 15px;border-radius:7px;
   font:700 13px/1.3 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;
-  box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
+  box-shadow:0 5px 16px rgba(11,60,92,.3);white-space:nowrap;}
 .tlcb-stamp--tl{left:10px;right:auto;transform:rotate(-8deg);}
 .tlcb-stamp--tr{right:10px;left:auto;transform:rotate(8deg);}
 .tlcb-stamp--bc{left:50%;right:auto;transform:translateX(-50%) rotate(-6deg);}
 .tlcb-stamp--lg{font-size:26px;padding:16px 32px;border-radius:11px;}
 .tlcb-stamp--pulse{animation:tlcb-stamp-pulse 1.5s ease-in-out infinite;}
-@keyframes tlcb-stamp-pulse{0%,100%{opacity:1;box-shadow:0 5px 16px rgba(30,45,74,.3);}
-  50%{opacity:.82;box-shadow:0 7px 26px 5px rgba(30,45,74,.55);}}
-.tlcb-empty{margin:40px;padding:52px 28px;border:2px dashed #C4CEDF;border-radius:12px;text-align:center;
+@keyframes tlcb-stamp-pulse{0%,100%{opacity:1;box-shadow:0 5px 16px rgba(11,60,92,.3);}
+  50%{opacity:.82;box-shadow:0 7px 26px 5px rgba(11,60,92,.55);}}
+.tlcb-empty{margin:40px;padding:52px 28px;border:2px dashed #C9D6E3;border-radius:12px;text-align:center;
   display:flex;flex-direction:column;gap:8px;}
-.tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
+.tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#0B3C5C;font-weight:500;}
 .tlcb-empty span{font-size:13.5px;color:#8A8898;}
 /* Page layouts. The template owns the wrapper only — it never touches a block,
    so switching layout can never drop content. */
@@ -3365,31 +3365,31 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   max-width:var(--tlcb-wrap,none);margin:0 auto;padding:0 var(--tlcb-pad);}
 .tlcb-layout-main{min-width:0;display:flex;flex-direction:column;}
 .tlcb-side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;}
-.tlcb-side-card{border:1px solid #DDE3ED;border-radius:11px;background:#FBF8F3;padding:18px;
+.tlcb-side-card{border:1px solid #DCE1E7;border-radius:11px;background:#FFFFFF;padding:18px;
   display:flex;flex-direction:column;gap:10px;}
 .tlcb-side-h{font:700 11px/1.4 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;
   color:#8A8898;margin:0;}
 .tlcb-side .tlcb-svc{padding:10px 12px;}
 .tlcb-side .tlcb-svc-t{font-size:18px;}
 .tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:calc(13.5px * var(--tlcb-scale, 1));color:#4A4860;line-height:1.5;}
-.tlcb-side-lines a{color:#2E7EA6;}
+.tlcb-side-lines a{color:#246582;}
 /* The pages beneath a section, in the aside. Rows rather than a bulleted list:
    these are destinations, and a row with its own hit area is easier to hit than
    a line of text — the same reasoning the phone tap-target pass applied to the
    footer. */
 .tlcb-side-kids{display:flex;flex-direction:column;}
 .tlcb-side-kids a,.tlcb-side-kids span{display:block;padding:9px 0;font-family:var(--tlcb-sans);
-  font-size:calc(14px * var(--tlcb-scale, 1));line-height:1.35;color:#2E7EA6;text-decoration:none;
-  border-bottom:1px solid var(--tlcb-rule,#E7DFD1);}
+  font-size:calc(14px * var(--tlcb-scale, 1));line-height:1.35;color:#246582;text-decoration:none;
+  border-bottom:1px solid var(--tlcb-rule,#DCE1E7);}
 .tlcb-side-kids a:last-child,.tlcb-side-kids span:last-child{border-bottom:0;padding-bottom:0;}
 .tlcb-side-kids a:hover{text-decoration:underline;}
 .tlcb-side-kids span{color:#4A4860;}
 .tlcb-kids{max-width:var(--tlcb-wrap,none);margin:0 auto;padding:8px var(--tlcb-pad) 32px;
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
-.tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DDE3ED;
-  border-radius:11px;background:#FBF8F3;text-decoration:none;}
-.tlcb-kid-t{font-family:var(--tlcb-serif);font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
-.tlcb-kid-d{font-size:13px;color:#6A6858;line-height:1.5;}
+.tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DCE1E7;
+  border-radius:11px;background:#FFFFFF;text-decoration:none;}
+.tlcb-kid-t{font-family:var(--tlcb-serif);font-weight:700;font-size:17px;color:#0B3C5C;line-height:1.25;}
+.tlcb-kid-d{font-size:13px;color:#4A4860;line-height:1.5;}
 
 /* ── THE REDESIGN'S FOUR OWN SHAPES ───────────────────────────────────────
    Everything above is a primitive every block type shares. These four are the
@@ -3402,17 +3402,17 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    when there is one, is layered over it and the veil over that. */
 .tlcb-pb{position:relative;overflow:hidden;display:flex;align-items:flex-end;
   min-height:var(--tlcb-pb-h,520px);padding:44px;border-radius:0;
-  background:var(--tlcb-bg,#101B2E) var(--tlcb-pb-img,none) center/cover no-repeat;}
+  background:var(--tlcb-bg,#0B2238) var(--tlcb-pb-img,none) center/cover no-repeat;}
 .tlcb-pb--short{--tlcb-pb-h:420px;}
 .tlcb-pb--mid{--tlcb-pb-h:520px;}
 .tlcb-pb--tall{--tlcb-pb-h:640px;}
 .tlcb-pb-veil{position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(180deg,rgba(16,27,46,var(--tlcb-pb-top,.72)) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.89) 100%);}
+  background:linear-gradient(180deg,rgba(11,34,56,var(--tlcb-pb-top,.72)) 0%,rgba(11,34,56,.16) 42%,rgba(11,34,56,.89) 100%);}
 .tlcb-pb-glow{position:absolute;inset:0;pointer-events:none;background:var(--tlcb-pb-glow,none);}
 .tlcb-pb-body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;width:100%;}
 .tlcb-pb-eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
 .tlcb-pb-eyebrow-t{font:800 12px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#E4A93C);}
+  color:var(--tlcb-eyebrow-ink,#F2C14E);}
 /* 64px is the design's own figure and it is not derived from the block's text
    size: this is the one place on the site set at display scale, and tying it
    to the S/M/L control would make S produce a 30px hero. It comes down on a
@@ -3434,7 +3434,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    they share this by construction rather than by two copies that agree today. */
 .tlcb-tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;
   border-radius:22px;padding:34px 32px;height:100%;
-  background:var(--tlcb-bg,#101B2E);box-shadow:0 18px 44px rgba(16,27,46,.14);}
+  background:var(--tlcb-bg,#0B2238);box-shadow:0 18px 44px rgba(11,34,56,.14);}
 .tlcb-tile-big{font-family:var(--tlcb-serif);font-weight:800;font-size:56px;line-height:1;
   letter-spacing:-.03em;color:var(--tlcb-head-ink,#fff);}
 .tlcb-tile-big:empty{display:none;}
@@ -3450,7 +3450,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    and 240px is the narrowest a tile reads at with 32px of padding inside it. */
 .tlcb-tiles-n{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;align-items:stretch;}
 .tlcb-tile-m{font-family:var(--tlcb-ui);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#C9973A);margin-top:auto;padding-top:10px;}
+  color:var(--tlcb-eyebrow-ink,#F2C14E);margin-top:auto;padding-top:10px;}
 .tlcb-tile-m:empty{display:none;}
 
 /* THE CALL-TO-ACTION BAND. One ask, ending in a button. */
@@ -3477,7 +3477,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    itself contains. */
 .tlcb-vals{display:grid;grid-template-columns:var(--tlcb-cols,repeat(4,1fr));gap:20px;align-items:stretch;}
 .tlcb-val{position:relative;display:flex;flex-direction:column;gap:6px;border-radius:22px;padding:30px 26px;
-  background:var(--v-photo,var(--v-field)) center/cover;color:var(--v-ink);box-shadow:0 18px 44px rgba(16,27,46,.16);
+  background:var(--v-photo,var(--v-field)) center/cover;color:var(--v-ink);box-shadow:0 18px 44px rgba(11,34,56,.16);
   overflow:hidden;}
 .tlcb-val::before{content:'';position:absolute;inset:0;
   background:linear-gradient(165deg,rgba(8,12,22,.34),rgba(8,12,22,.64));opacity:var(--v-veil,0);}
@@ -3496,7 +3496,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-val-wb{font-size:13.5px;font-weight:300;line-height:1.5;color:var(--v-ink);}
 /* ⚠ A DARK wash, never a white one. A white wash lightens the surface the
    white text is sitting on, and white fails. The handoff is explicit. */
-.tlcb-val-partner{margin-top:auto;padding:14px 16px;border-radius:14px;background:rgba(16,27,46,.18);
+.tlcb-val-partner{margin-top:auto;padding:14px 16px;border-radius:14px;background:rgba(11,34,56,.18);
   display:flex;flex-direction:column;gap:3px;}
 .tlcb-val-pn{font:800 11px/1.35 var(--tlcb-ui);letter-spacing:.06em;color:var(--v-head);}
 .tlcb-val-pb{font-size:13px;font-weight:300;line-height:1.5;color:var(--v-ink);}
@@ -3504,13 +3504,13 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 /* QUOTE BAND. No box and no border — the opposite gesture from Callout. */
 .tlcb-quote{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
 .tlcb-quote-q{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:30px;line-height:1.35;
-  color:var(--tlcb-head-ink,#101B2E);border-left:3px solid var(--tlcb-eyebrow-ink,#E4A93C);
+  color:var(--tlcb-head-ink,#0B2238);border-left:3px solid var(--tlcb-eyebrow-ink,#F2C14E);
   padding-left:26px;margin:0;}
-.tlcb-quote-b{font-size:calc(var(--tlcb-body,15px) * 1.15);font-weight:300;line-height:1.75;color:var(--tlcb-ink,#453F30);}
+.tlcb-quote-b{font-size:calc(var(--tlcb-body,15px) * 1.15);font-weight:300;line-height:1.75;color:var(--tlcb-ink,#1A1A2A);}
 
 /* COMING-UP STRIP. One line, read on the way past. */
 .tlcb-chips{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-  border-bottom:1px solid var(--tlcb-rule,#E7DFCD);padding-bottom:16px;}
+  border-bottom:1px solid var(--tlcb-rule,#DCE1E7);padding-bottom:16px;}
 .tlcb-chips-l{font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
   color:var(--tlcb-meta,#8A8168);flex:none;}
 .tlcb-chip-row{display:flex;gap:10px;flex-wrap:wrap;}
@@ -3519,9 +3519,9 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    .tlcb-chip-row; that one lives inside .tlcb-give. Neither selector can now
    reach the other's markup. */
 .tlcb-chip-row .tlcb-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--tlcb-rule,#D8CFBB);
-  border-radius:999px;padding:9px 16px;background:var(--tlcb-chip-bg,#F5F0E6);white-space:nowrap;}
-.tlcb-chip-d{font:800 12px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#B44A2E);}
-.tlcb-chip-t{font:600 14px/1 var(--tlcb-ui);color:var(--tlcb-head-ink,#1B2C4A);}
+  border-radius:999px;padding:9px 16px;background:var(--tlcb-chip-bg,#F7F9FB);white-space:nowrap;}
+.tlcb-chip-d{font:800 12px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#1565A0);}
+.tlcb-chip-t{font:600 14px/1 var(--tlcb-ui);color:var(--tlcb-head-ink,#0E3050);}
 
 /* WEEKLY LETTER. This week argued for on the left, the back issues listed on
    the right — rather than the archive's vertical column, which is a different
@@ -3530,10 +3530,10 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-lt-b{display:flex;flex-direction:column;gap:14px;align-items:flex-start;}
 .tlcb-lt-list{display:flex;flex-direction:column;}
 .tlcb-lt-row{display:flex;justify-content:space-between;gap:14px;padding:15px 0;text-decoration:none;
-  border-bottom:1px solid var(--tlcb-rule,rgba(245,240,230,.14));}
-.tlcb-lt-s{font-size:16px;font-weight:600;line-height:1.3;color:var(--tlcb-head-ink,#F5F0E6);}
+  border-bottom:1px solid var(--tlcb-rule,rgba(247,249,251,.14));}
+.tlcb-lt-s{font-size:16px;font-weight:600;line-height:1.3;color:var(--tlcb-head-ink,#F7F9FB);}
 .tlcb-lt-d{font:600 12px/1.5 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;
-  color:var(--tlcb-ink,rgba(245,240,230,.5));white-space:nowrap;}
+  color:var(--tlcb-ink,rgba(247,249,251,.5));white-space:nowrap;}
 
 /* ── THE THINGS THAT MOVE ─────────────────────────────────────────────────
    Motion was a third of the brief, alongside the photography and the type:
@@ -3551,7 +3551,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    still gets the animation. (No backticks in this comment — it lives inside a
    template literal and one ends the string. See CLAUDE.md; this is the fourth
    time.) */
-.tlcb-pulse{width:9px;height:9px;border-radius:50%;background:#E4A93C;display:inline-block;flex:none;
+.tlcb-pulse{width:9px;height:9px;border-radius:50%;background:#F2C14E;display:inline-block;flex:none;
   animation:tlcb-pulse 1.8s ease-in-out infinite;}
 @keyframes tlcb-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 /* The standalone Countdown block's own label and number. The banner's
@@ -3559,9 +3559,9 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
    block's own ink and eyebrow colors so they work on any of the ten
    backgrounds, not just a dark photo field. */
 .tlcb-cd-l{font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--tlcb-eyebrow-ink,#C9973A);}
+  color:var(--tlcb-eyebrow-ink,#F2C14E);}
 .tlcb-cd-v{font-family:var(--tlcb-serif);font-weight:700;font-size:28px;line-height:1;
-  color:var(--tlcb-head-ink,#1E2D4A);font-variant-numeric:tabular-nums;}
+  color:var(--tlcb-head-ink,#0B3C5C);font-variant-numeric:tabular-nums;}
 @media(prefers-reduced-motion:reduce){
   .tlcb-pulse{animation:none;}
   .tlcb-stamp--pulse{animation:none;}
@@ -3813,10 +3813,14 @@ function wrapperVars(b) {
     // language those move together with the background — see the note on BG.
     // Every older surface falls back to exactly what it has always emitted,
     // so nothing on an existing page shifts by a pixel.
-    '--tlcb-head-ink:' + (bg.head || (bg.dark ? '#F3EDE1' : '#1E2D4A')),
-    '--tlcb-eyebrow-ink:' + (bg.eyebrow || '#C9973A'),
-    '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
-    '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
+    '--tlcb-head-ink:' + (bg.head || (bg.dark ? '#F7F9FB' : '#0B3C5C')),
+    // ⚠ Deep sea & sun: the sun gold is bright, so it is eyebrow ink only on
+    // a dark field. On a light one the eyebrow takes the design's dark gold
+    // (#7A5A00, about 6:1), and a link on a dark field takes the pale gold
+    // rather than a blue that disappears into navy.
+    '--tlcb-eyebrow-ink:' + (bg.eyebrow || (bg.dark ? '#F2C14E' : '#7A5A00')),
+    '--tlcb-link-ink:' + (bg.link || (bg.dark ? '#F7D57E' : '#246582')),
+    '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(247,249,251,.14)' : '#DCE1E7')),
     '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
     // ⚠ calc() against the PAGE's scale, not a number baked in here. The scale
     // lives on the page wrapper (see pageFontVars) because it comes from the
@@ -3853,7 +3857,7 @@ function wrapperVars(b) {
   if (b.type === 'hero') {
     // Emitted whether or not there is a photo — it is also the flat field
     // color for a photo-less hero. Always the same key as the CSS fallback
-    // (#1E2D4A / 30,45,74), so an untouched hero is byte-identical either way.
+    // (#0B3C5C / 11,60,92), so an untouched hero is byte-identical either way.
     const hc = HERO_COLORS.find((x) => x.key === b.heroColor) || HERO_COLORS[0];
     v.push('--tlcb-hero-bg:' + hc.bg);
     v.push('--tlcb-hero-veil-top-rgb:' + hc.rgb);
@@ -3862,7 +3866,7 @@ function wrapperVars(b) {
     // color (which carries none of these three keys) renders byte-for-byte
     // as it always has.
     v.push('--tlcb-hero-title-ink:' + (hc.title || '#fff'));
-    v.push('--tlcb-hero-eyebrow-ink:' + (hc.eyebrow || '#E8C070'));
+    v.push('--tlcb-hero-eyebrow-ink:' + (hc.eyebrow || '#F7D57E'));
     v.push('--tlcb-hero-sub-ink:' + (hc.sub || 'rgba(255,255,255,.72)'));
   }
   if (b.type === 'hero' && b.photo) {
@@ -3920,7 +3924,7 @@ function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
 function tileAlt(i) {
   if (i % 2 !== 1) return '';
   const gold = BG[7];
-  return ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`;
+  return ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#0B2238;--tlcb-eyebrow-ink:${gold.eyebrow}"`;
 }
 
 const ytId = (u) => (String(u || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
@@ -4212,7 +4216,7 @@ const NATIVE_FORM_SCRIPT = '<script>' + `
       prayer: 'Something went wrong — please call the office at (314) 781-8673 or email dinger@timothystl.org',
       contact: 'Something went wrong — please email us directly at dinger@timothystl.org'
     };
-    var okStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#e8f5e9;border-left:3px solid #4a5e3a;color:#1a3d1f;';
+    var okStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#e8f5e9;border-left:3px solid #1A5C3E;color:#1a3d1f;';
     var errStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
     function showErr(alertEl, msg) { if (alertEl) { alertEl.style.cssText = errStyle; alertEl.textContent = msg; } }
     function validEmail(v) {
@@ -5056,9 +5060,9 @@ function renderInner(b, opts) {
       // the ink that would be right for the gradient is exactly wrong once a
       // photo replaces it.
       const hasPhoto = !!v.photoUrl;
-      const ink = (!hasPhoto && v.darkInk) ? '#3B2E12' : 'rgba(255,255,255,.94)';
-      const head = (!hasPhoto && v.darkInk) ? '#101B2E' : '#FFFFFF';
-      const label = (!hasPhoto && v.darkInk) ? 'rgba(16,27,46,.72)' : 'rgba(255,255,255,.88)';
+      const ink = (!hasPhoto && v.darkInk) ? '#0B2238' : 'rgba(255,255,255,.94)';
+      const head = (!hasPhoto && v.darkInk) ? '#0B2238' : '#FFFFFF';
+      const label = (!hasPhoto && v.darkInk) ? 'rgba(11,34,56,.72)' : 'rgba(255,255,255,.88)';
       const photoVars = hasPhoto ? `--v-photo:url('${cssUrl(v.photoUrl)}');--v-veil:1;` : '';
       const ways = b.ways && (v.ways || []).length
         ? `<div class="tlcb-val-ways">${v.ways.map((w) => `<div class="tlcb-val-way">
@@ -5477,9 +5481,9 @@ function renderInner(b, opts) {
     // site's own colors. The Christian Ed screen stores 'teal' or 'sage', never
     // a hex — so there is no way for a class to introduce a color the site does
     // not use, and no way for a stored value to reach a style attribute.
-    const ACCENT = { mid: '#2E7EA6', teal: '#2E7EA6', steel: '#1E2D4A', sage: '#4A5E3A', amber: '#C9973A', plum: '#8A6A8A' };
+    const ACCENT = { mid: '#246582', teal: '#246582', steel: '#0B3C5C', sage: '#1A5C3E', amber: '#F2C14E', plum: '#8A6A8A' };
     const cards = rows.map((c) => {
-      const accent = ACCENT[c.accent] || 'var(--tlcb-eyebrow-ink,#2E7EA6)';
+      const accent = ACCENT[c.accent] || 'var(--tlcb-eyebrow-ink,#246582)';
       const when = [c.schedule, c.location].filter(Boolean);
       return `<div class="tlcb-cl-card">` +
         (c.label ? `<div class="tlcb-cl-eyebrow" style="color:${esc(accent)}">${esc(c.label)}</div>` : '') +
@@ -5741,7 +5745,7 @@ function renderInner(b, opts) {
       : `<span class="tlcb-embed-ph">▶</span>`;
     const pick = opts.editing ? `<button type="button" class="tlcb-pick tlcb-pick--on" data-act="video">Choose video</button>` : '';
     const inner = opts.editing && id
-      ? `<span class="tlcb-embed-ph" style="background:#1E2D4A url('https://img.youtube.com/vi/${esc(id)}/mqdefault.jpg') center/cover">▶</span>`
+      ? `<span class="tlcb-embed-ph" style="background:#0B3C5C url('https://img.youtube.com/vi/${esc(id)}/mqdefault.jpg') center/cover">▶</span>`
       : media;
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-embed">${inner}${pick}</div></div>`;
   }
@@ -5771,7 +5775,7 @@ function renderInner(b, opts) {
     const feed = t === 'posts' ? 'posts' : 'events';
     const sample = opts.editing
       ? (t === 'posts'
-        ? `<div class="tlcb-cards">${[1, 2, 3].map(() => `<div class="tlcb-card"><div style="height:44px;border-radius:5px;background:repeating-linear-gradient(135deg,#DDE3ED 0 8px,#D2DAE7 8px 16px)"></div><span class="tlcb-card-t">A post from this ministry</span><span class="tlcb-card-m">Date</span></div>`).join('')}</div>`
+        ? `<div class="tlcb-cards">${[1, 2, 3].map(() => `<div class="tlcb-card"><div style="height:44px;border-radius:5px;background:repeating-linear-gradient(135deg,#DCE1E7 0 8px,#D2DAE7 8px 16px)"></div><span class="tlcb-card-t">A post from this ministry</span><span class="tlcb-card-m">Date</span></div>`).join('')}</div>`
         : `<div class="tlcb-rows">${[1, 2, 3].map(() => `<div class="tlcb-row"><span class="tlcb-row-d">Date</span><span class="tlcb-row-b"><span class="tlcb-row-n">An upcoming event</span><span class="tlcb-row-m">Time · Place</span></span></div>`).join('')}</div>`)
       : '';
     const note = opts.editing
@@ -5879,7 +5883,7 @@ function renderInner(b, opts) {
 
   if (t === 'spacer') {
     return opts.editing
-      ? `<div class="tlcb-spacer" style="border:1px dashed #C4CEDF;border-radius:7px;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--tlcb-ui);color:#A8A69A;letter-spacing:.1em">${b.height}PX SPACE</div>`
+      ? `<div class="tlcb-spacer" style="border:1px dashed #C9D6E3;border-radius:7px;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--tlcb-ui);color:#A8A69A;letter-spacing:.1em">${b.height}PX SPACE</div>`
       : `<div class="tlcb-spacer"></div>`;
   }
 
@@ -5982,13 +5986,13 @@ function renderInner(b, opts) {
       // calendar script, so a bare mount would read as a block that renders
       // nothing. It says what will be there instead.
       const inner = opts.editing
-        ? `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">The church calendar — the month, drawn by the site from the Google calendars and News &amp; Events together. Nothing to paste.</div>`
+        ? `<div style="border:1px solid #DCE1E7;border-radius:9px;padding:26px;text-align:center;background:#F7F9FB;color:#8A8898;font-size:13px">The church calendar — the month, drawn by the site from the Google calendars and News &amp; Events together. Nothing to paste.</div>`
         : `<div class="tlc-cal-mount" data-tlc-calendar></div>`;
       return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
     }
     const inner = src && !opts.editing
       ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
-      : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">Embed</div>`;
+      : `<div style="border:1px solid #DCE1E7;border-radius:9px;padding:26px;text-align:center;background:#F7F9FB;color:#8A8898;font-size:13px">Embed</div>`;
     return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
   }
 
@@ -6012,7 +6016,7 @@ function renderInner(b, opts) {
       inner = `<iframe src="${esc(src)}" title="${esc(b.title || 'Form')}" loading="lazy" style="width:100%;height:640px;border:0;border-radius:9px"></iframe>`;
     } else if (opts.editing) {
       inner = `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
-          <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">Sign up</span>
+          <span class="tlcb-btn" style="align-self:flex-start;background:#246582;border-color:#246582;color:#fff">Sign up</span>
           <span class="tlcb-note">${src ? 'Form embed' : 'Paste a Google Form URL in the panel on the right.'}</span></div>`;
     } else {
       inner = '';
@@ -6036,7 +6040,7 @@ function renderInner(b, opts) {
           <span class="tlcb-field"></span>
           <span class="tlcb-field"></span>
           <span class="tlcb-field" style="height:80px"></span>
-          <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">${esc(btnLabel)}</span>
+          <span class="tlcb-btn" style="align-self:flex-start;background:#246582;border-color:#246582;color:#fff">${esc(btnLabel)}</span>
           <span class="tlcb-note">The real, spam-screened ${kind} form — honeypot, signed token and Turnstile included. It only appears once this page is published.</span>
         </div></div>`;
     }
@@ -6084,7 +6088,7 @@ function renderInner(b, opts) {
     const px = (EMBED_HEIGHTS.find((h) => h.key === b.embedHeight) || EMBED_HEIGHTS[1]).px;
     const inner = src && !opts.editing
       ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Embed')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
-      : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">${src ? 'Embed' : 'Paste an embed code, or the address it points to, in the panel on the right.'}</div>`;
+      : `<div style="border:1px solid #DCE1E7;border-radius:9px;padding:26px;text-align:center;background:#F7F9FB;color:#8A8898;font-size:13px">${src ? 'Embed' : 'Paste an embed code, or the address it points to, in the panel on the right.'}</div>`;
     return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
   }
 

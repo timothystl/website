@@ -55,7 +55,7 @@ export const FALLBACK_FUNDS = [{ id: 0, name: 'General Fund', tithelyFundId: '',
 // admin/appearance.js resolved through publicAppearance() — the same values
 // that screen starts from.
 export const FALLBACK_APPEARANCE = {
-  bar: '#4A5E3A', rule: '#C9973A', cta: '#C9973A', ink: '#FFFFFF', ctaInk: '#FFFFFF',
+  bar: '#1A5C3E', rule: '#F2C14E', cta: '#F2C14E', ink: '#FFFFFF', ctaInk: '#FFFFFF',
   logo: '/logo.png?v=20260328', logoShape: 'round',
   name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations',
 };
@@ -75,10 +75,10 @@ const esc = (s) => String(s == null ? '' : s)
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 const VALUES_BAND = [
-  { key: 'acceptance', label: 'Acceptance', word: 'Welcome', color: '#4A5E3A' },
-  { key: 'worship',    label: 'Worship',    word: 'Receive', color: '#1E2D4A' },
-  { key: 'christianed', label: 'Christian Education', word: 'Grow', color: '#2E7EA6' },
-  { key: 'outreach',   label: 'Outreach',   word: 'Go',      color: '#C9973A' },
+  { key: 'acceptance', label: 'Acceptance', word: 'Welcome', color: '#1A5C3E' },
+  { key: 'worship',    label: 'Worship',    word: 'Receive', color: '#0B3C5C' },
+  { key: 'christianed', label: 'Christian Education', word: 'Grow', color: '#246582' },
+  { key: 'outreach',   label: 'Outreach',   word: 'Go',      color: '#F2C14E' },
 ];
 
 const valuesBandHtml = VALUES_BAND.map(v => `
@@ -164,9 +164,9 @@ function chromeCss(a) {
   .gv-home:hover{background:rgba(255,255,255,.14);}
   .gv-home:focus-visible,.gv-brand:focus-visible{outline:2px solid #fff;outline-offset:2px;}
 
-  .gv-foot{background:#111E32;padding:26px 40px;display:flex;justify-content:space-between;align-items:center;
+  .gv-foot{background:#0B2238;padding:26px 40px;display:flex;justify-content:space-between;align-items:center;
     flex-wrap:wrap;gap:12px;color:rgba(255,255,255,.72);font-size:13.5px;border-top:1px solid rgba(255,255,255,.1);}
-  .gv-foot a{color:#C9973A;font-weight:600;text-decoration:none;}
+  .gv-foot a{color:#F2C14E;font-weight:600;text-decoration:none;}
   .gv-foot a:hover{text-decoration:underline;}
   @media (max-width:900px){
     .gv-top{padding:12px 20px;gap:10px;}
@@ -225,7 +225,7 @@ export function renderGiveDocument({
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Source Sans 3', Arial, sans-serif; color: #4A4860; background: #F7F3EC; }
+  body { font-family: 'Source Sans 3', Arial, sans-serif; color: #4A4860; background: #F7F9FB; }
   a { text-decoration: none; }
   ${chromeCss(a)}
 </style>
@@ -290,58 +290,58 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
 
   const css = `<style>
   /* ── Hero header (full-width) ── */
-  .hero-header { background: #111E32; padding: 56px 40px; text-align: center; }
+  .hero-header { background: #0B2238; padding: 56px 40px; text-align: center; }
   .hero-header h1 {
     font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 48px; line-height: 1.1;
     color: #fff; text-wrap: balance; max-width: 820px; margin: 0 auto;
   }
 
   /* ── Give row: ministry ladder (left) + giving widget (right) ── */
-  .give-row { display: grid; grid-template-columns: 1.15fr .85fr; background: #FBF8F3; }
-  .ladder-col { padding: 48px 44px; border-right: 1px solid #DDE3ED; }
+  .give-row { display: grid; grid-template-columns: 1.15fr .85fr; background: #FFFFFF; }
+  .ladder-col { padding: 48px 44px; border-right: 1px solid #DCE1E7; }
   .ladder-eyebrow {
     font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
-    color: #C9973A; margin-bottom: 10px;
+    color: #F2C14E; margin-bottom: 10px;
   }
-  .ladder-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 26px; color: #1E2D4A; }
+  .ladder-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 26px; color: #0B3C5C; }
   .ladder-steps {
     margin-top: 18px; font-size: 14px; line-height: 1.65; color: #4A4860;
     display: flex; flex-direction: column; gap: 5px;
   }
-  .ladder-steps b { color: #1E2D4A; }
+  .ladder-steps b { color: #0B3C5C; }
   .ladder-list-label {
     margin-top: 24px; font-size: 12px; font-weight: 800; letter-spacing: .1em;
-    text-transform: uppercase; color: #1E2D4A; opacity: .85;
+    text-transform: uppercase; color: #0B3C5C; opacity: .85;
   }
   .ladder-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .ladder-row {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
-    background: #fff; border: 1px solid #DDE3ED; border-radius: 10px; padding: 14px 16px;
+    background: #fff; border: 1px solid #DCE1E7; border-radius: 10px; padding: 14px 16px;
     flex-wrap: wrap;
   }
-  .ladder-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 19px; color: #1E2D4A; }
+  .ladder-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 19px; color: #0B3C5C; }
   .ladder-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 12px; color: #8C8880; }
   .ladder-outcome { font-size: 13px; line-height: 1.5; color: #4A4860; margin-top: 2px; max-width: 320px; }
   .ladder-cta {
-    background: #C9973A; color: #1E2D4A; font-weight: 800; font-size: 13px;
+    background: #F2C14E; color: #0B3C5C; font-weight: 800; font-size: 13px;
     padding: 10px 16px; border-radius: 8px; white-space: nowrap; transition: background .2s;
   }
-  .ladder-cta:hover { background: #E8C070; }
+  .ladder-cta:hover { background: #F7D57E; }
 
-  .widget-col { background: #FBF8F3; padding: 48px 40px; display: flex; flex-direction: column; }
-  .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #1E2D4A; }
-  .widget-col .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 15.5px; color: #2E7EA6; margin-top: 4px; }
+  .widget-col { background: #FFFFFF; padding: 48px 40px; display: flex; flex-direction: column; }
+  .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #0B3C5C; }
+  .widget-col .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 15.5px; color: #246582; margin-top: 4px; }
 
   .fund-label {
     font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
     color: #6b6a5f; margin-top: 24px; margin-bottom: 8px;
   }
   .fund-select {
-    width: 100%; background: #fff; border: 1px solid #DDE3ED; border-radius: 9px;
+    width: 100%; background: #fff; border: 1px solid #DCE1E7; border-radius: 9px;
     padding: 12px 14px; font-family: 'Source Sans 3', sans-serif; font-size: 15px;
-    color: #1E2D4A; font-weight: 600; cursor: pointer;
+    color: #0B3C5C; font-weight: 600; cursor: pointer;
   }
-  .fund-select:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
+  .fund-select:focus-visible { outline: 2px solid #246582; outline-offset: 2px; }
 
   .amount-label {
     font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
@@ -350,44 +350,44 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
   .amount-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .chip {
     border-radius: 8px; font-size: 17px; font-weight: 700; text-align: center;
-    padding: 14px 0; background: #fff; color: #1E2D4A; border: 1px solid #DDE3ED;
+    padding: 14px 0; background: #fff; color: #0B3C5C; border: 1px solid #DCE1E7;
     cursor: pointer; transition: all .15s;
   }
-  .chip.active { background: #1E2D4A; color: #fff; border-color: #1E2D4A; box-shadow: 0 6px 16px -8px rgba(30,45,74,.6); }
-  .chip:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
+  .chip.active { background: #0B3C5C; color: #fff; border-color: #0B3C5C; box-shadow: 0 6px 16px -8px rgba(11,60,92,.6); }
+  .chip:focus-visible { outline: 2px solid #246582; outline-offset: 2px; }
 
   .other-amount {
-    margin-top: 10px; background: #fff; border: 1px solid #DDE3ED; border-radius: 9px;
+    margin-top: 10px; background: #fff; border: 1px solid #DCE1E7; border-radius: 9px;
     padding: 12px 14px; display: flex; align-items: center; gap: 8px;
   }
   .other-amount .dollar { font-family: 'Lora', Georgia, serif; font-size: 19px; color: #8C8880; }
   .other-amount input {
     border: none; outline: none; font-size: 15px; font-family: 'Source Sans 3', sans-serif;
-    color: #1E2D4A; flex: 1; min-width: 0; background: transparent;
+    color: #0B3C5C; flex: 1; min-width: 0; background: transparent;
   }
-  .other-amount input:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
-  .amount-error { font-size: 12.5px; color: #B0821E; margin-top: 6px; display: none; }
+  .other-amount input:focus-visible { outline: 2px solid #246582; outline-offset: 2px; }
+  .amount-error { font-size: 12.5px; color: #D9A63A; margin-top: 6px; display: none; }
   .amount-error.show { display: block; }
 
   .cta {
     margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 8px;
-    background: #C9973A; color: #1E2D4A; font-family: 'Source Sans 3', sans-serif;
+    background: #F2C14E; color: #0B3C5C; font-family: 'Source Sans 3', sans-serif;
     font-size: 21px; font-weight: 800; padding: 20px; border-radius: 10px;
-    box-shadow: 0 12px 28px -14px rgba(30,45,74,.5);
+    box-shadow: 0 12px 28px -14px rgba(11,60,92,.5);
     transition: background .2s, transform .15s;
   }
-  .cta:hover { background: #E8C070; transform: translateY(-2px); }
-  .cta:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
+  .cta:hover { background: #F7D57E; transform: translateY(-2px); }
+  .cta:focus-visible { outline: 2px solid #246582; outline-offset: 2px; }
 
   .trust-line { margin-top: 16px; display: flex; gap: 9px; font-size: 12.5px; line-height: 1.55; color: #6b6a5f; }
   .trust-line svg { flex-shrink: 0; margin-top: 2px; }
 
   /* ── Leadership giving ── */
-  .leadership-section { background: #111E32; padding: 48px 40px; }
+  .leadership-section { background: #0B2238; padding: 48px 40px; }
   .leadership-intro { max-width: 720px; margin: 0 auto 32px; text-align: center; }
   .leadership-eyebrow {
     font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
-    color: #E8C070; margin-bottom: 10px;
+    color: #F7D57E; margin-bottom: 10px;
   }
   .leadership-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 30px; color: #fff; }
   .leadership-sub { font-size: 15px; color: rgba(255,255,255,.7); margin-top: 10px; line-height: 1.6; }
@@ -397,43 +397,43 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
     background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
     border-radius: 10px; padding: 18px 22px; flex-wrap: wrap;
   }
-  .leadership-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 24px; color: #E8C070; }
+  .leadership-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 24px; color: #F7D57E; }
   .leadership-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 13px; color: rgba(255,255,255,.55); }
   .leadership-outcome { font-size: 14.5px; color: rgba(255,255,255,.82); line-height: 1.55; margin-top: 4px; max-width: 480px; }
   .leadership-cta {
-    background: #C9973A; color: #1E2D4A; font-weight: 800; font-size: 14.5px;
+    background: #F2C14E; color: #0B3C5C; font-weight: 800; font-size: 14.5px;
     padding: 12px 20px; border-radius: 8px; white-space: nowrap; transition: background .2s;
   }
-  .leadership-cta:hover { background: #E8C070; }
+  .leadership-cta:hover { background: #F7D57E; }
   .leadership-note {
     max-width: 780px; margin: 16px auto 0; text-align: center;
     font-size: 13px; line-height: 1.55; color: rgba(255,255,255,.7);
   }
-  .leadership-note strong { color: #E8C070; }
+  .leadership-note strong { color: #F7D57E; }
 
   /* ── Other ways to give ── */
   .other-ways {
-    background: #FBF8F3; border-top: 1px solid #DDE3ED; padding: 30px 40px 34px;
+    background: #FFFFFF; border-top: 1px solid #DCE1E7; padding: 30px 40px 34px;
     display: flex; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: 20px;
   }
   .ow-copy { max-width: 620px; }
-  .ow-eyebrow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #4A5E3A; }
+  .ow-eyebrow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #1A5C3E; }
   .ow-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1A1A2A; margin-top: 5px; }
   .ow-items { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
   .ow-item {
-    background: #FFFFFF; border: 1px solid #DDE3ED; border-radius: 999px;
+    background: #FFFFFF; border: 1px solid #DCE1E7; border-radius: 999px;
     padding: 5px 13px; font-size: 12.5px; color: #4A4860; white-space: nowrap;
   }
   .ow-cta {
-    background: #1E2D4A; color: #FFFFFF; font-weight: 800; font-size: 14.5px;
+    background: #0B3C5C; color: #FFFFFF; font-weight: 800; font-size: 14.5px;
     padding: 12px 22px; border-radius: 8px; white-space: nowrap; transition: background .2s;
   }
   .ow-cta:hover { background: #2E4670; }
 
   /* ── Values band ── */
   .values-band {
-    background: #F7F3EC; border-top: 1px solid #DDE3ED; padding: 32px 40px 36px;
+    background: #F7F9FB; border-top: 1px solid #DCE1E7; padding: 32px 40px 36px;
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
   }
   .vb-cell { padding: 0 20px; }
@@ -449,7 +449,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
        for giving to reach the button. Put the widget first; the ladder then reads as the
        supporting argument below it, which is the right order on a small screen. The divider
        moves with it, so the line still falls between the two. */
-    .widget-col { order: -1; border-bottom: 1px solid #DDE3ED; padding: 32px 22px; }
+    .widget-col { order: -1; border-bottom: 1px solid #DCE1E7; padding: 32px 22px; }
     .ladder-col { order: 0; border-right: none; padding: 32px 22px; }
     .values-band { grid-template-columns: 1fr 1fr; padding: 24px 20px 28px; }
     .other-ways { padding: 26px 20px 30px; }
@@ -514,7 +514,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
       </a>
 
       <div class="trust-line">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4A5E3A" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1A5C3E" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
         <span>Secure, encrypted giving through Tithe.ly. Receipt emailed instantly · tax-deductible · no account required.</span>
       </div>
     </div>

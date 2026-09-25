@@ -50,7 +50,7 @@ group('A bar color cannot be one the nav text disappears against');
       `${c.label} carries its own ink at 4.5:1 (got ${contrast(c.value, c.ink).toFixed(2)})`);
   }
   ok(!BAR_KEYS.includes('gold'),
-    'gold is not offered as a bar color — white on #C9973A is 2.6:1');
+    'gold is not offered as a bar color — white on #F2C14E is unreadable');
   ok(PALETTE_KEYS.includes('gold'),
     'but it stays available for the rule and the Give button, which is how the site already looks');
 
@@ -152,7 +152,7 @@ group('Draft and published are compared, never remembered');
 group('What the public site is sent');
 {
   const pub = publicAppearance({ bar: 'navy', rule: 'gold', cta: 'gold' });
-  eq(pub.bar, '#1E2D4A', 'colors are resolved to values here, not in the browser');
+  eq(pub.bar, '#0B3C5C', 'colors are resolved to values here, not in the browser');
   eq(pub.ink, '#FFFFFF', 'with the ink that goes on them');
   ok(!('logo_url' in pub), 'the stored shape is not leaked as-is');
 

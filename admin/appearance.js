@@ -51,20 +51,21 @@
 // already has — see the note on `cta` below. Pretending it passes here would
 // bury it.
 export const PALETTE = [
-  // ⚠ Ink navy is not the same as Navy, and both are here on purpose. Navy
-  // (#1E2D4A) is the site's own --steel, used by every button and heading on
-  // the pages that have not been converted; ink navy (#101B2E) is the
-  // redesign's darker ground, and a bar in the first against a page in the
-  // second reads as a mistake rather than as two shades. It leads the list
-  // because it is the default.
-  { key: 'ink',      label: 'Ink navy', value: '#101B2E', ink: '#FFFFFF', bar: true },
-  { key: 'moss',     label: 'Moss',     value: '#4A5E3A', ink: '#FFFFFF', bar: true },
-  { key: 'navy',     label: 'Navy',     value: '#1E2D4A', ink: '#FFFFFF', bar: true },
-  { key: 'teal',     label: 'Teal',     value: '#2E7EA6', ink: '#FFFFFF', bar: true },
+  // ⚠ Repainted in place for the Deep sea & sun design system (Sept 2026).
+  // The KEYS are what saved appearance records hold, so they never change;
+  // only the hex each one resolves to does, and every page picks that up on
+  // the next deploy. Ink navy is the design's --brand-ink, Deep sea (stored
+  // as 'navy') is its --primary, and Gold is its sun --accent, which is
+  // bright enough that the Give button now carries navy lettering (about
+  // 9:1) instead of the 2.6:1 white it used to.
+  { key: 'ink',      label: 'Ink navy', value: '#0B2238', ink: '#FFFFFF', bar: true },
+  { key: 'moss',     label: 'Green',    value: '#1A5C3E', ink: '#FFFFFF', bar: true },
+  { key: 'navy',     label: 'Deep sea', value: '#0B3C5C', ink: '#FFFFFF', bar: true },
+  { key: 'teal',     label: 'Teal',     value: '#246582', ink: '#FFFFFF', bar: true },
   { key: 'slate',    label: 'Slate',    value: '#3A4E5C', ink: '#FFFFFF', bar: true },
   { key: 'plum',     label: 'Plum',     value: '#8A6A8A', ink: '#FFFFFF', bar: true },
   { key: 'charcoal', label: 'Charcoal', value: '#1A1A2A', ink: '#FFFFFF', bar: true },
-  { key: 'gold',     label: 'Gold',     value: '#C9973A', ink: '#FFFFFF', bar: false },
+  { key: 'gold',     label: 'Gold',     value: '#F2C14E', ink: '#0B2238', bar: false },
 ];
 
 // ── THE TYPEFACE ─────────────────────────────────────────────
@@ -463,13 +464,8 @@ export function publicAppearance(a) {
     rule: colorOf(s.rule, 'gold').value,
     cta: colorOf(s.cta, 'gold').value,
     ink: colorOf(s.bar).ink,
-    // ⚠ The Give button's label is white on gold today — 2.6:1, which is below
-    // the 4.5:1 a body of text needs. That is the site as it already is, and
-    // it is sent on unchanged here rather than quietly corrected: recoloring
-    // the most-clicked button on the church website is a decision somebody
-    // should make on purpose, not a side effect of making the header editable.
-    // Flagged in CLAUDE.md. Picking a darker CTA color on this screen fixes
-    // it today without any code change, which is part of why the choice exists.
+    // The Give button's lettering is whatever the chosen color carries: navy
+    // on the design system's bright gold, white on every dark choice.
     ctaInk: colorOf(s.cta, 'gold').ink,
     logo: s.logo_url,
     logoShape: s.logo_shape,

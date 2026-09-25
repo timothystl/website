@@ -54,7 +54,7 @@ const ERROR_PAGE_HTML = `<!DOCTYPE html>
     @import url('https://fonts.googleapis.com/css2?family=Lora:wght@600&family=Source+Sans+3:wght@400;600&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #F7F3EC;
+      background: #F7F9FB;
       font-family: 'Source Sans 3', Arial, sans-serif;
       color: #1A1A2A;
       min-height: 100vh;
@@ -72,13 +72,13 @@ const ERROR_PAGE_HTML = `<!DOCTYPE html>
       font-weight: 600;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #C9973A;
+      color: #F2C14E;
       margin-bottom: 16px;
     }
     h1 {
       font-family: Lora, Georgia, serif;
       font-size: clamp(36px, 6vw, 64px);
-      color: #1E2D4A;
+      color: #0B3C5C;
       line-height: 1.1;
       margin-bottom: 20px;
     }
@@ -91,7 +91,7 @@ const ERROR_PAGE_HTML = `<!DOCTYPE html>
     }
     .btn {
       display: inline-block;
-      background: #1E2D4A;
+      background: #0B3C5C;
       color: #fff;
       font-family: 'Source Sans 3', Arial, sans-serif;
       font-size: 16px;
@@ -193,9 +193,9 @@ const NOT_FOUND_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Page not found &middot; Timothy Lutheran Church</title>
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-background:#F7F3EC;color:#1A1A2A;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center}
+background:#F7F9FB;color:#1A1A2A;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center}
 main{padding:32px;max-width:32rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0 0 1.5rem;color:#4A4860}
-a{display:inline-block;padding:12px 24px;border-radius:999px;background:#1E2D4A;color:#F5E4C0;text-decoration:none}</style>
+a{display:inline-block;padding:12px 24px;border-radius:999px;background:#0B3C5C;color:#FEF6DC;text-decoration:none}</style>
 </head><body><main><h1>Page not found</h1>
 <p>That address does not exist on our site.</p>
 <a href="https://timothystl.org/">Go to the homepage</a></main></body></html>`;

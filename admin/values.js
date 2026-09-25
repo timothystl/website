@@ -31,21 +31,20 @@
 // they stay distinguishable even where the hues are neighbors, and it cannot
 // be undone by a later tone landing on a hue a value already uses.
 //
-// The hues are the church's own (moss, navy, teal, plum — see the design
-// system in CLAUDE.md), spaced so no two tints are within 20 of each other on
-// any channel. `values.test.mjs` asserts the separation, the non-collision and
+// The hues are the Timothy Website Design System's four values (Sept 2026):
+// Welcome #F2C14E, Receive #B9A3E3, Grow #7FCB94, Go #F08A74, each with its
+// `soft` companion for large areas, and all four carry navy (#0B2238) ink.
+// They are spaced so no two tints are within 20 of each other on any channel. `values.test.mjs` asserts the separation, the non-collision and
 // 4.5:1 ink-on-tint, so this cannot quietly drift back.
 export const VALUES = [
   {
     key: 'acceptance',
-    // The redesign's own field for this value — a gradient, its bright
-    // accent, and whether text on it is light or dark. Authored to a
-    // contrast budget: a field is measured at the END THAT HURTS (the
-    // light stop for white ink), which is why these are darker than the
-    // brand hues they came from.
-    field: 'linear-gradient(150deg,#153A1E 0%,#2F6B3A 58%,#3F7A38 100%)',
-    light: '#6FA84E',
-    darkInk: false,
+    // The value's field — a shallow gradient around its bright fill, the
+    // rule color drawn on it, and dark ink. Deep sea & sun (Sept 2026): every
+    // value color is a bright fill that carries navy text, never white.
+    field: 'linear-gradient(150deg,#F7D57E 0%,#F2C14E 58%,#E8B23A 100%)',
+    light: '#0B2238',
+    darkInk: true,
     tag: 'Welcoming all people with the love of Jesus.',
     why: 'Nothing else on this list happens to a person who never felt welcome. Acceptance is not the warm-up; it is the first thing the gospel does.',
     ways: [
@@ -58,21 +57,20 @@ export const VALUES = [
     ],
     short: 'Welcome',
     name: 'Acceptance',
-    tint: '#D6E4BE',
-    ink: '#33431E',
-    solid: '#4A5E3A',
+    tint: '#F2C14E',
+    soft: '#FEF6DC',
+    ink: '#0B2238',
+    solid: '#8A6400',
     blurb: 'Intentionally welcoming and loving all people as Jesus does.',
   },
   {
     key: 'worship',
-    // The redesign's own field for this value — a gradient, its bright
-    // accent, and whether text on it is light or dark. Authored to a
-    // contrast budget: a field is measured at the END THAT HURTS (the
-    // light stop for white ink), which is why these are darker than the
-    // brand hues they came from.
-    field: 'linear-gradient(150deg,#0E2B5B 0%,#1B4FA0 58%,#3266AE 100%)',
-    light: '#3E7BD1',
-    darkInk: false,
+    // The value's field — a shallow gradient around its bright fill, the
+    // rule color drawn on it, and dark ink. Deep sea & sun (Sept 2026): every
+    // value color is a bright fill that carries navy text, never white.
+    field: 'linear-gradient(150deg,#D3C5EF 0%,#B9A3E3 58%,#A58BD8 100%)',
+    light: '#0B2238',
+    darkInk: true,
     tag: 'Gathering as God’s people to celebrate His grace and receive His gifts through Word and Sacrament.',
     why: 'Lutherans put receiving before doing. Sunday morning is not what we offer God; it is where He hands out what He has already won.',
     ways: [
@@ -85,21 +83,20 @@ export const VALUES = [
     ],
     short: 'Receive',
     name: 'Worship',
-    tint: '#CEDBF7',
-    ink: '#1E2D4A',
-    solid: '#1E2D4A',
+    tint: '#B9A3E3',
+    soft: '#F1ECFA',
+    ink: '#0B2238',
+    solid: '#5B3FA0',
     blurb: "Gathering as God's people, celebrating His grace, receiving His gifts of Word and Sacrament.",
   },
   {
     key: 'education',
-    // The redesign's own field for this value — a gradient, its bright
-    // accent, and whether text on it is light or dark. Authored to a
-    // contrast budget: a field is measured at the END THAT HURTS (the
-    // light stop for white ink), which is why these are darker than the
-    // brand hues they came from.
-    field: 'linear-gradient(150deg,#0C3F47 0%,#17636D 58%,#1F7A86 100%)',
-    light: '#45AFB8',
-    darkInk: false,
+    // The value's field — a shallow gradient around its bright fill, the
+    // rule color drawn on it, and dark ink. Deep sea & sun (Sept 2026): every
+    // value color is a bright fill that carries navy text, never white.
+    field: 'linear-gradient(150deg,#A6DCB5 0%,#7FCB94 58%,#68BD80 100%)',
+    light: '#0B2238',
+    darkInk: true,
     tag: 'Growing together in Christ — equipping people to grow in a lifelong journey with Him.',
     why: 'Faith that stopped learning stopped moving. Confirmation is not graduation, and neither is being sixty.',
     ways: [
@@ -112,20 +109,19 @@ export const VALUES = [
     ],
     short: 'Grow',
     name: 'Christian Education',
-    tint: '#BAE8DE',
-    ink: '#0F5049',
-    solid: '#1F7A70',
+    tint: '#7FCB94',
+    soft: '#E6F5EA',
+    ink: '#0B2238',
+    solid: '#1A5C3E',
     blurb: 'Equipping people for a lifelong journey with Christ.',
   },
   {
     key: 'outreach',
-    // The redesign's own field for this value — a gradient, its bright
-    // accent, and whether text on it is light or dark. Authored to a
-    // contrast budget: a field is measured at the END THAT HURTS (the
-    // light stop for white ink), which is why these are darker than the
-    // brand hues they came from.
-    field: 'linear-gradient(140deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)',
-    light: '#E8A93C',
+    // The value's field — a shallow gradient around its bright fill, the
+    // rule color drawn on it, and dark ink. Deep sea & sun (Sept 2026): every
+    // value color is a bright fill that carries navy text, never white.
+    field: 'linear-gradient(140deg,#F6AC9B 0%,#F08A74 52%,#E8765E 100%)',
+    light: '#0B2238',
     darkInk: true,
     tag: 'Sharing Jesus with our neighbors and the nations — sharing the love of Jesus with those who do not yet know Him.',
     why: 'From our neighborhood to the nations is not a slogan on the letterhead. It is the last line of the arc, and it points out the door.',
@@ -139,9 +135,10 @@ export const VALUES = [
     ],
     short: 'Go',
     name: 'Outreach',
-    tint: '#E4CBEE',
-    ink: '#573A5F',
-    solid: '#8A6A8A',
+    tint: '#F08A74',
+    soft: '#FDECE8',
+    ink: '#0B2238',
+    solid: '#8A2A1C',
     blurb: "Sharing the love of Jesus with those who don't yet know Him.",
   },
 ];

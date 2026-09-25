@@ -3319,6 +3319,7 @@ export default {
         photoUrl: v.photo_url || '',
         ink: v.ink,
         tint: v.tint,
+        soft: v.soft,
         partner: byValue[v.key] || null,
         ministries: counts.filter((m) => m.value === v.key).map((m) => ({ slug: m.slug, title: m.title })),
       }));
