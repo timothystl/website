@@ -23,7 +23,10 @@ test('release pins one tree, resumes its own version bump, and refuses supersede
     writeFileSync(join(local,'app.js'),'newer code');git('add','.');git('commit','-m','Newer application');git('push','origin','HEAD:main');
     const newer=git('rev-parse','HEAD');git('checkout','--detach',source);
     assert.match(prepare(),/deploy=false/);assert.equal(git('rev-parse','HEAD'),source);
-    git('checkout','--detach',newer);writeFileSync(join(local,'admin/helpers.js'),"export const VERSION = 'v2.0.0';\n");git('add','.');git('commit','-m','Chosen version');git('push','origin','HEAD:main');
+    git('checkout','--detach',newer);writeFileSync(join(local,'admin/helpers.js'),"export const VERSION = 'v0.1.0-alpha.1';\n");git('add','.');git('commit','-m','Chosen version');git('push','origin','HEAD:main');
     const chosen=git('rev-parse','HEAD');assert.match(prepare(),/deploy=true/);assert.equal(git('rev-parse','HEAD'),chosen);
+    writeFileSync(join(local,'app.js'),'post-reset release');git('add','.');git('commit','-m','Next alpha change');git('push','origin','HEAD:main');
+    assert.match(prepare(),/deploy=true/);
+    assert.match(readFileSync(join(local,'admin/helpers.js'),'utf8'),/v0.1.0-alpha.2/);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
