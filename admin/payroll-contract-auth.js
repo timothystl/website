@@ -100,8 +100,11 @@ export async function verifyAccessJwt(token, { teamDomain, audience, fetchImpl =
   if (typeof payload.exp !== 'number' || payload.exp < nowSec) return null;
   if (typeof payload.nbf === 'number' && payload.nbf > nowSec) return null;
   if (payload.iss !== `https://${teamDomain}`) return null;
+  // `audience` may list several Access application AUDs, comma-separated: production and
+  // staging Finance are separate Access applications but relay to this same Worker.
+  const accepted = String(audience).split(',').map((a) => a.trim()).filter(Boolean);
   const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (!auds.includes(audience)) return null;
+  if (!auds.some((a) => accepted.includes(a))) return null;
   if (!payload.email || typeof payload.email !== 'string') return null;
 
   return payload.email.toLowerCase();
