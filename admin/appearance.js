@@ -172,7 +172,7 @@ export const DEFAULTS = {
   bar: 'ink',
   rule: 'gold',
   cta: 'gold',
-  logo_url: '/logo.png?v=20260328',
+  logo_url: '/logo.png?v=20260926',
   logo_shape: 'round',
   brand_name: 'Timothy Lutheran Church',
   tagline: 'from our Neighborhood to the Nations',
