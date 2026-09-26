@@ -287,6 +287,15 @@ group('a rewritten document cannot be revalidated against the stale asset ETag')
   const cachedImg = withAssetCaching(img, 'logo.webp');
   eq(cachedImg.headers.get('ETag'), '"def456"', 'a real asset keeps its own validator');
   ok(/max-age=86400/.test(cachedImg.headers.get('Cache-Control')), 'and its long cache');
+  eq(cachedImg.headers.get('Access-Control-Allow-Origin'), null, 'an image is not given a CORS header');
+
+  // Fonts load with CORS. The Website Admin draws the brand face (Hero) in its
+  // header preview and page editor from these files, so the admin origin, and
+  // only that origin, is allowed to use them.
+  const font = { headers: new Headers({ 'content-type': 'font/woff2' }), body: 'x', status: 200, statusText: 'OK' };
+  const cachedFont = withAssetCaching(font, '/fonts/hero-bold.woff2');
+  eq(cachedFont.headers.get('Access-Control-Allow-Origin'), 'https://admin.timothystl.org', 'a font names the admin origin for CORS');
+  ok(/max-age=86400/.test(cachedFont.headers.get('Cache-Control')), 'and keeps the long cache');
 
   // The other half: env.ASSETS.fetch() must never even see the browser's own
   // conditional headers for a document-shaped request, or it can hand back a

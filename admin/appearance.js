@@ -69,7 +69,7 @@ export const PALETTE = [
 ];
 
 // ── THE TYPEFACE ─────────────────────────────────────────────
-// One control, two pairs, and it moves the WHOLE site — the header, the
+// One control, three pairs, and it moves the WHOLE site — the header, the
 // footer, every heading on every page and every block in the page editor.
 //
 // That is the point rather than a side effect. Dinger's answer to "should the
@@ -87,7 +87,20 @@ export const PALETTE = [
 // The three names are the three custom properties public/styles.css already
 // declares, so switching the pair is re-pointing variables the site has always
 // used rather than a new mechanism laid over the old one.
+//
+// 'brand' is the September 2026 identity: Hero (Fontfabric, self-hosted from
+// public/fonts/ under its free-font EULA, which permits @font-face use) sets
+// the name, headings and UI the way the logo's lettering does, and Newsreader
+// stays the reading face. Hero ships in three weights — Light, Regular and
+// Bold — so a 600 or 800 request renders as Bold.
 export const TYPEFACES = [
+  {
+    key: 'brand', label: 'Hero & Newsreader',
+    head: "'Hero',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    body: "'Newsreader',Georgia,'Times New Roman',serif",
+    ui: "'Hero',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    note: 'The Timothy brand typeface. Hero for headings, the header and buttons, as in the logo; Newsreader for reading.',
+  },
   {
     key: 'redesign', label: 'Bricolage & Newsreader',
     head: "'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
@@ -157,7 +170,7 @@ export const DEFAULTS = {
   // the admin is UNREACHABLE, since applyAppearance() never runs then and the
   // static markup is all there is. A default of 'classic' would mean the site
   // silently reverted to the old typefaces during an admin outage.
-  typeface: 'redesign',
+  typeface: 'brand',
   // Normal is the site exactly as it reads today, so the record ships changing
   // nothing — unlike `typeface` above, this is a preference rather than a look
   // somebody has already asked for.

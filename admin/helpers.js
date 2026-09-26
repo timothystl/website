@@ -12,6 +12,15 @@ import { APPEARANCE_CSS } from './appearance.js';
 
 export const VERSION = 'v0.1.0-alpha.4'; // Product version; the deployment SHA uniquely identifies each release.
 
+// Hero's @font-face rules, prepended to ADMIN_SHELL_CSS below, for the admin
+// pages that draw the public site (header preview, page editor). Hero is not
+// on Google Fonts; the files live on timothystl.org, which sends this origin
+// the CORS header a cross-origin font needs (see withAssetCaching() in
+// site-worker.js).
+export const HERO_FONT_FACES = [['light', '200 300'], ['regular', '400 500'], ['bold', '600 900']]
+  .map(([f, w]) => `@font-face{font-family:'Hero';src:url('https://timothystl.org/fonts/hero-${f}.woff2') format('woff2');font-weight:${w};font-style:normal;font-display:swap;}`)
+  .join('');
+
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
 // tags — ~89KB, unminified, re-sent and re-parsed on every single click,
@@ -23,7 +32,7 @@ export const VERSION = 'v0.1.0-alpha.4'; // Product version; the deployment SHA 
 // automatically by the `?v=${VERSION}` query string every deploy already
 // bumps. Same-origin, so the existing CSP's 'self' already allows both —
 // nothing there needed to change.
-export const ADMIN_SHELL_CSS = `
+export const ADMIN_SHELL_CSS = HERO_FONT_FACES + `
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
 /* Full width under the header — a table constrained to 860px in a 1600px
@@ -639,7 +648,7 @@ ${MARKET_JS}
 // 'unsafe-eval' is not here.
 export const ADMIN_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; "
   + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-  + "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
+  + "font-src 'self' https://fonts.gstatic.com https://timothystl.org; img-src 'self' data: blob: https:; "
   + "connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 // A JSON admin API response — never cached, never indexed. Sibling of html()
