@@ -327,6 +327,50 @@ let pagesCache = null;
 let pagesCacheTime = 0;
 let pagesCacheStamp = null;
 
+// The module cache above disappears with its Worker isolate. Keep the last
+// successful public bundle in this Worker's edge cache too, so a new isolate
+// in a location that has served the site before can still render the most
+// recently published pages while Website Admin is unavailable. This is only
+// public /api/pages output -- never drafts, sessions, or administrator data.
+// Cloudflare's Cache API is data-center-local rather than a database, so the
+// static site remains the final fallback for a genuinely cold location.
+const PAGES_SNAPSHOT_URL = 'https://timothystl.org/__internal/published-pages-snapshot-v1';
+const PAGES_SNAPSHOT_MAX_AGE_SECONDS = 31_536_000;
+
+function siteEdgeCache() {
+  return (typeof caches !== 'undefined' && caches.default) ? caches.default : null;
+}
+
+function isPublishedPagesPayload(data) {
+  return !!data && typeof data === 'object' && Array.isArray(data.pages) &&
+    !!data.rendered && typeof data.rendered === 'object' && !Array.isArray(data.rendered);
+}
+
+async function readPublishedPagesSnapshot() {
+  const cache = siteEdgeCache();
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(new Request(PAGES_SNAPSHOT_URL));
+    if (!hit || !hit.ok) return null;
+    const data = await hit.json();
+    return isPublishedPagesPayload(data) ? data : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function persistPublishedPagesSnapshot(data, ctx) {
+  const cache = siteEdgeCache();
+  if (!cache || !ctx || typeof ctx.waitUntil !== 'function') return;
+  const response = new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      'Cache-Control': `public, max-age=${PAGES_SNAPSHOT_MAX_AGE_SECONDS}`,
+    },
+  });
+  ctx.waitUntil(cache.put(new Request(PAGES_SNAPSHOT_URL), response).catch(() => undefined));
+}
+
 // ── THE PAGE BUNDLE IS NOT ON A CLOCK ANY MORE ──────────────────────────────
 // It used to re-fetch every CACHE_TTL whether or not anything had changed, and
 // there was no alternative: this copy lives in one isolate's memory and nothing
@@ -390,7 +434,7 @@ async function contentStamp() {
   return null;
 }
 
-async function getPublishedPages() {
+export async function getPublishedPages(ctx) {
   const now = Date.now();
   if (pagesCache && now - pagesCacheTime < PAGES_MAX_AGE) {
     const stamp = await contentStamp();
@@ -406,12 +450,28 @@ async function getPublishedPages() {
     // publish at all, and serves it for a day.
     const [res, stamp] = await Promise.all([fetchAdmin('/api/pages'), contentStamp()]);
     if (res.ok) {
-      pagesCache = await res.json();
-      pagesCacheTime = now;
-      pagesCacheStamp = stamp;
+      const data = await res.json();
+      if (isPublishedPagesPayload(data)) {
+        pagesCache = data;
+        pagesCacheTime = now;
+        pagesCacheStamp = stamp;
+        persistPublishedPagesSnapshot(data, ctx);
+      }
     }
   } catch (_) { /* the client-side takeover is the fallback */ }
+  if (!pagesCache) {
+    pagesCache = await readPublishedPagesSnapshot();
+    if (pagesCache) pagesCacheTime = now;
+  }
   return pagesCache;
+}
+
+export function resetPublishedPagesCacheForTests() {
+  pagesCache = null;
+  pagesCacheTime = 0;
+  pagesCacheStamp = null;
+  stampCache = null;
+  stampCacheTime = 0;
 }
 
 // ⚠ A MIRROR OF tlcPathFor() IN public/index.html, AND IT HAS TO STAY ONE.
@@ -882,7 +942,7 @@ export default {
       // ask the admin Worker different questions and neither needs the other's
       // answer; awaiting them in sequence simply added one round trip to every
       // page load, and doubled how long a degraded admin could hold the site.
-      const pagesPromise = getPublishedPages();
+      const pagesPromise = getPublishedPages(ctx);
       const social = await getSettingUrl('social_image_url', '');
       const socialImage = /^https:\/\/\S+$/.test(social) ? social : '';
 
