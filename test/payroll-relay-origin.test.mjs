@@ -147,6 +147,29 @@ try {
     // contract-relay credentials is simply ignored, not treated as a reason to block.
     eq(res.status, 200, 'contract-relay auth is what matters, not whatever Origin happens to be present');
   }
+  group('production and staging Finance Access audiences are both accepted');
+  {
+    const PROD_AUD = 'prod-finance-aud';
+    const multiEnv = { ...env, FINANCE_ACCESS_AUD: `${PROD_AUD}, ${AUD}` };
+    for (const [aud, label] of [[PROD_AUD, 'production'], [AUD, 'staging']]) {
+      resetPayrollContractAuthCacheForTests();
+      const token = await signToken(keyPair.privateKey, 'test-kid', { ...accessJwtPayload(), aud });
+      const res = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+        method: 'POST',
+        headers: { 'X-Contract-Key': CONTRACT_KEY, 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
+        body: '{}',
+      }), multiEnv, ctx);
+      eq(res.status, 200, `a ${label} Finance token is accepted`);
+    }
+    resetPayrollContractAuthCacheForTests();
+    const token = await signToken(keyPair.privateKey, 'test-kid', { ...accessJwtPayload(), aud: 'some-other-app' });
+    const res = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+      method: 'POST',
+      headers: { 'X-Contract-Key': CONTRACT_KEY, 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json' },
+      body: '{}',
+    }), multiEnv, ctx);
+    ok(res.status !== 200, 'a token for any other Access application is still refused');
+  }
 } finally {
   globalThis.fetch = originalFetch;
 }

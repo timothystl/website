@@ -16,7 +16,9 @@ invocation_logs = true
 # which Cloudflare Access application's public keys to check against.
 [vars]
 FINANCE_ACCESS_TEAM_DOMAIN = "timothystl.cloudflareaccess.com"
-FINANCE_ACCESS_AUD = "3c8cae1345ea2e2e15a88e01d7801c27ec7a57bfb73952098bd4b1929ab01717"
+# Comma-separated: production Finance (finance.timothystl.org, same AUD Connect's wrangler.toml
+# uses) and staging Finance. Both relay payroll calls to this one Worker.
+FINANCE_ACCESS_AUD = "74de33dfe1e65b4eea9b8bf51e04d654e470a60773175bf34d74d55e940b66eb,3c8cae1345ea2e2e15a88e01d7801c27ec7a57bfb73952098bd4b1929ab01717"
 
 # Repointed 2026-09-15: Connect's Worker was renamed tlc-chms -> timothy-connect in place via
 # the Cloudflare dashboard (same underlying script id, confirmed before/after via the Workers
