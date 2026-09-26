@@ -107,6 +107,12 @@ jobs:
       - name: Site edge render
         run: node test/site-edge-render.test.mjs
 
+      # A new Site Worker isolate should keep the last successfully published
+      # bundle through a Website Admin outage, not drop all the way back to the
+      # repository's old static markup merely because its module memory is cold.
+      - name: Published page outage snapshot
+        run: node test/site-published-snapshot.test.mjs
+
       # The 404 gate. Browserless for the same reason as the two above. The
       # assertion worth having is not the status code — it is that no REAL
       # address is ever refused, read from admin/site-pages.js and
