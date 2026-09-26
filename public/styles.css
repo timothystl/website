@@ -42,7 +42,7 @@
 
      ⚠ It therefore has to match DEFAULTS.typeface in admin/appearance.js. If
      the two disagree, every page paints one pair and then visibly reflows to
-     the other on every single load. They are both 'redesign' today.
+     the other on every single load. They are both 'brand' (Hero) today.
 
      ⚠ --serif and --sans are NOT the same thing and are deliberately left on
      the old pair. Dozens of inline styles in index.html still name them
@@ -51,9 +51,9 @@
      out from under the conversion, one variable at a time. They retire when
      the last page is converted, not before. */
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
-  --font-heading:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-heading:'Hero',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --font-body:'Newsreader',Georgia,'Times New Roman',serif;
-  --font-ui:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-ui:'Hero',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   /* ⚠ TEXT SIZE IS A MULTIPLIER APPLIED TO EVERY font-size BELOW, not a set of
      new sizes. Every size on this sheet was chosen in proportion to the others,
      and a control that replaced them would flatten that; scaling moves them
@@ -67,6 +67,16 @@
   --r-sm:8px;--r-md:12px;--r-lg:20px;
   --shadow:0 2px 12px rgba(11,60,92,.08);--shadow-lift:0 6px 32px rgba(11,60,92,.14);
 }
+/* Hero (Fontfabric) — the brand typeface of the September 2026 identity.
+   Self-hosted under Fontfabric's free-font EULA, which allows @font-face use
+   on web sites; the files are the original fonts converted to WOFF2, not
+   subset or edited, which that license does not allow. Three weights ship:
+   Light covers 200-300, so the site's font-weight:300 copy gets the real
+   light face. */
+@font-face{font-family:'Hero';src:url('/fonts/hero-light.woff2') format('woff2');font-weight:200 300;font-style:normal;font-display:swap;}
+@font-face{font-family:'Hero';src:url('/fonts/hero-regular.woff2') format('woff2');font-weight:400 500;font-style:normal;font-display:swap;}
+@font-face{font-family:'Hero';src:url('/fonts/hero-bold.woff2') format('woff2');font-weight:600 900;font-style:normal;font-display:swap;}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 /* Z-INDEX SCALE
    1     — hero content / decorative elements inside positioned parents

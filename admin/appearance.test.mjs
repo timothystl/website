@@ -10,7 +10,7 @@ import {
   TYPEFACES, TYPEFACE_KEYS, typefaceOf, renderHeaderPreview, renderNewsletterPreview,
   TEXT_SIZES, TEXT_SIZE_KEYS, textSizeOf,
 } from './appearance.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -165,8 +165,9 @@ group('What the public site is sent');
 
 group('The typeface reaches every page, so it is guarded like one');
 {
-  eq(TYPEFACES.length, 2, 'two pairs, not a font list');
-  ok(TYPEFACE_KEYS.includes('redesign') && TYPEFACE_KEYS.includes('classic'), 'the redesign and the way back');
+  eq(TYPEFACES.length, 3, 'three pairs, not a font list');
+  ok(TYPEFACE_KEYS.includes('brand') && TYPEFACE_KEYS.includes('redesign') && TYPEFACE_KEYS.includes('classic'),
+    'the brand pair, the redesign and the way back');
 
   // ⚠ THREE ROLES. Collapsing head/ui to one puts the reading serif on every
   // button in the redesign, which is the single thing the design is emphatic
@@ -180,11 +181,14 @@ group('The typeface reaches every page, so it is guarded like one');
     'in the redesign the UI face is the display face, not the reading face');
   ok(typefaceOf('redesign').ui !== typefaceOf('redesign').body,
     'and specifically not the serif — a serif Give button is the failure this pins');
+  ok(typefaceOf('brand').ui === typefaceOf('brand').head && /Hero/.test(typefaceOf('brand').head),
+    'the brand pair sets headings and UI in Hero, as the logo does');
+  ok(/Newsreader/.test(typefaceOf('brand').body), 'and keeps the reading serif for body copy');
   ok(typefaceOf('classic').ui === typefaceOf('classic').body,
     'classically the UI face is the body face, which is how the site read before');
 
-  eq(typefaceOf('nonsense').key, 'redesign', 'an unknown pair clamps to the default');
-  eq(sanitizeAppearance({ typeface: 'wingdings' }).typeface, 'redesign',
+  eq(typefaceOf('nonsense').key, 'brand', 'an unknown pair clamps to the default');
+  eq(sanitizeAppearance({ typeface: 'wingdings' }).typeface, 'brand',
     'and a crafted POST cannot select a pair the site has no fonts loaded for');
   eq(sanitizeAppearance({ typeface: 'classic' }).typeface, 'classic', 'a real one is kept');
 
@@ -225,6 +229,13 @@ group('The typeface reaches every page, so it is guarded like one');
   const links = index.slice(0, index.indexOf('</head>'));
   for (const fam of ['Lora', 'Source+Sans+3', 'Bricolage+Grotesque', 'Newsreader']) {
     ok(links.includes('family=' + fam), fam.replace(/\+/g, ' ') + ' is loaded on the public site');
+  }
+  // Hero is not on Google Fonts: the site declares it itself, in every weight
+  // the brand pair asks for, from files that are actually in public/fonts.
+  for (const f of ['light', 'regular', 'bold']) {
+    ok(new RegExp("font-family:'Hero';src:url\\('/fonts/hero-" + f + "\\.woff2'\\)").test(css),
+      'Hero ' + f + ' is declared with @font-face');
+    ok(existsSync(new URL('../public/fonts/hero-' + f + '.woff2', import.meta.url)), 'and hero-' + f + '.woff2 ships');
   }
 }
 

@@ -220,8 +220,16 @@ const SHORT_CACHE_RE = /\.(css|js|mjs|json|xml|txt|map|webmanifest)$/i;
 // (the ?v= busting on index.html's references stays the real control); HTML
 // gets no-cache so a publish is visible on the next load — no-cache still
 // allows storing, it just forces the etag revalidation env.ASSETS supports.
+// Fonts are requested with CORS, so the Website Admin (another origin) can only
+// draw the brand face in its header preview and page editor if the font says
+// that origin may use it. Named rather than '*', so the files are not an open
+// font CDN for other sites.
+const FONT_RE = /\.(woff2?|ttf|otf)$/i;
+export const FONT_CORS_ORIGIN = 'https://admin.timothystl.org';
+
 export function withAssetCaching(res, pathname) {
   const h = new Headers(res.headers);
+  if (FONT_RE.test(pathname)) h.set('Access-Control-Allow-Origin', FONT_CORS_ORIGIN);
   if (LONG_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   else if (SHORT_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=3600');
   else {
