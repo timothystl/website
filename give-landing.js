@@ -56,7 +56,7 @@ export const FALLBACK_FUNDS = [{ id: 0, name: 'General Fund', tithelyFundId: '',
 // that screen starts from.
 export const FALLBACK_APPEARANCE = {
   bar: '#1A5C3E', rule: '#F2C14E', cta: '#F2C14E', ink: '#FFFFFF', ctaInk: '#FFFFFF',
-  logo: '/logo.png?v=20260328', logoShape: 'round',
+  logo: '/logo.png?v=20260926', logoShape: 'round',
   name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations',
 };
 export const FALLBACK_DETAILS = {
