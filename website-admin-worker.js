@@ -41,6 +41,7 @@ import { dayKey, monthKey, pruneBefore, countInMonth, tapCountLabel, everCounted
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
+import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
 import { sendTransactionalEmail, buildWebHtml, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
@@ -4449,6 +4450,9 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     }
 
     // ── LOGIN ──
+    if (path === '/access-login' && method === 'GET') {
+      return handleWebsiteAccessLogin(request, env);
+    }
     if (path === '/login' && method === 'POST') {
       const ip = request.headers.get('CF-Connecting-IP') || '';
       // Rate limit: block after 10 failures from the same IP in 15 minutes.
@@ -4489,6 +4493,9 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       SETUP_DONE.set(env.DB, true);
     }
     const currentUser = await getSession(env.DB, request);
+    if (!currentUser && (path === '/' || path === '/login') && request.headers.get('Cf-Access-Jwt-Assertion')) {
+      return handleWebsiteAccessLogin(request, env);
+    }
     // /payroll/email and /api/push/payroll-ready are the two routes reachable with
     // no browser session at all -- Finance's contract-relay identity
     // (payrollContractRelayUser, resolved above at the CSRF gate) stands in for
