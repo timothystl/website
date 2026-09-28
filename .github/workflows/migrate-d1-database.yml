@@ -1,0 +1,119 @@
+name: Migrate tlc-newsletter-db to timothy-website-db
+
+# Data-copy step of the Website Admin naming cleanup. Cloudflare cannot rename a D1 database in
+# place, so tlc-newsletter-db -> timothy-website-db is: create the new database (this workflow
+# does it if missing) -> copy data (this workflow) -> repoint wrangler.toml in a separate PR ->
+# the normal release -> verify -> delete the old database once confirmed. This workflow only
+# creates and fills the new database; it never deletes or modifies the old one or the Worker's
+# live binding, so it is safe to run ahead of the repoint and safe to re-run (the destination is
+# emptied and reloaded each time, keeping the same database id) to catch up on newer writes.
+# Modeled on Connect's migrate-d1-database.yml, which ran clean.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full main commit SHA approved for this data-copy exercise
+        required: true
+        type: string
+      reason:
+        description: Reason for this migration run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Copy tlc-newsletter-db into timothy-website-db
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SOURCE_DB: tlc-newsletter-db
+      SOURCE_DB_ID: 7feda7f2-abf5-4756-9c15-9bb1c9a6c331
+      DEST_DB: timothy-website-db
+      RESULT_FILE: /tmp/d1-migration-result.json
+    steps:
+      - name: Check out the approved commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verify the approved commit is on main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No package.json in this repo -- installed globally, same as deploy.yml.
+      - name: Install wrangler
+        run: npm install -g wrangler@4.130.0
+
+      # The destination is created empty and left unbound to any Worker. If the token cannot
+      # create databases, create timothy-website-db by hand in the dashboard and re-run.
+      - name: Create the destination database if it does not exist yet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! wrangler d1 info "$DEST_DB" --json >/dev/null 2>&1; then
+            wrangler d1 create "$DEST_DB"
+          fi
+          dest_id="$(wrangler d1 info "$DEST_DB" --json | jq -r '(if type == "array" then .[0] else . end) | (.uuid // .id)')"
+          test -n "$dest_id" -a "$dest_id" != "null"
+          echo "DEST_DB_ID=$dest_id" >> "$GITHUB_ENV"
+
+      - name: Copy tlc-newsletter-db into timothy-website-db and reconcile
+        run: bash scripts/migrate-d1-database.sh
+
+      - name: Record migration summary
+        if: always()
+        shell: bash
+        env:
+          MIGRATION_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$RESULT_FILE" ]]; then
+            echo '## tlc-newsletter-db -> timothy-website-db data copy' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo '- The copy script did not produce a result file (failed before completing any phase). Check the job logs.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo '## tlc-newsletter-db -> timothy-website-db data copy'
+            echo
+            echo "- Approved commit: \`${GITHUB_SHA}\`"
+            echo "- Reason: ${MIGRATION_REASON}"
+            jq -r '
+              "- Destination database id (for wrangler.toml): `" + .dest_db_id_verified + "`",
+              "- Source database UUID verified: `" + .source_db_id_verified + "`",
+              "- Export: " + (.export_bytes | tostring) + " bytes; SHA-256 `" + .export_sha256 + "`",
+              "- Oversized export handling: " + (.oversized_export_statements_rewritten | tostring) + " statement rewritten; " + (.large_cells_length_verified | tostring) + " large value length-verified",
+              "- Destination cleared before import (safe re-run): " + (.destination_cleared_before_import | tostring),
+              "- Schema: " + (.schema_objects_matched | tostring) + " objects matched; control SHA-256 `" + .schema_control_sha256 + "`",
+              "- Integrity: " + .integrity_check + "; foreign-key violations " + (.foreign_key_violations | tostring),
+              "- Rows: " + (.tables_matched | tostring) + " tables matched; control SHA-256 `" + .row_control_sha256 + "`",
+              "- Monetary controls: " + (.monetary_controls_matched | tostring) + " columns matched; control SHA-256 `" + .monetary_control_sha256 + "`",
+              "- AUTOINCREMENT sequences: " + (.autoincrement_sequences_matched | tostring) + " matched; control SHA-256 `" + .sequence_control_sha256 + "`",
+              "- Source database left unmodified: " + (.source_database_modified | tostring) + "; destination never bound to a Worker: " + (.destination_never_bound_to_a_worker | tostring),
+              "- Sensitive rows and values were not printed or retained as artifacts"
+            ' "$RESULT_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
