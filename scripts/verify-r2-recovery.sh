@@ -24,9 +24,9 @@ set -euo pipefail
 # this bucket only) and the account id, for the S3 endpoint URL. See this
 # repo's AGENTS.md and the PR this shipped in for the full setup list.
 
-source_bucket="${SOURCE_BUCKET:-tlc-news-images}"
+source_bucket="${SOURCE_BUCKET:-timothy-website-images}"
 account_id="${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is required}"
-restore_bucket="tlc-news-images-recovery-$(date -u +%Y%m%d%H%M%S)-$$"
+restore_bucket="timothy-website-images-recovery-$(date -u +%Y%m%d%H%M%S)-$$"
 temp_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/timothy-r2-recovery.XXXXXX")"
 result_file="${RESULT_FILE:-/tmp/timothy-r2-recovery-result.json}"
 restore_created=0

@@ -1,4 +1,11 @@
-name = "tlc-newsletter-admin"
+# Renamed from tlc-newsletter-admin 2026-09-28, in place, via the Cloudflare dashboard (Worker
+# Settings -> General -> Name) BEFORE this file was merged: deploying this name first would create
+# a new empty Worker with no routes or secrets. Finance's PAYROLL_SERVICE binding targets this
+# name (Connect's wrangler.finance*.jsonc). The database and image bucket were copied to new,
+# correctly named resources (see docs/NAMING-CUTOVER.md); the old tlc-newsletter-db (id
+# 7feda7f2-abf5-4756-9c15-9bb1c9a6c331) and tlc-news-images stay untouched as the rollback path
+# until they are retired after a retention window.
+name = "timothy-website-admin"
 main = "website-admin-worker.js"
 compatibility_date = "2024-01-01"
 
@@ -33,12 +40,12 @@ service = "timothy-connect"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "tlc-newsletter-db"
-database_id = "7feda7f2-abf5-4756-9c15-9bb1c9a6c331"
+database_name = "timothy-website-db"
+database_id = "425e2a80-af12-41a1-959a-9a1f3ed79fca"
 
 [[r2_buckets]]
 binding = "IMAGES"
-bucket_name = "tlc-news-images"
+bucket_name = "timothy-website-images"
 
 # Promotes ministry pages whose scheduled publish time has come
 # (see promoteScheduledPages in website-admin-worker.js). Quarter-hourly so a page

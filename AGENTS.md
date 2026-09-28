@@ -61,8 +61,8 @@ Connect owns people/Giving; myMDO owns childcare. A Finance payroll relay does n
 
 Production has three Workers:
 - `timothystl-site`: `site-worker.js` and `public/`, configured by `wrangler-site.toml`.
-- `tlc-newsletter-admin`: `website-admin-worker.js`, D1 `tlc-newsletter-db`, R2
-  `tlc-news-images`, and `CONNECT_WORKER` targeting `timothy-connect`; `wrangler.toml`.
+- `timothy-website-admin`: `website-admin-worker.js`, D1 `timothy-website-db`, R2
+  `timothy-website-images`, and `CONNECT_WORKER` targeting `timothy-connect`; `wrangler.toml`.
 - `tlc-links`: `tlc-links-worker.js`, configured by `wrangler-links.toml`.
 
 Published page blocks are authoritative. Edge rendering and client navigation use the same
