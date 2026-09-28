@@ -8,7 +8,7 @@
 //    property that keeps the two Workers from drifting.
 // 2. A card can be a sign-up form rather than a link, which means the URL
 //    check must stop applying to it without being weakened for anything else.
-import worker from '../tlc-links-worker.js';
+import worker from '../links-worker.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };

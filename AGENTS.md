@@ -60,10 +60,10 @@ Christmas Market, gym rentals, giving presentation, and the current payroll back
 Connect owns people/Giving; myMDO owns childcare. A Finance payroll relay does not move ownership.
 
 Production has three Workers:
-- `timothystl-site`: `site-worker.js` and `public/`, configured by `wrangler-site.toml`.
+- `timothy-website`: `site-worker.js` and `public/`, configured by `wrangler-site.toml`.
 - `timothy-website-admin`: `website-admin-worker.js`, D1 `timothy-website-db`, R2
   `timothy-website-images`, and `CONNECT_WORKER` targeting `timothy-connect`; `wrangler.toml`.
-- `tlc-links`: `tlc-links-worker.js`, configured by `wrangler-links.toml`.
+- `timothy-links`: `links-worker.js`, configured by `wrangler-links.toml`.
 
 Published page blocks are authoritative. Edge rendering and client navigation use the same
 published-block path. Chrome and page-body requests are separate. Preserve publish/cache

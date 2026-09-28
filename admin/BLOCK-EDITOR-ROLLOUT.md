@@ -134,7 +134,7 @@ It is the first, and it is the proof the mechanism works end to end.
 | Surface | Worker | Block editor? |
 |---|---|---|
 | `give.timothystl.org` | `site-worker.js` → blocks, `give-landing.js` as fallback | **Yes — built, awaiting Publish. See §3** |
-| `links.timothystl.org` | `tlc-links-worker.js` | No — it is a card list, already fully admin-managed under NFC Taps |
+| `links.timothystl.org` | `links-worker.js` | No — it is a card list, already fully admin-managed under NFC Taps |
 | `timothystl.org/gym/*` | `admin/gym.js` | No — a renter-facing booking flow, not a page |
 | The header, the footer, the newsletter band | `public/index.html` + admin | **Not pages, and should not be.** See §4 |
 
