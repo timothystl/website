@@ -41,6 +41,7 @@ import { dayKey, monthKey, pruneBefore, countInMonth, tapCountLabel, everCounted
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
+import { handleGymIncomeContract } from './admin/gym-income-report.js';
 import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
 import { sendTransactionalEmail, buildWebHtml, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
@@ -945,6 +946,13 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+
+    // Finance's Facilities → Gym rental income page (read-only, server to server).
+    // Same X-Contract-Key + verified Access identity as the payroll relay below,
+    // plus gym_manage. See admin/gym-income-report.js.
+    if (path === '/api/contracts/gym-income-v1') {
+      return handleGymIncomeContract(request, env, { today: churchDate() });
+    }
 
     // ── Supabase proxy for /payroll page — runs before the schema gate ──
     // Placed ahead of the ~140-query schema-migration block below (so it isn't
