@@ -36,7 +36,7 @@ jobs:
       R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_RECOVERY_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_RECOVERY_SECRET_ACCESS_KEY }}
-      SOURCE_BUCKET: tlc-news-images
+      SOURCE_BUCKET: timothy-website-images
       RESULT_FILE: /tmp/r2-recovery-result.json
     steps:
       - name: Check out the approved commit

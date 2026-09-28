@@ -10,12 +10,12 @@ set -euo pipefail
 # package.json, so wrangler is installed globally by the workflow rather than
 # run through `npx`) are specific to this repo.
 
-source_db="${SOURCE_DB:-tlc-newsletter-db}"
+source_db="${SOURCE_DB:-timothy-website-db}"
 source_db_id="${SOURCE_DB_ID:?SOURCE_DB_ID is required}"
-restore_db="tlc-newsletter-recovery-$(date -u +%Y%m%d%H%M%S)-$$"
+restore_db="timothy-website-recovery-$(date -u +%Y%m%d%H%M%S)-$$"
 temp_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/timothy-d1-recovery.XXXXXX")"
-export_file="$temp_dir/tlc-newsletter-db.sql"
-import_file="$temp_dir/tlc-newsletter-db-import.sql"
+export_file="$temp_dir/timothy-website-db.sql"
+import_file="$temp_dir/timothy-website-db-import.sql"
 rewrite_metadata="$temp_dir/rewrite-metadata.json"
 snapshot_db="$temp_dir/source-snapshot.sqlite"
 result_file="${RESULT_FILE:-/tmp/timothy-d1-recovery-result.json}"

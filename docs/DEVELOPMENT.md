@@ -59,7 +59,7 @@ far this gets you depends on which Worker:
   (`chms_forward_outbox`) rather than deliver — that's the intended degrade path, not a bug (see
   `docs/CHMS_FORWARD_RECOVERY.md`). Do not point local `wrangler dev` at production D1/R2 by
   passing production IDs into a local config; the shared `wrangler.toml` already carries the real
-  `tlc-newsletter-db`/`tlc-news-images` IDs; run it in default (local) mode.
+  `timothy-website-db`/`timothy-website-images` names and IDs; run it in default (local) mode.
 
 None of the three `wrangler-*.toml` files define a separate staging environment — unlike `chms`,
 this repository has only production Cloudflare resources. There is no `wrangler dev --env staging`

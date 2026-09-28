@@ -38,3 +38,11 @@ The latest reviewed production workflow succeeded at `7348eaa5d`, followed by it
 Stax public mockup relocation #610 and Connect #1037 merged and deployed during this review;
 the mockup is Website-owned while Connect retains its backend. This is not a live-provider cutover.
 See the [current overhaul plan](https://github.com/timothystl/digital-architecture/blob/main/architecture/11-overhaul-readiness-and-execution-plan.md).
+
+## Website Admin naming cutover — September 28, 2026
+
+Worker `tlc-newsletter-admin` became `timothy-website-admin` (renamed in place in the dashboard),
+D1 `tlc-newsletter-db` became `timothy-website-db`, and R2 `tlc-news-images` became
+`timothy-website-images`, following [NAMING-CUTOVER.md](NAMING-CUTOVER.md). The old database and
+bucket remain untouched as the rollback path until retired after a retention window. Recovery
+drills now target the new names.

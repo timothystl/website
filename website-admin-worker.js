@@ -1,7 +1,7 @@
 import { CALENDAR_LINK_SCHEMA, CALENDAR_NEWS_LINK_INDEX, calendarLink, refreshCalendarLinks } from './admin/calendar-google.js';
 // Timothy Lutheran Church — Newsletter Admin Worker
 // Purpose: Serves admin.timothystl.org — newsletter, news, sermons, youth pages, gym rentals, voter pages
-// Deploy: Cloudflare Worker + D1 (tlc-newsletter-db) + KV (RSVP_STORE)
+// Deploy: Cloudflare Worker + D1 (timothy-website-db) + KV (RSVP_STORE)
 // Dependencies: Brevo API (email sending), TinyMCE CDN (WYSIWYG), Google Calendar API (gym bookings)
 // Last modified: 2026-03-27
 
@@ -531,7 +531,7 @@ const ADMIN_ORIGIN = 'https://admin.timothystl.org';
 // on a page where nobody is signed in to anything.
 //
 // ⚠ Read from `gym_portal_origin`, and BLANK IS THE SAFE DEFAULT: the
-// Cloudflare route (timothystl.org/gym/* → tlc-newsletter-admin) has to exist
+// Cloudflare route (timothystl.org/gym/* → timothy-website-admin) has to exist
 // before anything is sent there, and code deploys before somebody adds a
 // route. Until it is set, everything behaves exactly as it did.
 const PORTAL_PATHS = ['/gym/book/', '/gym/cal/'];
