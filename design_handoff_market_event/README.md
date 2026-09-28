@@ -153,7 +153,7 @@ A tab the reader cannot see is **not rendered as a disabled tab** — it is abse
 
 - **Page & copy** — the section list is `panelList()` with its existing reorder POST; reordering writes the blocks' `sort`. "Compare & publish" reuses the Pages editor's own publish path; do not build a second one. The row for the application block carries the amber note that fee, dates, open/closed and the nine clauses live there.
 - **Money & dates** — same forms and routes as today (`/market/settings`, `/market/fund`, `/market/payment`), just rendered under a tab. Keep the live "a vendor will be asked $31.20 / $93" line, computed with `priceBreakdown()`. Keep the stale-bookmark behaviour from `/settings?edit=market_table_fee`.
-- **Volunteers** — the source is `timothystl/chms` (the `tlc-chms` worker, which also serves `serve.timothystl.org`); signups live in its D1 and its API is `src/api-admin.js`. Follow the existing precedent for cross-app reads — the website admin already queries ChMS for member data for newsletter sync — rather than inventing a new transport, and **never** scrape or iframe the public volunteer page.
+- **Volunteers** — the source is `timothystl/connect` (the `tlc-chms` worker, which also serves `serve.timothystl.org`); signups live in its D1 and its API is `src/api-admin.js`. Follow the existing precedent for cross-app reads — the website admin already queries ChMS for member data for newsletter sync — rather than inventing a new transport, and **never** scrape or iframe the public volunteer page.
 
   Add one read endpoint on the ChMS side, scoped to a signup slug: `GET /api/signups/christmasmarket/summary` →
 
