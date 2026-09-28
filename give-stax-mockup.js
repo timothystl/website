@@ -9,8 +9,8 @@
 // at the edge — dashboard config, invisible to any repo, and the reason a first pass of this
 // mockup 401'd for him there).
 //
-// This page is presentational ONLY. Every API call it makes is cross-origin to the chms repo's
-// Worker (connect.timothystl.org/api/mockup/stax-giving/*), which is where the actual donor
+// This page is presentational ONLY. Every API call it makes is cross-origin to Connect STAGING
+// (timothy-connect-staging, /api/mockup/stax-giving/*), which is where the actual donor
 // matching, ledger writes, and Stax calls happen — per the original scope memo's own reasoning,
 // Connect already owns donor identity and giving records, so this page has no business
 // duplicating that logic. See chms's src/stax-giving-mockup.js corsHeadersFor()/
@@ -22,9 +22,11 @@
 // second network round trip until the real submit), so the API contract with chms is unchanged.
 import { renderGiveDocument, FALLBACK_APPEARANCE, FALLBACK_DETAILS } from './give-landing.js';
 
-// Same host chms's public API is served from — see that repo's connect-worker.js wrangler.toml
-// route (connect.timothystl.org).
-const CHMS_API_BASE = 'https://connect.timothystl.org/api/mockup/stax-giving';
+// Connect staging, not production (Andrew, 2026-09-28: "sandbox should be sequestered during
+// testing"). Sandbox test gifts land in staging's own database and show in Finance staging;
+// production Connect refuses them (STAX_SANDBOX_REFUSED in Connect's wrangler.toml). Staging has no
+// custom domain, so this is its workers.dev address (Connect's wrangler.staging.toml).
+export const CHMS_API_BASE = 'https://timothy-connect-staging.timothystl.workers.dev/api/mockup/stax-giving';
 const STAXJS_URL = 'https://staxjs.staxpayments.com/staxjs-captcha.js';
 
 const css = `<style>
