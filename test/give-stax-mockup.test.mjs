@@ -44,8 +44,7 @@ group('the mockup page is clearly labeled and never mentions Tithe.ly');
   // which would mean this sandbox page could somehow route to a real charge.
   hasNot(html.toLowerCase(), 'give.tithe.ly', 'no actual Tithe.ly giving link');
   hasNot(html, 'formId=', 'no Tithe.ly form/location query params either');
-  has(html, 'https://timothy-connect-staging.timothystl.workers.dev/api/mockup/stax-giving', 'calls Connect staging cross-origin');
-  hasNot(html, 'connect.timothystl.org/api/mockup', 'never sends sandbox test gifts to production Connect');
+  has(html, 'https://connect.timothystl.org/api/mockup/stax-giving', 'calls Connect cross-origin, where test gifts are kept apart from real giving');
   has(html, 'Back to timothystl.org', 'reuses the real masthead/footer shell (same brand, same trust signals)');
 }
 
