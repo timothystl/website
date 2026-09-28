@@ -1,4 +1,7 @@
-name = "timothystl-site"
+# Renamed from timothystl-site 2026-09-28, in place, via the Cloudflare dashboard (Worker Settings
+# -> General -> Name) BEFORE this file was merged: deploying this name first would create a new
+# Worker with no custom domains or routes. Same script, domains, and settings after the rename.
+name = "timothy-website"
 main = "site-worker.js"
 compatibility_date = "2024-01-01"
 

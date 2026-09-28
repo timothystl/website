@@ -46,3 +46,7 @@ D1 `tlc-newsletter-db` became `timothy-website-db`, and R2 `tlc-news-images` bec
 `timothy-website-images`, following [NAMING-CUTOVER.md](NAMING-CUTOVER.md). The old database and
 bucket remain untouched as the rollback path until retired after a retention window. Recovery
 drills now target the new names.
+
+The public-site Worker `timothystl-site` became `timothy-website` and `tlc-links` became
+`timothy-links` (both renamed in place in the dashboard September 28; `tlc-links-worker.js` is now
+`links-worker.js`). Hostnames are unchanged.

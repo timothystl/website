@@ -1,5 +1,7 @@
-name = "tlc-links"
-main = "tlc-links-worker.js"
+# Renamed from tlc-links 2026-09-28, in place, via the Cloudflare dashboard, before this file was
+# merged (same reason as wrangler-site.toml).
+name = "timothy-links"
+main = "links-worker.js"
 compatibility_date = "2024-01-01"
 
 [observability]

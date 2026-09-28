@@ -38,11 +38,11 @@ gate (edge vs. client page-body rendering) and runs in CI on every PR.
 Useful for clicking through a change in a browser rather than only reading test assertions. How
 far this gets you depends on which Worker:
 
-- **`timothystl-site`** (`npx wrangler dev --config wrangler-site.toml`) needs only the `ASSETS`
+- **`timothy-website`** (`npx wrangler dev --config wrangler-site.toml`) needs only the `ASSETS`
   binding (`public/`) — no D1, R2, or service binding. It runs fully standalone: the public site,
   the giving page, `run_worker_first` hostname routing, and clean-URL/404 handling all work with
   no external dependency.
-- **`tlc-links`** (`npx wrangler dev --config wrangler-links.toml`) has no bindings at all.
+- **`timothy-links`** (`npx wrangler dev --config wrangler-links.toml`) has no bindings at all.
 - **`tlc-newsletter-admin`** (`npx wrangler dev`, the default `wrangler.toml`) is the least
   self-contained of the three. `wrangler dev`'s local mode gives you a fresh local D1 and R2
   automatically — schema is fine (every table is created by an idempotent

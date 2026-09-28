@@ -1092,7 +1092,7 @@ export const CARD_KINDS = [
 ];
 export const isFormCard = (kind) => String(kind || 'link') === 'signup';
 
-// The newsletter sign-up card was hardcoded into tlc-links-worker.js, which
+// The newsletter sign-up card was hardcoded into links-worker.js, which
 // meant it showed on every tap and the office could not touch a word of it.
 // It is seeded as a real row so it is editable like any other card — once,
 // behind SIGNUP_CARD_MARKER, because a seed that ran on every schema bump

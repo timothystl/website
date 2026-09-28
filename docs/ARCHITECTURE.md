@@ -2,11 +2,11 @@
 
 Production has three Cloudflare Workers:
 
-- `timothystl-site` (`site-worker.js` plus `public/`) serves the public site and giving landing.
+- `timothy-website` (`site-worker.js` plus `public/`) serves the public site and giving landing.
 - `timothy-website-admin` (`website-admin-worker.js`) serves Website Admin, binds D1
   `timothy-website-db`, R2 `timothy-website-images`, and service binding `CONNECT_WORKER` to `timothy-connect`,
   and runs scheduled-page promotion every 15 minutes.
-- `tlc-links` (`tlc-links-worker.js`) serves the utility links surface.
+- `timothy-links` (`links-worker.js`) serves the utility links surface.
 
 Published page blocks are authoritative. The Site Worker edge-renders initial page bodies; client
 navigation uses the same published-block model. `/api/pages?chrome=1` returns global chrome and
