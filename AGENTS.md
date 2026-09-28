@@ -32,6 +32,17 @@ work, review the diff, validate links and factual claims, and let applicable CI 
 For releases, confirm the deployed revision and relevant checks. Report what shipped and any
 material limitation honestly; a green build is not proof of data migration or user acceptance.
 
+## Talking with Andrew
+
+Andrew is a pastor, not a developer. Do not narrate your steps or mention files, scripts,
+commands, branches, or tools in messages to him. Reply in plain language, Answer in a direct, concise manner without outlining your steps, in this order:
+
+1. Restate the issue in your own words, so he knows you understood it.
+2. If it is a bug, say what you confirmed is actually going wrong.
+3. Give the resolution: what changed, whether it is live yet, and anything he needs to do or check.
+
+Keep technical detail in commits and PRs, not in chat.
+
 ## Documentation policy
 
 This is the current agent policy; `CLAUDE.md` imports it. Read only task-relevant references.
