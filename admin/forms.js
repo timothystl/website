@@ -427,7 +427,9 @@ ${sidebarShell('filtered', currentUser, '', badges)}
       // Nothing to email — finish the signup the filter interrupted, on both
       // the Brevo list (which is the one that actually receives newsletters)
       // and the local record behind the Subscribers tab.
-      if (env.BREVO_API_KEY) {
+      if (env.BREVO_API_KEY && !parseInt(env.BREVO_LIST_ID || '0', 10)) {
+        console.error('Brevo add on release skipped: BREVO_LIST_ID is not configured');
+      } else if (env.BREVO_API_KEY) {
         try {
           await fetch('https://api.brevo.com/v3/contacts', {
             method: 'POST',
@@ -435,7 +437,7 @@ ${sidebarShell('filtered', currentUser, '', badges)}
             body: JSON.stringify({
               email: (row.email || '').toLowerCase(),
               attributes: { FIRSTNAME: row.name || '' },
-              listIds: [parseInt(env.BREVO_LIST_ID || '2')],
+              listIds: [parseInt(env.BREVO_LIST_ID, 10)],
               updateEnabled: true,
             }),
           });

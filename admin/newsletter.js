@@ -1268,9 +1268,9 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     // Send via Brevo if requested (only when publishing with newsletter_approve permission)
     let emailSuffix = '';
     if (action === 'publish' && emailSend !== 'none' && hasPermission(currentUser, 'newsletter_approve')) {
-      const listId = emailSend === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
-      if (!listId && emailSend === 'all') {
-        emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
+      const listId = emailSend === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '0', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
+      if (!listId) {
+        emailSuffix = `&emailerr=${encodeURIComponent(emailSend === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
         const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading);
         const result = await withScheduleOperation(env, newsletterId, async current => {
@@ -2122,12 +2122,12 @@ ${classesJs}
     const id = path.split('/').pop();
     const form = await request.formData();
     const listType = form.get('list_type') || 'test';
-    const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
+    const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '0', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
 
-    if (!listId && listType === 'all') {
+    if (!listId) {
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+        headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent(listType === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
       });
     }
 
@@ -2163,7 +2163,7 @@ ${classesJs}
     const id = path.split('/').pop();
     const form = await request.formData();
     const listType = form.get('list_type') || 'all';
-    const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
+    const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '0', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
     // Submitted by prepSchedule() in helpers.js as a browser-computed ISO
     // instant — the Worker itself runs in UTC and can't turn a bare
     // "2026-07-20T09:00" string back into the office's actual local time.
@@ -2172,7 +2172,7 @@ ${classesJs}
     if (!listId) {
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+        headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent(listType === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
       });
     }
     const scheduledDate = scheduledAtSubmitted ? new Date(scheduledAtSubmitted) : null;
