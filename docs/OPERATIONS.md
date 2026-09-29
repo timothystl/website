@@ -59,3 +59,5 @@ test list (**2**). There is no built-in fallback for either. A missing setting s
 sends) or fails the signup with a logged message, rather than quietly using another list. Set
 `BREVO_TEST_LIST_ID` to 2 before sending a test issue. `admin/brevo-list-config.test.mjs` guards against a
 hardcoded fallback returning.
+
+Names, purposes, and rotation locations for every Worker secret, variable, binding, and GitHub Actions secret are in [SECRETS.md](SECRETS.md).
