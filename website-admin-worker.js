@@ -3781,8 +3781,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           turnstileToken: form.get('cf-turnstile-response'),
         });
         if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsH });
-        // Add to Brevo contacts list
-        const listId = parseInt(env.BREVO_LIST_ID || '2');
+        // Add to Brevo contacts list. No fallback list: a missing setting must fail loudly
+        // rather than quietly filing subscribers on the test list.
+        const listId = parseInt(env.BREVO_LIST_ID || '0', 10);
+        if (!listId) {
+          console.error('Newsletter signup failed: BREVO_LIST_ID is not configured');
+          return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
+        }
         const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
           method: 'POST',
           headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },

@@ -50,3 +50,12 @@ drills now target the new names.
 The public-site Worker `timothystl-site` became `timothy-website` and `tlc-links` became
 `timothy-links` (both renamed in place in the dashboard September 28; `tlc-links-worker.js` is now
 `links-worker.js`). Hostnames are unchanged.
+
+## Newsletter list settings — September 29, 2026
+
+Website Admin reads two Brevo list numbers from Cloudflare (Workers → `timothy-website-admin` → Settings →
+Variables and Secrets): `BREVO_LIST_ID` is the full weekly list (**4**) and `BREVO_TEST_LIST_ID` is the
+test list (**2**). There is no built-in fallback for either. A missing setting shows an error (newsletter
+sends) or fails the signup with a logged message, rather than quietly using another list. Set
+`BREVO_TEST_LIST_ID` to 2 before sending a test issue. `admin/brevo-list-config.test.mjs` guards against a
+hardcoded fallback returning.

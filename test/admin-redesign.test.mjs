@@ -73,6 +73,8 @@ async function boot() {
     DB: d1(db),
     IMAGES: { get: async () => null, put: async () => ({}), delete: async () => {} },
     BREVO_API_KEY: 'test',
+    // Production sets the test list explicitly; there is deliberately no built-in fallback.
+    BREVO_TEST_LIST_ID: '2',
   };
   // The first request through the worker runs every CREATE/ALTER/INSERT.
   await call(env, '/login');
@@ -7670,6 +7672,7 @@ group('Google calendar routes keep authorization and linked schedule ownership')
  db.prepare("INSERT INTO newsletters(id,subject,published_at) VALUES(702,'Test issue','2026-09-23')").run();
  db.prepare("INSERT INTO events(newsletter_id,news_item_id,event_name,event_date) VALUES(702,701,'Selected post','2026-09-25')").run();
  const beforeFetch=globalThis.fetch;let sends=0;globalThis.fetch=async()=>{sends++;throw Error('No external requests expected without credentials');};
+ try{const noTest={...env};delete noTest.BREVO_TEST_LIST_ID;const missing=await call(noTest,'/send-email/702',{cookie,method:'POST',form:{list_type:'test'}});has(decodeURIComponent(missing.headers.get('location')||''),'BREVO_TEST_LIST_ID','a missing test list is reported, never replaced by another list');eq(sends,0,'nothing was sent without a test list');}finally{}
  try{const response=await call(env,'/send-email/702',{cookie,method:'POST',form:{list_type:'test'}});has(await response.text(),'Nothing was sent or scheduled','unverified linked scheduling stops newsletter delivery');eq(sends,0,'no newsletter request was made');}finally{globalThis.fetch=beforeFetch;}
  const {privateKey}=crypto.generateKeyPairSync('rsa',{modulusLength:2048});env.GCAL_SERVICE_ACCOUNT_EMAIL='test@example.test';env.GCAL_PRIVATE_KEY=privateKey.export({type:'pkcs8',format:'pem'});
  let mailed='';globalThis.fetch=async(url,options={})=>{if(String(url).includes('oauth2.googleapis.com'))return Response.json({access_token:'test'});if(String(url).includes('googleapis.com/calendar'))return Response.json({id:'post-linked',summary:'Google schedule',etag:'"1"',start:{dateTime:'2026-10-02T11:00:00-05:00'},end:{dateTime:'2026-10-02T12:00:00-05:00'}});if(options.body?.includes('htmlContent'))mailed=JSON.parse(options.body).htmlContent;return Response.json({id:123});};
