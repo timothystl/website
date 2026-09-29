@@ -63,7 +63,7 @@ that; this table is only for finding the right one.
 | `audit.js` | The audit log — diffs, not before/after blobs, are the useful part of an entry. |
 | `payroll-contract-auth.js` | Lets Finance's separate app reach this Worker's payroll relay **as a real, specific admin**, not as an anonymous trusted server — see "Cross-product contracts" below. |
 | `payroll-report.js` | Builds the emailed payroll report (CSV + PDF) from the exact same figures the payroll screen and its own CSV/print already use — "one report shape, N destinations." |
-| `pdf.js` | A minimal dependency-free PDF writer (Workers has no headless browser to render one). |
+| `pdf.js` | A minimal dependency-free PDF writer (Workers has no headless browser to render one); sets text in Finance's Figtree/Outfit, embedded from the generated `pdf-fonts.js` subsets. |
 | `give-landing-seed.js` / `redesign-seeds.js` / `native-form-page-seed.js` / `school-calendar-seed.js` | Hand-authored page/block seeds for surfaces the generic extractor has no model for (a live spam-screened form, a hand-tuned redesign page, etc). |
 | `when.js` | Church-local (Central time) date/day-part helpers — the Worker itself always runs in UTC. |
 

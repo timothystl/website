@@ -8,7 +8,7 @@
 // "the file opened somewhere" — a corrupt-but-tolerated PDF is exactly the
 // class of bug a lenient reader would hide.
 import { buildPayrollCsv, buildPayrollPdfLines } from './payroll-report.js';
-import { buildMonospacePdf } from './pdf.js';
+import { buildReportPdf, textWidth, fitText } from './pdf.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -88,10 +88,10 @@ group('buildPayrollCsv matches the client\'s own shape');
   ok(injected.includes("\"'=cmd()\""), 'a name starting with = is guarded against spreadsheet formula injection');
 }
 
-group('buildPayrollPdfLines feeds buildMonospacePdf a structurally valid PDF');
+group('buildPayrollPdfLines feeds buildReportPdf a structurally valid PDF');
 {
   const lines = buildPayrollPdfLines(BODY);
-  const pdf = buildMonospacePdf(lines);
+  const pdf = buildReportPdf(lines);
   ok(pdf.startsWith('%PDF-1.4'), 'starts with a PDF header');
   ok(xrefIntegrityOk(pdf), 'every xref offset points at its own object — verified against the bug below');
   ok(pdf.includes('Pat Rivera'), 'MDO row name is in the content stream');
@@ -101,7 +101,7 @@ group('buildPayrollPdfLines feeds buildMonospacePdf a structurally valid PDF');
   ok(pdf.includes('Approved by dinger'), 'the approval state is stated, matching the emailed HTML');
   ok(!pdf.includes('INCOMPLETE'), 'no incomplete banner on a complete run');
 
-  const incompletePdf = buildMonospacePdf(buildPayrollPdfLines({ ...BODY, incomplete: true }));
+  const incompletePdf = buildReportPdf(buildPayrollPdfLines({ ...BODY, incomplete: true }));
   ok(incompletePdf.includes('INCOMPLETE: the childcare app'), 'an incomplete run says so in the PDF too');
 
   // Verify the xref check is not vacuous: corrupt a real offset and confirm
@@ -110,12 +110,41 @@ group('buildPayrollPdfLines feeds buildMonospacePdf a structurally valid PDF');
   ok(!xrefIntegrityOk(corrupted), 'the integrity check actually fails on a corrupted offset — not vacuous');
 }
 
+group('the PDF is set in the Finance app\'s embedded Figtree/Outfit, not Courier');
+{
+  const pdf = buildReportPdf(buildPayrollPdfLines(BODY));
+  ok(!pdf.includes('/Courier'), 'no standard Courier font is referenced any more');
+  ok(/\/BaseFont \/[A-Z]{6}\+Figtree-Regular/.test(pdf), 'Figtree Regular is embedded as a tagged subset');
+  ok(/\/BaseFont \/[A-Z]{6}\+Figtree-Bold/.test(pdf), 'Figtree Bold is embedded as a tagged subset');
+  ok(/\/BaseFont \/[A-Z]{6}\+Outfit-SemiBold/.test(pdf), 'Outfit SemiBold is embedded as a tagged subset');
+  ok((pdf.match(/\/FontFile2 \d+ 0 R/g) || []).length === 3, 'each font carries its own embedded font program');
+  // Each font program's declared /Length must match the stream bytes, or a
+  // strict reader drops the font and falls back to something else entirely.
+  const re = /<< \/Length (\d+) \/Length1 (\d+) \/Filter \/ASCIIHexDecode >>\nstream\n/g;
+  let m, lengthsOk = true, n = 0;
+  while ((m = re.exec(pdf))) {
+    n++;
+    const start = m.index + m[0].length;
+    const hex = pdf.slice(start, start + Number(m[1]));
+    if (!hex.endsWith('>') || pdf.slice(start + Number(m[1]), start + Number(m[1]) + 10) !== '\nendstream') lengthsOk = false;
+    if (hex.replace(/[\s>]/g, '').length !== Number(m[2]) * 2) lengthsOk = false;
+  }
+  ok(n === 3 && lengthsOk, 'every embedded font stream length matches its bytes');
+
+  // Right-aligned figures end on the same edge: the gross column's x plus
+  // the measured width is the page's right margin for every amount.
+  ok(Math.abs(textWidth('$1,224.00', 'R', 8) - textWidth('$172.00', 'R', 8)) > 5, 'proportional widths really differ by string');
+  const cut = fitText('A Very Long Staff Member Name That Will Not Fit', 'R', 9, 80);
+  ok(cut.endsWith('...') && textWidth(cut, 'R', 9) <= 80, 'a name too wide for its column is shortened to fit');
+  ok(fitText('Pat Rivera', 'R', 9, 200) === 'Pat Rivera', 'a name that fits is left alone');
+}
+
 group('a very long roster spans multiple PDF pages, each still valid');
 {
   const bigRows = Array.from({ length: 90 }, (_, i) => ({
     name: `Staffer ${i}`, salaried: false, rate: 15, hours: 20, pto: 0, gross: 300,
   }));
-  const pdf = buildMonospacePdf(buildPayrollPdfLines({ ...BODY, mdo: { subtotal: 27000, rows: bigRows }, church: { subtotal: 0, rows: [] } }));
+  const pdf = buildReportPdf(buildPayrollPdfLines({ ...BODY, mdo: { subtotal: 27000, rows: bigRows }, church: { subtotal: 0, rows: [] } }));
   ok(xrefIntegrityOk(pdf), 'a multi-page PDF still has correct object offsets');
   const pageCountMatch = pdf.match(/\/Count (\d+)/);
   ok(pageCountMatch && Number(pageCountMatch[1]) > 1, `90 rows overflow one page — got Count ${pageCountMatch && pageCountMatch[1]}`);
@@ -124,7 +153,7 @@ group('a very long roster spans multiple PDF pages, each still valid');
 
 group('non-ASCII text is substituted, not emitted raw — a corrupt content stream is worse than a "?"');
 {
-  const pdf = buildMonospacePdf(buildPayrollPdfLines({ ...BODY, mdo: { subtotal: 1, rows: [
+  const pdf = buildReportPdf(buildPayrollPdfLines({ ...BODY, mdo: { subtotal: 1, rows: [
     { name: 'José “Café” Müller', salaried: false, rate: 1, hours: 1, pto: 0, gross: 1 },
   ] }, church: { subtotal: 0, rows: [] } }));
   ok(xrefIntegrityOk(pdf), 'a name with accented/curly characters still produces a structurally valid PDF');

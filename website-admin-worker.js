@@ -45,7 +45,7 @@ import { handleGymIncomeContract } from './admin/gym-income-report.js';
 import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
 import { sendTransactionalEmail, buildWebHtml, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
-import { buildMonospacePdf } from './admin/pdf.js';
+import { buildReportPdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
 import { handleGymRoutes, getGCalAccessToken } from './admin/gym.js';
 import { handleSermonsRoutes } from './admin/sermons.js';
@@ -5933,15 +5933,18 @@ ${PAYROLL_HTML}`, 'Payroll');
         ? `Approved${body.approvedBy ? ' by ' + escapeHtml(String(body.approvedBy).slice(0, 60)) : ''}.`
         : `Not yet approved — these figures may still change.`;
       const warn = body.incomplete
-        ? `<p style="margin:10px 0 0;font:400 13px/1.5 Arial,sans-serif;color:#8A4A4A;"><strong>Incomplete:</strong> the childcare app could not be reached, so no MDO staff are in this report.</p>`
+        ? `<p style="margin:10px 0 0;font:400 13px/1.5 Figtree,Arial,sans-serif;color:#8A4A4A;"><strong>Incomplete:</strong> the childcare app could not be reached, so no MDO staff are in this report.</p>`
         : '';
 
-      const emailHtml = `<div style="max-width:520px;margin:0 auto;padding:22px;background:#FBF8F3;font-family:Arial,sans-serif;">
-        <h1 style="margin:0 0 10px;font:600 20px/1.3 Georgia,serif;color:#1E2D4A;">Timothy Lutheran — payroll</h1>
-        <p style="margin:0;font:400 14px/1.6 Arial,sans-serif;color:#3A3A4A;">Payroll for ${escapeHtml(label)} is attached (CSV and PDF).</p>
-        <p style="margin:6px 0 0;font:400 13px/1.5 Arial,sans-serif;color:${body.approved ? '#3B4C2E' : '#7A5B18'};">${stateLine}</p>
+      // Same type as the Finance app and the attached PDF: Outfit for the
+      // heading, Figtree for the text, falling back to Arial in mail
+      // clients that only offer the fonts installed on the reader's device.
+      const emailHtml = `<div style="max-width:520px;margin:0 auto;padding:22px;background:#FBF8F3;font-family:Figtree,Arial,sans-serif;">
+        <h1 style="margin:0 0 10px;font:600 20px/1.3 Outfit,Figtree,Arial,sans-serif;color:#1E2D4A;">Timothy Lutheran — payroll</h1>
+        <p style="margin:0;font:400 14px/1.6 Figtree,Arial,sans-serif;color:#3A3A4A;">Payroll for ${escapeHtml(label)} is attached (CSV and PDF).</p>
+        <p style="margin:6px 0 0;font:400 13px/1.5 Figtree,Arial,sans-serif;color:${body.approved ? '#3B4C2E' : '#7A5B18'};">${stateLine}</p>
         ${warn}
-        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(emailUser?.username || 'the office')}.</p>
+        <p style="margin:18px 0 0;font:400 12px/1.5 Figtree,Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(emailUser?.username || 'the office')}.</p>
       </div>`;
 
       // sendTransactionalEmail RETURNS {error}, it does not throw — a bare
@@ -5975,7 +5978,7 @@ ${PAYROLL_HTML}`, 'Payroll');
         const safeName = label.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || String(body.periodStart || 'period');
         attachments = [
           { name: `payroll-${safeName}.csv`, content: toBase64(buildPayrollCsv(body)) },
-          { name: `payroll-${safeName}.pdf`, content: toBase64(buildMonospacePdf(buildPayrollPdfLines(body))) },
+          { name: `payroll-${safeName}.pdf`, content: toBase64(buildReportPdf(buildPayrollPdfLines(body))) },
         ];
       } catch (e) {
         // A malformed attachment must not silently swallow the whole

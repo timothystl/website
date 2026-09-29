@@ -3,26 +3,34 @@
 // no headless browser to render a page to PDF with — so a report that has
 // to leave the Worker as a real PDF file is built byte by byte here, the
 // same way admin/exif.js reads image bytes by hand instead of pulling in a
-// library. Text is laid out as plain monospace lines (Courier is one of
-// the 14 standard PDF fonts, so nothing has to be embedded) — good enough
-// for a tabular report where alignment matters more than typography.
+// library.
 //
-// A line can also carry `bg` (a full-bleed filled band behind it — the
-// title banner, a shaded subtotal row) and `rule` (a stroked horizontal
-// line drawn just under it — the underline below a column header) and
-// `color` (its own text color, e.g. white on a navy band). None of that
-// needs a second drawing pass or a graphics library: PDF content streams
-// are just operators, and a filled rectangle or a stroked line is two or
-// three of them, emitted before the BT/ET text block on the same page.
+// Type is set in the Finance app's own faces — Figtree for body text and
+// Outfit for headings and totals — embedded from admin/pdf-fonts.js as
+// small TrueType subsets, so the report reads like the screen it came from
+// on any reader, installed fonts or not. Because they are proportional,
+// columns are placed by x position and right-aligned by measuring each
+// string against the font's own width table (textWidth), not by padding
+// with spaces the way a monospace layout would.
 //
-// ⚠ TEXT IS ASCII ONLY. A simple (non-embedded) PDF font takes single-byte
-// character codes through WinAnsiEncoding; a codepoint outside the ASCII
-// printable range is not a rendering quirk if emitted raw, it is a
-// corrupted content stream. asciiSafe() substitutes the punctuation this
-// codebase actually uses (em dash, curly quotes, the minus sign) and
-// replaces anything else with '?' rather than emit it. If a real name
-// needs true Unicode someday, that is a different, much larger piece of
-// work — an embedded CID font, not a tweak to this one.
+// A line is either one `text` at the left margin or a row of `cells`, each
+// { text, x, align: 'left'|'right', font, color }. A line can also carry
+// `bg` (a full-bleed filled band behind it — the title banner, a shaded
+// subtotal row), `rule` (a stroked horizontal line drawn just under it —
+// the underline below a column header) and `color` (its text color, e.g.
+// white on a navy band). PDF content streams are just operators, so a
+// filled rectangle or a stroked line is two or three of them, emitted
+// before the BT/ET text block on the same page.
+//
+// ⚠ TEXT IS ASCII ONLY. The embedded fonts are simple TrueType fonts taking
+// single-byte codes through WinAnsiEncoding, subset to 32-126; a codepoint
+// outside that range is not a rendering quirk if emitted raw, it is a
+// corrupted content stream (or a missing glyph). asciiSafe() substitutes
+// the punctuation this codebase actually uses (em dash, curly quotes, the
+// minus sign) and replaces anything else with '?' rather than emit it.
+// The font programs themselves are written ASCIIHex-encoded, so the whole
+// file stays 7-bit and can be base64-encoded as a binary string directly.
+import { PDF_FONTS } from './pdf-fonts.js';
 
 function asciiSafe(s) {
   return String(s == null ? '' : s)
@@ -37,23 +45,64 @@ function pdfEscape(s) {
   return asciiSafe(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-const PAGE_W = 612, PAGE_H = 792, MARGIN = 36;
+export const PAGE_W = 612, PAGE_H = 792, MARGIN = 36;
 
-// lines: [{ text, font: 'R'|'B', size, gap, color, bg, rule }] — 'gap' adds
-// extra space ABOVE this line (a blank line would also work but a gap reads
-// cleaner in the source that builds these arrays). font/size default to
-// R/9. `color`/`bg`/`rule` are each an [r,g,b] triple, 0..1 — `color` is
-// the text's own paint, `bg` fills a full-bleed band behind the line, and
-// `rule` strokes a thin line just under it.
-export function buildMonospacePdf(lines) {
+// Resource name and subset tag per font key. The tag is the six-capital
+// prefix PDF expects on the BaseFont of an embedded subset.
+const FONT_KEYS = [
+  { key: 'R', res: 'F1', tag: 'TLCFGR' },
+  { key: 'B', res: 'F2', tag: 'TLCFGB' },
+  { key: 'H', res: 'F3', tag: 'TLCOSB' },
+];
+const fontKey = (f) => (f === 'B' || f === 'H' ? f : 'R');
+
+// Width of a string in points, set in `font` at `size`.
+export function textWidth(text, font, size) {
+  const widths = PDF_FONTS[fontKey(font)].widths;
+  let units = 0;
+  for (const ch of asciiSafe(text)) units += widths[ch.charCodeAt(0) - 32] || 0;
+  return (units * size) / 1000;
+}
+
+// The string cut down (with a trailing '...') until it fits `maxWidth`, so
+// a long name cannot run into the next column.
+export function fitText(text, font, size, maxWidth) {
+  let s = asciiSafe(text);
+  if (textWidth(s, font, size) <= maxWidth) return s;
+  while (s.length && textWidth(s + '...', font, size) > maxWidth) s = s.slice(0, -1);
+  return s.trimEnd() + '...';
+}
+
+let hexCache = null;
+function fontHex() {
+  if (hexCache) return hexCache;
+  hexCache = {};
+  for (const { key } of FONT_KEYS) {
+    const bin = atob(PDF_FONTS[key].base64);
+    let hex = '';
+    for (let i = 0; i < bin.length; i++) {
+      hex += bin.charCodeAt(i).toString(16).padStart(2, '0');
+      if (i % 40 === 39) hex += '\n';
+    }
+    hexCache[key] = { hex: hex + '>', length1: bin.length };
+  }
+  return hexCache;
+}
+
+// lines: see the header. 'gap' adds extra space ABOVE a line. font/size
+// default to R/9; `color`/`bg`/`rule` are each an [r,g,b] triple, 0..1.
+export function buildReportPdf(lines) {
   const usableH = PAGE_H - MARGIN * 2;
   const pages = [];
   let cur = [];
   let used = 0;
   for (const raw of lines || []) {
+    const font = fontKey(raw.font);
+    const cells = Array.isArray(raw.cells)
+      ? raw.cells.map((c) => ({ text: c.text, x: Number(c.x) || MARGIN, align: c.align === 'right' ? 'right' : 'left', font: fontKey(c.font || font), color: c.color || null }))
+      : [{ text: raw.text, x: MARGIN, align: 'left', font, color: null }];
     const ln = {
-      text: raw.text,
-      font: raw.font === 'B' ? 'B' : 'R',
+      cells,
       size: raw.size || 9,
       color: raw.color || null,
       bg: raw.bg || null,
@@ -67,12 +116,17 @@ export function buildMonospacePdf(lines) {
   pages.push(cur); // always at least one page, even if empty
 
   const objects = [];
-  const catalogId = 1, pagesId = 2, fontRId = 3, fontBId = 4;
-  let nextId = 5;
+  const catalogId = 1, pagesId = 2;
+  let nextId = 3;
+  const fontIds = {};
+  for (const f of FONT_KEYS) {
+    fontIds[f.key] = { font: nextId++, descriptor: nextId++, file: nextId++ };
+  }
   const contentIds = [];
   const pageIds = [];
 
   const rgb3 = (c) => c.map((v) => Number(v.toFixed(3))).join(' ');
+  const resOf = Object.fromEntries(FONT_KEYS.map((f) => [f.key, f.res]));
 
   for (const pl of pages) {
     // Graphics (bands and rules) are painted first, as a set of plain path
@@ -94,18 +148,23 @@ export function buildMonospacePdf(lines) {
         graphics.push('1 w');
         graphics.push(`${MARGIN} ${(y - ln.lh * 0.3).toFixed(2)} m ${(PAGE_W - MARGIN).toFixed(2)} ${(y - ln.lh * 0.3).toFixed(2)} l S`);
       }
-      const f = ln.font === 'B' ? 'F2' : 'F1';
-      if (f !== curFont || ln.size !== curSize) {
-        text.push(`/${f} ${ln.size} Tf`);
-        curFont = f; curSize = ln.size;
+      for (const cell of ln.cells) {
+        const s = asciiSafe(cell.text);
+        if (!s) continue;
+        const f = resOf[cell.font];
+        if (f !== curFont || ln.size !== curSize) {
+          text.push(`/${f} ${ln.size} Tf`);
+          curFont = f; curSize = ln.size;
+        }
+        const col = rgb3(cell.color || ln.color || [0, 0, 0]);
+        if (col !== curColor) {
+          text.push(`${col} rg`);
+          curColor = col;
+        }
+        const x = cell.align === 'right' ? cell.x - textWidth(s, cell.font, ln.size) : cell.x;
+        text.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm`);
+        text.push(`(${pdfEscape(s)}) Tj`);
       }
-      const col = ln.color || [0, 0, 0];
-      if (!curColor || rgb3(col) !== curColor) {
-        text.push(`${rgb3(col)} rg`);
-        curColor = rgb3(col);
-      }
-      text.push(`1 0 0 1 ${MARGIN} ${y.toFixed(2)} Tm`);
-      text.push(`(${pdfEscape(ln.text)}) Tj`);
     }
     text.push('ET');
     const body = graphics.concat(text).join('\n');
@@ -113,16 +172,30 @@ export function buildMonospacePdf(lines) {
     contentIds.push(contentId);
     objects[contentId - 1] = `<< /Length ${body.length} >>\nstream\n${body}\nendstream`;
   }
+  const fontRes = FONT_KEYS.map((f) => `/${f.res} ${fontIds[f.key].font} 0 R`).join(' ');
   for (let i = 0; i < pages.length; i++) {
     const pageId = nextId++;
     pageIds.push(pageId);
     objects[pageId - 1] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] `
-      + `/Resources << /Font << /F1 ${fontRId} 0 R /F2 ${fontBId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
+      + `/Resources << /Font << ${fontRes} >> >> /Contents ${contentIds[i]} 0 R >>`;
   }
   objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
   objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map((p) => p + ' 0 R').join(' ')}] /Count ${pageIds.length} >>`;
-  objects[fontRId - 1] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>';
-  objects[fontBId - 1] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>';
+
+  const hex = fontHex();
+  for (const { key, tag } of FONT_KEYS) {
+    const meta = PDF_FONTS[key];
+    const ids = fontIds[key];
+    const baseFont = `${tag}+${meta.name}`;
+    objects[ids.font - 1] = `<< /Type /Font /Subtype /TrueType /BaseFont /${baseFont} /FirstChar 32 /LastChar 126 `
+      + `/Widths [${meta.widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${ids.descriptor} 0 R >>`;
+    // Flags 32 = Nonsymbolic (standard Latin character set).
+    objects[ids.descriptor - 1] = `<< /Type /FontDescriptor /FontName /${baseFont} /Flags 32 `
+      + `/FontBBox [${meta.bbox.join(' ')}] /ItalicAngle 0 /Ascent ${meta.ascent} /Descent ${meta.descent} `
+      + `/CapHeight ${meta.capHeight} /StemV ${meta.weight >= 600 ? 120 : 80} /FontWeight ${meta.weight} /FontFile2 ${ids.file} 0 R >>`;
+    objects[ids.file - 1] = `<< /Length ${hex[key].hex.length} /Length1 ${hex[key].length1} /Filter /ASCIIHexDecode >>\n`
+      + `stream\n${hex[key].hex}\nendstream`;
+  }
 
   let out = '%PDF-1.4\n';
   const offsets = [];
@@ -137,7 +210,7 @@ export function buildMonospacePdf(lines) {
   }
   out += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
-  // Every character written above is ASCII (0x20-0x7E, plus the \n/\r we
+  // Every character written above is ASCII (0x20-0x7E, plus the \n we
   // control), so this is safe to base64-encode as a binary string directly.
   return out;
 }
