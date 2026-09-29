@@ -149,17 +149,9 @@ Compared against [document 17](https://github.com/timothystl/digital-architectur
 - None missing. Doc 17 lists no Website name the code does not read. Doc 17's statement that
   `timothy-website` and `timothy-links` read nothing (except `ASSETS`) matches the code.
 
-**Stale statements in doc 17 to correct**
-- "Findings to act on" item 1 (subscribe falls back to list 2, sends to 0) is out of date. Current code has
-  no fallback for `BREVO_LIST_ID` or `BREVO_TEST_LIST_ID`; a missing value errors. Its Website table row
-  "Fallbacks differ" is also stale. List numbers: full list 4, test list 2.
-- Its `BREVO_API_KEY` row says a missing key makes subscribe skip Brevo. True for the form-release path;
-  the direct newsletter signup path fails with an error when `BREVO_LIST_ID` is missing.
-- `BREVO_LIST_ID` and `BREVO_TEST_LIST_ID` are described as "not in Wrangler; confirm which" (var or
-  secret). Still true, and unresolved here: the code error messages call them "secret", but they are list
-  numbers and may be plain variables. A deploy that replaces dashboard variables could wipe them; confirm.
-
 **Still unverified (dashboard check needed)**
 - Whether `BREVO_LIST_ID`, `BREVO_TEST_LIST_ID`, `BREVO_SENDER_EMAIL`, `BREVO_REPLY_TO`,
   `SQUARE_LOCATION_ID`, `WEBSITE_ACCESS_*`, and `VAPID_PUBLIC_KEY` are set as variables or secrets, and
-  that the `wrangler deploy` in `deploy.yml` preserves them (it does not pass `--keep-vars`).
+  that the `wrangler deploy` in `deploy.yml` preserves them (it does not pass `--keep-vars`, so a
+  dashboard-only **plain variable** would be removed by the next deploy; **secrets** survive). The Brevo
+  list numbers have survived many deploys, which suggests they are stored as secrets.
