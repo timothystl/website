@@ -724,17 +724,20 @@ export async function readNewsEvents(env, from, to, cats, { strict = false } = {
   } catch (error) { if (strict) throw error; return []; }
 }
 
-// ── EVENT INTAKE'S OWN "LOCAL" ROWS ─────────────────────────────────────────
-// A room booking typed straight into Event Intake, with no Google event and
-// no News & Events post behind it — a private wedding, a one-off outside
+// ── "LOCAL" EVENTS — ENTERED DIRECTLY IN CALENDAR & EVENTS ──────────────────
+// A room booking typed straight into the Calendar tab, with no Google event
+// and no News & Events post behind it — a private wedding, a one-off outside
 // group, anything the office wants on the calendar without either of the
-// site's other two doors. See admin/intake.js and the `event_intake` table.
+// site's other two doors. Stored in the `event_intake` table (source_kind =
+// 'local') — a name left over from the retired Event Intake / Office
+// follow-up screen (see admin/intake.js's header comment); admin/workspace.js
+// is what actually reads and writes these rows now.
 //
 // ⚠ THE TYPE-TO-CATEGORY MAPPING IS ONE-WAY AND COMPUTED HERE, NEVER STORED.
-// Event Intake's own `type` (worship/education/rental/news — see the note at
-// the top of admin/intake.js on why that is a separate question from a
-// calendar category) still has to draw SOME color on the public month, so it
-// is mapped onto the nearest calendar_categories key at render time. Nothing
+// A local event's own `type` (worship/education/rental/news — one of the
+// eleven in admin/intake.js's TYPES, a separate idea from a calendar
+// category) still has to draw SOME color on the public month, so it is
+// mapped onto the nearest calendar_categories key at render time. Nothing
 // writes this back onto the event_intake row — re-pointing a category's own
 // color in the admin still repaints every local event that maps to it, the
 // same as it repaints everything else.

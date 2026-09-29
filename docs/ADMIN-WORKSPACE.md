@@ -20,7 +20,7 @@ The Admin calendar reads the existing Google, News & Events, gym, and local inta
 
 Local event creation and editing require `intake_manage`. Saves use the existing `event_intake` record, validate real dates/time ranges, clear times for all-day events, and conditionally reject conflicting edits. They retain the global session/CSRF gate and write the audit log. No schema migration or parallel event store is introduced.
 
-**Local events are public when saved**, matching existing behavior. The form explicitly says Add to public calendar. There are no private drafts or simulated publishing controls. Office follow-up is separate: the former Publish button now says Complete office follow-up, while its existing storage and route stay compatible. The checklist remains optional.
+**Local events are public when saved**, matching existing behavior. The form explicitly says Add to public calendar. There are no private drafts or simulated publishing controls. Office follow-up — the earlier standalone triage screen this form's room/type fields once duplicated — is retired; see docs/CALENDAR_GOOGLE_WORKFLOW.md for where its one still-useful piece (a confirmed rental's own paperwork trail) moved to.
 
 News events open their existing editor for users with `news_edit`. Gym records open Gym Rentals for `gym_manage`; private renter information is not added to the calendar response. Google events include their validated original Google link in the authenticated workspace only. No Google writes or recurrence edits occur in Admin.
 

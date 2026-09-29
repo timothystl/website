@@ -28,7 +28,7 @@ export function workspaceSearchEntries(user, query) {
   ].filter(r=>r.on&&(r.label+' '+r.meta).toLowerCase().includes(query.toLowerCase()))
     .map(({on,...r})=>({section:'Workspace',...r}));
 }
-export function workspaceTabs(user,active,badges={}){const tabs=[[canCalendar(user),'/calendar-workspace','Calendar','calendar'],[hp(user,'intake_manage'),'/event-intake','Office follow-up','intake'],[hp(user,'events_manage')||hp(user,'market_manage')||Object.keys(badges.eventPerms||{}).some(p=>hp(user,p)),'/events','Registrations','events'],[hp(user,'pages_edit'),'/calendar-categories','Categories & colors','calcats']];return `<nav class="ws-tabs" aria-label="Calendar workspace">${tabs.filter(t=>t[0]).map(([,href,label,id])=>`<a href="${href}"${id===active?' aria-current="page"':''}>${label}</a>`).join('')}</nav>`;}
+export function workspaceTabs(user,active,badges={}){const tabs=[[canCalendar(user),'/calendar-workspace','Calendar','calendar'],[hp(user,'events_manage')||hp(user,'market_manage')||Object.keys(badges.eventPerms||{}).some(p=>hp(user,p)),'/events','Registrations','events'],[hp(user,'pages_edit'),'/calendar-categories','Categories & colors','calcats']];return `<nav class="ws-tabs" aria-label="Calendar workspace">${tabs.filter(t=>t[0]).map(([,href,label,id])=>`<a href="${href}"${id===active?' aria-current="page"':''}>${label}</a>`).join('')}</nav>`;}
 // Preserve unfamiliar lines and return unchanged structured rows byte-for-byte.
 export function serviceRows(raw){return String(raw??'').split('\n').map((line,index)=>{const p=line.split('|');return p.length>=2&&p.length<=3?{index,day:p[0].trim(),time:p[1].trim(),note:(p[2]||'').trim(),original:line}:{index,raw:line,original:line};});}
 export function serializeServiceRows(raw,submitted){

@@ -19,7 +19,7 @@ newsletter/website posts.
   link to Google**. Review its details and either create a Google record or choose
   an existing entry in the displayed calendar range. No bulk migration is automatic.
 - Linked post scheduling fields are locked. Edit those fields in Calendar; photos,
-  publishing channels, promotional titles/copy and office checklists remain local.
+  publishing channels and promotional titles/copy remain local.
 - Use **Room / location**, Month/Week/List, and **Print this view** for the building
   schedule. Locations are the existing room/location text; this is not a new room
   conflict checker or a setup/cleanup reservation system.
@@ -65,9 +65,16 @@ also appear in the calendar. An unavailable Google event is not interpreted as a
 confirmed cancellation; cached records are preserved for review. Confirmed Google
 cancellation clears the cached date but retains all promotional/office content.
 
-Legacy creation endpoints remain compatible with existing tabs/integrations; new
-Calendar and Office follow-up navigation uses the Google-backed form. Converting
-all historical records is a separate reconciliation task, not part of deployment.
+Legacy creation endpoints remain compatible with existing tabs/integrations; the
+Calendar tab uses the Google-backed form. Converting all historical records is a
+separate reconciliation task, not part of deployment.
+
+Office follow-up — the earlier standalone triage screen with its own type/room
+pickers and an 11-type paperwork checklist — is retired; Calendar already covers
+room and office type for a local event, and nothing else read the checklist. A
+confirmed gym rental's own paperwork trail (signed agreement, certificate of
+insurance, custodian told, fee recorded) moved to Gym Rentals' All bookings list
+instead, the one piece of it with no other home.
 
 ## Verification
 
