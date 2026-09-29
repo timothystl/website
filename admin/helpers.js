@@ -820,7 +820,6 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   ].filter(Boolean).join('');
   const eventItems = [
     (hp('intake_manage') || hp('news_edit') || hp('gym_manage') || hp('pages_edit')) ? navItem('/calendar-workspace', 'Calendar', activeTab === 'calendar') : '',
-    hp('intake_manage') ? navItem('/event-intake', 'Office follow-up', activeTab === 'intake', badge(b.intake, true, `${b.intake} item(s) need a decision`)) : '',
     (hp('events_manage') || Object.keys(b.eventPerms || {}).some(k => hp(k))) ? navItem('/events', 'Registrations', activeTab === 'events') : '',
     hp('pages_edit') ? navItem('/calendar-categories', 'Categories &amp; colors', activeTab === 'calcats') : '',
   ].filter(Boolean).join('');
@@ -922,7 +921,6 @@ const TRAIL = {
   filtered: { group: GROUPS.email, section: 'Filtered mail' },
   pushLog: { group: GROUPS.email, section: 'Push notification log' },
   giving: { group: GROUPS.money, section: 'Giving' },
-  intake: { group: GROUPS.events, section: 'Office follow-up', waits: 'intake' },
   market: { group: GROUPS.money, section: 'Christmas Market vendors', waits: 'market' },
   gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
   payroll: { group: GROUPS.money, section: 'Payroll' },

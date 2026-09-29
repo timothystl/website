@@ -39,12 +39,14 @@ export const PERMISSIONS = {
   // roster, the same separation market_manage already keeps from the market
   // being merely reachable.
   events_manage:      'Events (create & manage)',
-  // The Event Intake screen — the checklist over every Google booking, News
-  // post and confirmed gym rental. Its own key rather than a share of
-  // news_edit or gym_manage: it reads across all three (plus payment/renter
-  // detail from Gym Rentals), so it should not silently widen to whoever
-  // holds any one of them.
-  intake_manage:      'Event intake',
+  // The Calendar tab in Calendar & events — adding/editing Google Calendar
+  // events and locally-entered ones. Its own key rather than a share of
+  // news_edit or gym_manage: Calendar reads across Google, News and confirmed
+  // gym rentals, so it should not silently widen to whoever holds any one of
+  // them. (Formerly also gated the retired Event Intake / "Office follow-up"
+  // screen — the name stayed the same to avoid rewriting every stored user's
+  // permission list for a label-only change.)
+  intake_manage:      'Calendar & events',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
 };

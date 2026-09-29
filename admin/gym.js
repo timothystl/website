@@ -8,6 +8,32 @@ import { renderListSection, primaryCell, statusPill } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { pushToAllSubscribers } from './webpush.js';
 
+// ── PAPERWORK CHECKLIST (moved from the retired Event Intake "Office
+// follow-up" screen) ─────────────────────────────────────────
+// The rental checklist was the one piece of that screen with no other home
+// once Calendar & events took over room and type — see website-admin-worker.js's
+// schema notes for the column additions. One list drives both the POST route
+// (below) and the checkbox row on the All bookings list, so the two can never
+// disagree about which key writes which column.
+const GYM_PAPERWORK_FIELDS = [
+  { key: 'agreement', column: 'agreement_signed', abbr: 'Agmt', label: 'Signed use agreement on file' },
+  { key: 'insurance', column: 'insurance_received', abbr: 'Ins', label: 'Certificate of insurance current' },
+  { key: 'custodian', column: 'custodian_notified', abbr: 'Cust', label: 'Custodian told about setup' },
+  { key: 'fee', column: 'fee_recorded', abbr: 'Fee', label: 'Fee or waiver recorded' },
+];
+
+// Only a confirmed booking has paperwork to track — a hold isn't a real
+// rental yet, and a released/cancelled one never became one. Checking any
+// box submits the other three exactly as they already stand, so ticking one
+// never silently un-ticks another already saved.
+function gymPaperworkCell(b) {
+  if (b.status !== 'confirmed') return '<span style="color:var(--tlc-muted);font-size:12.5px;">—</span>';
+  const boxes = GYM_PAPERWORK_FIELDS.map((f) => `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;" title="${escapeHtml(f.label)}">
+    <input type="checkbox" name="${f.key}" value="1" ${b[f.column] ? 'checked' : ''} onchange="this.form.requestSubmit()" style="width:14px;height:14px;cursor:pointer;">${f.abbr}
+  </label>`).join('');
+  return `<form method="POST" action="/gym-rentals/bookings/paperwork/${b.id}" style="display:flex;gap:8px;flex-wrap:wrap;margin:0;">${boxes}</form>`;
+}
+
 // ── IMAGE HELPERS ───────────────────────────────────────────
 export function extractImageKeys(body, origin) {
   if (!body) return [];
@@ -4445,6 +4471,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
               primaryCell(fmtBookingDate(b.booking_date), `${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}`),
               `<span>${b.created_at ? escapeHtml(formatDate(String(b.created_at).slice(0, 10))) : ''}</span>`,
               statusPill(tone, label),
+              gymPaperworkCell(b),
             ],
             actions: (b.status === 'hold' || b.status === 'confirmed') && !past
               ? (b.status === 'hold'
@@ -4814,6 +4841,25 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
           }
         }
         return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings?msg=saved' } });
+      }
+
+      // ── BOOKING PAPERWORK ─────────────────────────────────────
+      // The four checkboxes the retired Event Intake "Office follow-up"
+      // screen used to track for a rental (signed agreement, certificate of
+      // insurance, custodian told about setup, fee or waiver recorded) —
+      // nothing else in this app recorded that, so it lives on the booking
+      // itself now, not a separate screen. All four checkboxes submit
+      // together from one small form on the All bookings list (see
+      // GYM_PAPERWORK_FIELDS below, shared with that render) — a checkbox
+      // left unchecked simply is not present in the POST body, same as any
+      // other checkbox form.
+      if (path.startsWith('/gym-rentals/bookings/paperwork/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        const form = await request.formData();
+        await env.DB.prepare(
+          `UPDATE gym_bookings SET ${GYM_PAPERWORK_FIELDS.map((f) => `${f.column}=?`).join(', ')} WHERE id=?`
+        ).bind(...GYM_PAPERWORK_FIELDS.map((f) => (form.get(f.key) === '1' ? 1 : 0)), bid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings' } });
       }
 
       // ── INVOICES LIST ─────────────────────────────────────────

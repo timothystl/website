@@ -47,7 +47,7 @@ that; this table is only for finding the right one.
 | `newsletter.js` | The weekly ~600-recipient newsletter — the one action in this admin that can't be taken back, so its send/approval rules live here. |
 | `calendar.js` | The Church Calendar feed: merges two Google Calendars with News & Events into one de-duplicated shape. |
 | `events.js` | The generalized Events system the Christmas Market grew into. |
-| `intake.js` / `intake-page.js` | Event Intake — the office's own triage queue over every Google booking, News post, and confirmed gym rental. |
+| `intake.js` | Event types and rooms shared by Calendar & events (`workspace.js`, `calendar.js`) — what's left of the retired Event Intake / Office follow-up screen. |
 | `market.js` / `market-page-seed.js` / `market-vendors-apply-seed.js` | The Christmas Market vendor application (replaced a Google Form + spreadsheet). |
 | `square.js` | Square checkout links per vendor, and the webhook that confirms payment. |
 | `gym.js` | Gym rental booking and its route handler (large — 5,300+ lines). |

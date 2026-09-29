@@ -53,15 +53,7 @@ import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
          DEFAULT_CATEGORIES, NEUTRAL_CATEGORY,
          parseFilterList, filterEvents, feedName } from './admin/calendar.js';
-// ⚠ Only openCountOf is needed here — for the sidebar/dashboard badge count
-// in intakeOpenCount() below, which deliberately reads event_intake directly
-// rather than fetching Google. Every other Event Intake decision (types,
-// checklists, the merge, the queues) and all the D1 I/O and rendering live in
-// admin/intake-page.js, imported below — see its own header comment for why
-// this screen is its own module rather than another few hundred lines here.
-import { openCountOf } from './admin/intake.js';
 import { handleWorkspaceRoutes, workspaceSearchEntries } from './admin/workspace.js';
-import { handleIntakeRoutes } from './admin/intake-page.js';
 import { migrateLegacyPage, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock,
@@ -392,8 +384,7 @@ async function badgeCounts(env, user) {
   const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
   const canApprove = hasPermission(user, 'newsletter_approve');
   const canMarket = hasPermission(user, 'market_manage');
-  const canIntake = hasPermission(user, 'intake_manage');
-  const [gym, pages, newsletter, market, eventPerms, intake] = await Promise.all([
+  const [gym, pages, newsletter, market, eventPerms] = await Promise.all([
     canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
     // A page counts as needing attention when its draft differs from what is
     // live, or when it has never been published at all. Same rule as the Pages
@@ -408,43 +399,8 @@ async function badgeCounts(env, user) {
     // row to a coordinator holding one of them without also holding
     // events_manage — see the eventItems row in sidebarShell().
     eventCoordinatorPermissions(env).catch(() => ({})),
-    // ⚠ A DB COUNT, NOT A LIVE GOOGLE POLL. badgeCounts() runs on nearly every
-    // admin request, and Event Intake's real list requires fetching Google —
-    // adding that fetch here would slow down every page for anyone holding
-    // intake_manage. Instead this reads event_intake as of the last time
-    // somebody opened the screen (which is when new rows are synced in — see
-    // GET /event-intake), and reads TRUE if that has never happened. It is
-    // therefore honest about being a day or two stale rather than a live
-    // count, the same tradeoff Filtered Mail's badge already makes.
-    canIntake ? intakeOpenCount(env) : 0,
   ]);
-  return { gym, pages, newsletter, market, eventPerms, intake };
-}
-
-// The one-line answer badgeCounts() needs: how many synced intake rows still
-// need a decision. Bounded to roughly "upcoming" by the row's own
-// event_date — a row nobody has looked at in months should age out of the
-// badge, not inflate it forever. Uses the SAME openCountOf() the real screen
-// uses, so the two can never disagree about what "not yet ready" means.
-//
-// ⚠ A PUBLISHED ROW NEVER COUNTS, EVEN WITH AN OPEN CHECKLIST — the same
-// needsDecision() rule admin/intake.js applies to the "Needs a decision"
-// queue itself. Publish is the office's own decision that a row needs
-// nothing further from this screen; counting it here anyway would leave the
-// badge (and the dashboard tile it feeds) permanently overstating how much
-// is actually still waiting on staff.
-async function intakeOpenCount(env) {
-  try {
-    const from = churchDatePlus(-3);
-    const rows = (await env.DB.prepare(
-      "SELECT event_type, checks_json, published_at FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
-    ).bind(from).all()).results || [];
-    return rows.filter((r) => {
-      if (r.published_at) return false;
-      const checks = r.checks_json ? (JSON.parse(r.checks_json) || {}) : {};
-      return openCountOf(r.event_type, checks) !== 0;
-    }).length;
-  } catch (_) { return 0; }
+  return { gym, pages, newsletter, market, eventPerms };
 }
 
 // A genuinely R2-uploaded image (/api/upload-image, the market photo upload)
@@ -1497,7 +1453,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-24-functional-fixes'; // Atomic gym overlaps and serialized newsletter campaign operations.
+    const SCHEMA_VERSION = '2026-09-29-retire-office-followup'; // Gym booking paperwork columns replace the retired Event Intake checklist.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2376,6 +2332,17 @@ export default {
     // row before this) means an unbounded waitlist, unchanged.
     try { await env.DB.prepare('ALTER TABLE site_events ADD COLUMN waitlist_cap INTEGER').run(); } catch (_) {}
 
+    // Office follow-up (the old Event Intake screen) is retired — Calendar &
+    // events already covers room/type, and its own paperwork checklist had no
+    // other consumer. The one piece worth keeping is a confirmed rental's own
+    // paperwork trail (signed agreement, certificate of insurance, custodian
+    // told, fee recorded) — nothing else tracked that, so it moves onto the
+    // booking itself rather than disappearing with the screen.
+    try { await env.DB.prepare('ALTER TABLE gym_bookings ADD COLUMN agreement_signed INTEGER DEFAULT 0').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE gym_bookings ADD COLUMN insurance_received INTEGER DEFAULT 0').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE gym_bookings ADD COLUMN custodian_notified INTEGER DEFAULT 0').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE gym_bookings ADD COLUMN fee_recorded INTEGER DEFAULT 0').run(); } catch (_) {}
+
     for (const p of PARTNER_SEED) {
       try {
         await env.DB.prepare(
@@ -3156,8 +3123,8 @@ export default {
       let catV = 0;
       for (let i = 0; i < catStamp.length; i++) catV = ((catV * 31) + catStamp.charCodeAt(i)) | 0;
 
-      // ⚠ THE SAME TRICK, FOR A LOCAL EVENT INTAKE ROW. Without it, a wedding
-      // typed in through Event Intake would sit behind the same ten-minute
+      // ⚠ THE SAME TRICK, FOR A LOCAL EVENT_INTAKE ROW. Without it, a wedding
+      // typed in through Calendar & events would sit behind the same ten-minute
       // window a category rename would otherwise sit behind — and unlike a
       // rename, "I just added this and it isn't on the calendar" is the exact
       // complaint the whole feature exists to end. One cheap indexed count,
@@ -6044,16 +6011,6 @@ ${PAYROLL_HTML}`, 'Payroll');
         return new Response('Access denied.', { status: 403 });
       }
       const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx, await portalOrigin(env), await pageBadges());
-      if (r) return r;
-    }
-
-    // ── EVENT INTAKE (auth + intake_manage) ─────────────────────
-    // The office's own triage queue over Google, News & Events and confirmed
-    // gym rentals at once — see admin/intake-page.js's own header comment for
-    // the design and the three explicit decisions it is built on.
-    {
-      const r = await handleIntakeRoutes(request, env, path, method, currentUser, url,
-        (path === '/event-intake' || path.startsWith('/event-intake/')) ? await pageBadges() : {});
       if (r) return r;
     }
 

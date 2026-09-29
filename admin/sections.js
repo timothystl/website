@@ -130,8 +130,8 @@ export const SECTIONS = {
     label: 'All bookings', glyph: '▤', title: 'All bookings',
     purpose: 'Every hold and confirmed booking, newest first — the long view behind the queue on the main screen.',
     search: 'Search bookings', filters: ['All', 'Holds', 'Confirmed', 'Released'],
-    columns: [['Group', '1.8fr'], ['When', '1.8fr'], ['Booked', '1.2fr'], ['Status', '1.2fr']],
-    note: 'Confirming and releasing happen on the Gym Rentals screen, so there is one place a booking changes.'
+    columns: [['Group', '1.6fr'], ['When', '1.6fr'], ['Booked', '1fr'], ['Status', '1fr'], ['Paperwork', '1.6fr']],
+    note: 'Confirming and releasing happen on the Gym Rentals screen, so there is one place a booking changes. Paperwork only shows for a confirmed booking — sign, insure, tell the custodian, record the fee.'
   },
   gymInvoices: {
     label: 'Invoices', glyph: '≡', title: 'Invoices',

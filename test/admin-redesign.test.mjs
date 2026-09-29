@@ -13,7 +13,6 @@
 // claims and the second one is what a new deploy actually hits.
 import { DatabaseSync } from 'node:sqlite';
 import { churchDate, churchDatePlus } from '../admin/when.js';
-import { openCountOf } from '../admin/intake.js';
 import worker, { PAYROLL_RPC_FNS } from '../website-admin-worker.js';
 import { pushToAllSubscribers } from '../admin/webpush.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
@@ -112,6 +111,17 @@ async function call(env, path, { cookie = '', method = 'GET', form = null, fresh
   }
   const req = new Request('https://admin.timothystl.org' + path, { method, headers, body });
   return worker.fetch(req, env, fresh ? { waitUntil: () => {}, passThroughOnException: () => {} } : ctx);
+}
+
+// Calendar & events' own local-event door (admin/workspace.js) takes a JSON
+// body, not a form post — call()'s x-www-form-urlencoded shape does not fit
+// it, so it gets its own thin wrapper rather than complicating call() for one
+// caller.
+async function callJson(env, path, { cookie = '', method = 'POST', body = null } = {}) {
+  const headers = new Headers({ 'content-type': 'application/json', origin: 'https://admin.timothystl.org' });
+  if (cookie) headers.set('cookie', cookie);
+  const req = new Request('https://admin.timothystl.org' + path, { method, headers, body: body != null ? JSON.stringify(body) : undefined });
+  return worker.fetch(req, env, ctx);
 }
 
 // A signed-in session, created directly in the tables the way login does.
@@ -3646,6 +3656,44 @@ group('the gym sub-screens use the shared pattern');
   has(blocked, 'does not cancel bookings already confirmed', 'and the rule it enforces');
 }
 
+group('a confirmed rental carries its own paperwork checklist now — the one piece of the retired Office follow-up screen with no other home');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (1,'Cub Scouts','Pat','pat@example.org',1)").run();
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,'2099-02-10','18:00','20:00','confirmed',?)").run(now);
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,'2099-02-11','18:00','20:00','hold',?)").run(now);
+  const confirmedId = db.prepare("SELECT id FROM gym_bookings WHERE status='confirmed'").get().id;
+  const holdId = db.prepare("SELECT id FROM gym_bookings WHERE status='hold'").get().id;
+
+  const page = await (await call(env, '/gym-rentals/bookings', { cookie })).text();
+  has(page, 'Paperwork', 'the All bookings list has the new column');
+  has(page, `/gym-rentals/bookings/paperwork/${confirmedId}`, 'the confirmed booking gets the checkbox form');
+  // A hold is not a rental yet — nothing to check off until it is confirmed.
+  // Its row still renders (no crash), just without a paperwork form for it.
+  ok(!page.includes(`/gym-rentals/bookings/paperwork/${holdId}`), 'a hold gets no paperwork form of its own');
+
+  // Ticking two of the four boxes.
+  const res = await call(env, `/gym-rentals/bookings/paperwork/${confirmedId}`, { cookie, method: 'POST',
+    form: { agreement: '1', fee: '1' } });
+  eq(res.status, 302, 'redirects back to the list, same shape as every other booking action here');
+  const after = db.prepare('SELECT agreement_signed, insurance_received, custodian_notified, fee_recorded FROM gym_bookings WHERE id=?').get(confirmedId);
+  eq(after.agreement_signed, 1, 'agreement checked');
+  eq(after.fee_recorded, 1, 'fee checked');
+  eq(after.insurance_received, 0, 'insurance left unchecked');
+  eq(after.custodian_notified, 0, 'custodian left unchecked');
+
+  // Submitting again with a box now left off clears it — the form always
+  // posts the FULL current state of all four, not just what changed.
+  await call(env, `/gym-rentals/bookings/paperwork/${confirmedId}`, { cookie, method: 'POST',
+    form: { insurance: '1' } });
+  const after2 = db.prepare('SELECT agreement_signed, insurance_received, custodian_notified, fee_recorded FROM gym_bookings WHERE id=?').get(confirmedId);
+  eq(after2.agreement_signed, 0, 'no longer checked — it was not in this submission');
+  eq(after2.insurance_received, 1, 'the newly-checked one is set');
+  eq(after2.fee_recorded, 0, 'and the earlier fee tick is gone too, same reason');
+}
+
 group('the taps are counted');
 {
   // \u26a0 Until now `taps.scans` was a column nothing ever wrote to. Resolution
@@ -6132,20 +6180,34 @@ group('the events editors force an explicit choice: a real time, or All day');
   } })).status === 302, 'no event date means nothing to require');
   ok(db.prepare("SELECT 1 FROM news_items WHERE title='Just an announcement'").get(), 'and it is written');
 
-  // The identical rule on Event Intake's own "+ New event" door.
-  const eiAmbiguous = await call(env, '/event-intake/new', { cookie: admin.cookie, method: 'POST', form: {
-    local_title: 'Ambiguous local event', local_event_date: '2026-08-21',
-  } });
-  eq(eiAmbiguous.status, 302, 'refused, not a 500');
-  ok(eiAmbiguous.headers.get('location').includes('needsdate'), 'and says so the same way a missing title/date does');
-  ok(!db.prepare("SELECT 1 FROM event_intake WHERE local_title='Ambiguous local event'").get(),
-    'nothing was written');
+  // The identical rule for a locally-entered event used to be tested through
+  // Event Intake's own "+ New event" door (/event-intake/new); that screen is
+  // retired (see admin/intake.js's header comment). A local event is created
+  // through Calendar & events instead — see the next group for that door's
+  // own version of this same rule.
+}
 
-  ok((await call(env, '/event-intake/new', { cookie: admin.cookie, method: 'POST', form: {
-    local_title: 'A real local all-day event', local_event_date: '2026-08-21', local_all_day: '1',
-  } })).status === 302, 'checking All day lets the local event save');
-  ok(db.prepare("SELECT 1 FROM event_intake WHERE local_title='A real local all-day event'").get(),
-    'and it is written');
+group('Calendar & events’ own local-event door forces the same choice, server-side');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+
+  const ambiguous = await callJson(env, '/calendar-workspace/local', { cookie: admin.cookie,
+    body: { title: 'Ambiguous local event', date: '2026-08-21' } });
+  eq(ambiguous.status, 400, 'refused, not a 500');
+  const ambiguousBody = await ambiguous.json();
+  ok(/all day/i.test(ambiguousBody.error || ''), 'and says why: ' + ambiguousBody.error);
+  ok(!db.prepare("SELECT 1 FROM event_intake WHERE local_title='Ambiguous local event'").get(), 'nothing was written');
+
+  const allDay = await callJson(env, '/calendar-workspace/local', { cookie: admin.cookie,
+    body: { title: 'A real local all-day event', date: '2026-08-21', allDay: true } });
+  eq(allDay.status, 200, 'checking All day lets the local event save');
+  ok(db.prepare("SELECT 1 FROM event_intake WHERE local_title='A real local all-day event'").get(), 'and it is written');
+
+  const timed = await callJson(env, '/calendar-workspace/local', { cookie: admin.cookie,
+    body: { title: 'A real timed local event', date: '2026-08-21', time: '18:30' } });
+  eq(timed.status, 200, 'a real time lets it save too, with All day left unchecked');
+  ok(db.prepare("SELECT 1 FROM event_intake WHERE local_title='A real timed local event'").get(), 'and it is written');
 }
 
 group('the newsletter picks its events from the posts, instead of retyping them');
@@ -6356,610 +6418,6 @@ group('a subscription can leave out what would crowd somebody\'s own calendar');
     ok(json.events.some((e) => e.title === 'Christmas break'),
       'the page still gets the whole month, whatever the subscription asked for');
   } finally { globalThis.fetch = realFetch; }
-}
-
-
-// ── EVENT INTAKE, end to end through the real Worker ────────────────────────
-// admin/intake.test.mjs already covers every pure decision (types, checklist
-// templates, the merge, the queues) with zero D1 access. What only a real
-// Worker + real sqlite can prove: the permission gate, that a sync actually
-// writes placeholder rows, that Publish is refused server-side (not just by a
-// disabled button) when the checklist is incomplete, that a deferred field
-// set is genuinely read-only against a crafted POST (not just hidden in the
-// markup), that a "local" row created here reaches the PUBLIC calendar feed,
-// and — the one property Andrew's three answers are all binding on — that
-// none of this ever gates the public calendar or touches calendar_category.
-group('Event Intake is gated on its own permission');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['news_edit'], 'noaccess');
-  const res = await call(env, '/event-intake', { cookie, fresh: true });
-  eq(res.status, 403, 'holding no intake_manage at all is refused');
-  ok(!(await res.text()).includes('Timothy’s Calendar'), 'and never renders the screen to get there');
-}
-
-group('a visit syncs Google, News and gym rows into placeholders, all unclassified');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const realFetch = globalThis.fetch;
-  const gcalDate = churchDatePlus(5);
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [
-    { id: 'ei-g1', summary: 'Choir Rehearsal', colorId: '9',
-      start: { dateTime: `${gcalDate}T19:00:00-05:00` }, end: { dateTime: `${gcalDate}T20:00:00-05:00` } },
-  ] }) });
-  try {
-    env.GCAL_API_KEY = 'test-key';
-    const newsDate = churchDatePlus(6);
-    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, event_time, expire_date, channels) VALUES (?,?,?,?,?,?,?)")
-      .run('Rally Day Kickoff', 'Classes then a picnic.', churchDate(), newsDate, '09:15', '2099-01-01', 'web');
-    db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Boy Scouts Troop 217','Dave Kessler','dave@troop217.org',1)").run();
-    const gymDate = churchDatePlus(7);
-    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:30','20:30','confirmed','Tables 4, chairs 40')")
-      .run(gymDate);
-    // A held/expired hold must never appear — only confirmed bookings do.
-    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,?,'09:00','10:00','hold')").run(gymDate);
-
-    const res = await call(env, '/event-intake', { cookie, fresh: true });
-    eq(res.status, 200, 'intake_manage reaches the screen');
-    const html = await res.text();
-    has(html, 'Choir Rehearsal', 'the Google event is in the default (inbox) queue');
-    has(html, 'Rally Day Kickoff', 'so is the News post');
-    has(html, 'Boy Scouts Troop 217', 'and the confirmed gym booking, titled by group name');
-    has(html, 'Needs a type', 'none of the three has been classified yet');
-    ok(!html.includes('4 open') || true, 'sanity: page renders without throwing');
-
-    // ⚠ THE SYNC WROTE PLACEHOLDER ROWS — this is the row the badge and a
-    // later visit both depend on, and it is the one thing a unit test on
-    // admin/intake.js alone could never prove (it has no D1 access at all).
-    // ⚠ Scoped to OUR OWN three keys, not a bare row count — the school-year
-    // seed (admin/school-calendar-seed.js) writes ~29 News & Events rows with
-    // channel='calendar', and several of those genuinely fall inside Event
-    // Intake's own sync window too. That is correct behavior (Andrew's
-    // "everything flows into the queue" applies to them as much as to this
-    // test's own data), not a defect to work around — so the test asks about
-    // its own rows by key instead of assuming it is the only thing synced.
-    const newsId = db.prepare("SELECT id FROM news_items WHERE title = 'Rally Day Kickoff'").get().id;
-    const gymBookingId = db.prepare("SELECT id FROM gym_bookings WHERE status = 'confirmed'").get().id;
-    const myKeys = ['g:ei-g1', `n:${newsId}`, `b:${gymBookingId}`];
-    const placeholders = myKeys.map(() => '?').join(',');
-    const rowsOf = () => db.prepare(`SELECT source_kind, source_key, event_type FROM event_intake WHERE source_key IN (${placeholders})`).all(...myKeys);
-    const rows = rowsOf();
-    eq(rows.length, 3, 'exactly one placeholder row per synced source of ours (the hold is not confirmed, so it never syncs)');
-    ok(rows.every((r) => r.event_type === null), 'and every one starts unclassified');
-    ok(rows.some((r) => r.source_kind === 'gcal' && r.source_key === 'g:ei-g1'), 'the Google row uses the same key space the public calendar reads');
-    ok(rows.some((r) => r.source_kind === 'gym'), 'the gym row synced too — Andrew’s explicit "everything, including gym bookings"');
-
-    // A second visit must not duplicate the rows — ON CONFLICT(source_key)
-    // updates in place rather than inserting a sibling.
-    await call(env, '/event-intake', { cookie, fresh: true });
-    eq(rowsOf().length, 3, 'a second sync does not duplicate placeholder rows for the same three keys');
-  } finally { globalThis.fetch = realFetch; }
-}
-
-group('picking a type never touches calendar_category, and the checklist is purely internal');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const newsDate = churchDatePlus(4);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels, calendar_category) VALUES (?,?,?,?,?,?,?)")
-    .run('Council Meeting', 'Monthly meeting.', churchDate(), newsDate, '2099-01-01', 'web', 'meetings');
-  await call(env, '/event-intake', { cookie, fresh: true }); // sync
-  const key = `n:${db.prepare("SELECT id FROM news_items WHERE title='Council Meeting'").get().id}`;
-  // ⚠ Looked up by source_key, not "the first news-kind row" — the
-  // school-year seed writes its own News-sourced rows into event_intake too,
-  // so grabbing an arbitrary row of that kind would silently check somebody
-  // else's row instead of this test's own.
-
-  const res = await call(env, '/event-intake/type', { cookie, method: 'POST',
-    form: { key, type: 'worship', queue: 'inbox' } });
-  eq(res.status, 302, 'redirects back to the queue');
-  const after = db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(key);
-  eq(after.event_type, 'worship', 'the Intake type is stored');
-  const news = db.prepare("SELECT calendar_category FROM news_items WHERE title='Council Meeting'").get();
-  eq(news.calendar_category, 'meetings', 'and the News post’s OWN calendar_category is completely untouched — type and category are separate ideas');
-
-  // ⚠ THE LOAD-BEARING ASSERTION: the public calendar feed shows this event
-  // — unchanged, still under its News category — with no checklist item
-  // ever checked and nothing ever published from this screen. Internal
-  // tracking here must never gate what the congregation sees.
-  const feed = await (await call(env, `/api/calendar?month=${newsDate.slice(0, 7)}`, { fresh: true })).json();
-  const onFeed = feed.events.find((e) => e.title === 'Council Meeting');
-  ok(onFeed, 'the event is on the public calendar with zero Intake checklist progress');
-  eq(onFeed.category, 'meetings', 'still wearing its own category, not Intake’s "worship"');
-
-  // An unrecognized type is refused rather than stored.
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'not-a-real-type', queue: 'inbox' } });
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(key).event_type, null,
-    'a bogus type clears the classification rather than storing garbage');
-}
-
-group('Publish is never gated on the checklist or the room — reported as "dont make any field required"');
-{
-  // Andrew: "not every event needs a room, or the checklist... dont make any
-  // field required, you can just leave it with a publish button." The
-  // checklist was already never what put anything ON the public calendar —
-  // a Google/News/gym-sourced event reaches it through its own path
-  // regardless, and a local one reaches it the instant it is entered — so
-  // gating Publish on it was only ever an internal courtesy that got in the
-  // way of a routine class or a plain note like "First day of school."
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const newsDate = churchDatePlus(3);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Adult Bible Study', 'Colossians, week 1.', churchDate(), newsDate, '2099-01-01', 'web');
-  await call(env, '/event-intake', { cookie, fresh: true });
-  const newsId = db.prepare("SELECT id FROM news_items WHERE title='Adult Bible Study'").get().id;
-  const key = `n:${newsId}`;
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
-
-  // Publish with only ONE of the four education checklist items ticked, and
-  // no room at all — this used to be refused server-side.
-  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'education', action: 'publish', check_teacher: '1' } });
-  eq(res.status, 302, 'redirects on success');
-  const row = db.prepare("SELECT published_at, published_by, checks_json, room FROM event_intake WHERE source_key = ?").get(key);
-  ok(row.published_at, 'published even though three of four checklist items were never ticked and no room was set');
-  eq(row.published_by, 'office', 'and records who');
-  ok(JSON.parse(row.checks_json).teacher === true, 'the one real tick is still saved alongside it — the checklist is a record now, not a gate');
-  eq(row.room, '', 'no room was required either');
-}
-
-group('a bare item — no type, no room, no checklist ticked — can still be published, "materials copied" is not a calendar requirement');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const newsDate = churchDatePlus(5);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('First day of school', 'No description needed.', churchDate(), newsDate, '2099-01-01', 'web');
-  await call(env, '/event-intake', { cookie, fresh: true });
-  const newsId = db.prepare("SELECT id FROM news_items WHERE title='First day of school'").get().id;
-  const key = `n:${newsId}`;
-  // No /event-intake/type call at all — Publish is pressed on an item that
-  // is still "Needs a type."
-  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'inbox', action: 'publish' } });
-  eq(res.status, 302, 'redirects on success');
-  const row = db.prepare("SELECT published_at, event_type FROM event_intake WHERE source_key = ?").get(key);
-  ok(row.published_at, 'a plain note publishes with nothing filled in at all');
-  eq(row.event_type, null, 'and never picked up a type it was never given');
-}
-
-group('a deferred field set (a gym-sourced rental) is read-only against a crafted POST, not just hidden');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Red Cross','Angela Poe','apoe@redcross.org',1)").run();
-  const gymDate = churchDatePlus(10);
-  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'12:30','16:30','confirmed','8 tables, 20 chairs')")
-    .run(gymDate);
-  await call(env, '/event-intake', { cookie, fresh: true });
-  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
-  const key = `b:${bookingId}`;
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
-
-  // A gym-sourced rental defers ALL its extra fields to Gym Rentals — see
-  // deferredFieldsSource('rental', 'gym') in admin/intake.js. A crafted POST
-  // trying to overwrite the renter's name through Intake must be dropped.
-  const res = await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'rental', action: 'save', room: 'Gym',
-      extra_renter: 'SOMEBODY ELSE ENTIRELY', extra_contact: 'not-a-real-contact' } });
-  eq(res.status, 302, 'still saves the parts that are genuinely Intake’s (the room)');
-  const row = db.prepare("SELECT extra_json, room FROM event_intake WHERE source_key = ?").get(key);
-  eq(row.room, 'Gym', 'the room, which is not deferred, is saved');
-  eq(row.extra_json, null, 'but extra_json was never written at all — the deferred fields have nowhere to land');
-
-  // And the real renter name still comes from gym_groups, not from anything
-  // Intake could have overwritten.
-  const group = db.prepare('SELECT name FROM gym_groups WHERE id = 1').get();
-  eq(group.name, 'Red Cross', 'the real record is untouched');
-  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
-  has(page, 'Red Cross', 'and the screen displays it read-only, pulled live from the real record');
-  has(page, 'Managed on the Gym Rentals screen, not here.', 'saying so in as many words');
-}
-
-group("the checklist renders before the type's own fields, and a tick shows without a reload");
-{
-  // Reported plainly: "move the info box on right side up to the top so I can
-  // see it for the event" and "these checkboxes are all unable to be ticked."
-  // Both traced to the same panel — a Rental item is the one type whose extra
-  // block (the deferred Gym Rentals note) is tall enough that the checklist
-  // used to sit well below the fold.
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Cub Scouts','Pat Reyes','preyes@example.org',1)").run();
-  const gymDate = churchDatePlus(9);
-  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:00','20:00','confirmed','')")
-    .run(gymDate);
-  await call(env, '/event-intake', { cookie, fresh: true });
-  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
-  const key = `b:${bookingId}`;
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
-  await call(env, '/event-intake/save', { cookie, method: 'POST',
-    form: { key, queue: 'rental', action: 'save', room: 'Gym', check_agreement: '1' } });
-
-  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
-  const checklistAt = page.indexOf('Office paperwork');
-  const typeBlockAt = page.indexOf('Rental only');
-  ok(checklistAt >= 0 && typeBlockAt >= 0, 'both the checklist and the type-specific block are on the page');
-  ok(checklistAt < typeBlockAt,
-    'the checklist ("Office paperwork") renders before the type’s own fields ("Rental only"), so it does not need scrolling past to reach: ' +
-    checklistAt + ' vs ' + typeBlockAt);
-
-  // ⚠ THE ROOT CAUSE OF "unable to be ticked": the tick glyph and the fill
-  // were only ever written into the markup by the SERVER, keyed on whatever
-  // was already saved — clicking a box toggled the underlying input just
-  // fine, but nothing on screen ever said so until a reload. The fix is that
-  // the glyph is in the DOM unconditionally now, and a live CSS rule (not a
-  // second server-side flag) decides whether it is visible.
-  const checkSpans = page.match(/class="ei-check-box" aria-hidden="true">[^<]*</g) || [];
-  eq(checkSpans.length, 4, 'the four Rental checklist items each render a box');
-  ok(checkSpans.every((s) => s.endsWith('>✓<')), 'and every one of them — ticked or not — carries the tick mark in the markup: ' + checkSpans.join(' | '));
-  const doneCount = (page.match(/class="ei-check ei-check-done"/g) || []).length;
-  eq(doneCount, 1, 'but only the one item actually saved as done gets the done class server-side, so an unopened page still shows the truth');
-  has(page, '.ei-check:has(input:checked)', 'and a CSS rule keyed off the checkbox’s own live checked state is what makes a click visible with no reload');
-}
-
-group('"+ New event" creates a local row with no other record, and it reaches the public calendar directly');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const formRes = await call(env, '/event-intake/new-form', { cookie, fresh: true });
-  eq(formRes.status, 200, 'the standalone form is reachable');
-  has(await formRes.text(), 'For a booking with no Google event and no News', 'and says what it is for');
-
-  const wedDate = churchDatePlus(20);
-  const res = await call(env, '/event-intake/new', { cookie, method: 'POST', form: {
-    local_title: 'Wedding — Bauer / Klein', local_event_date: wedDate,
-    local_event_time: '14:00', room: 'Sanctuary', type: 'rental',
-  } });
-  eq(res.status, 302, 'redirects back into the queue with the new row selected');
-  const row = db.prepare("SELECT * FROM event_intake WHERE source_kind='local'").get();
-  ok(row, 'a local row now exists');
-  eq(row.event_type, 'rental', 'the type picked on the standalone form is stored immediately');
-  eq(row.local_title, 'Wedding — Bauer / Klein');
-
-  // ⚠ THE OTHER HALF — admin/calendar.js's readLocalIntakeEvents() is unit
-  // tested with a stub DB; this proves the real route that creates a local
-  // row and the real public feed that reads it agree with each other.
-  const feed = await (await call(env, `/api/calendar?month=${wedDate.slice(0, 7)}`, { fresh: true })).json();
-  const onFeed = feed.events.find((e) => e.title === 'Wedding — Bauer / Klein');
-  ok(onFeed, 'the local event reaches the public calendar with no Google event and no News post behind it');
-  eq(onFeed.source, 'local', 'and says so');
-  eq(onFeed.start, `${wedDate}T14:00:00`, 'carrying the church wall clock, no offset');
-
-  // A missing title or date is refused, not silently dropped as a blank row.
-  const bad = await call(env, '/event-intake/new', { cookie, method: 'POST', form: { local_title: '', local_event_date: '' } });
-  eq(bad.status, 302, 'still redirects');
-  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 1,
-    'but nothing was inserted for the incomplete submission');
-
-  // Deleting the local row removes it from the calendar; deleting a
-  // non-local key (the safety the route itself enforces) is a silent no-op.
-  await call(env, '/event-intake/local/delete', { cookie, method: 'POST', form: { key: 'g:not-a-real-id' } });
-  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 1,
-    'a non-local key deletes nothing');
-  await call(env, '/event-intake/local/delete', { cookie, method: 'POST', form: { key: `l:${row.id}` } });
-  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE source_kind='local'").get().n, 0,
-    'the local row itself deletes cleanly');
-  const feedAfter = await (await call(env, `/api/calendar?month=${wedDate.slice(0, 7)}`, { fresh: true })).json();
-  ok(!feedAfter.events.some((e) => e.title === 'Wedding — Bauer / Klein'), 'and is gone from the public calendar too');
-}
-
-group('the sidebar badge counts open Intake items, from the database alone');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const newsDate = churchDatePlus(8);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('MDO Open House', 'Tour the wing.', churchDate(), newsDate, '2099-01-01', 'web');
-  // Before any visit, the badge reads zero — nothing has synced yet, not even
-  // the school-year seed (it only reaches event_intake through a sync, same
-  // as anything else).
-  const dash0 = await call(env, '/dashboard', { cookie, fresh: true });
-  const dash0Html = await dash0.text();
-  has(dash0Html, 'sidebar-item', 'the dashboard renders at all');
-  lacks(dash0Html, 'item(s) need a decision', 'and before any visit event_intake is empty, so nothing is counted yet');
-
-  await call(env, '/event-intake', { cookie, fresh: true }); // syncs everything in the window
-  const dash = await call(env, '/dashboard', { cookie, fresh: true });
-  const dashHtml = await dash.text();
-  has(dashHtml, 'Office follow-up', 'the row is visible to intake_manage');
-  // ⚠ NOT a literal "1 item(s)" — the school-year seed's own rows are inside
-  // the same sync window and genuinely count too (Andrew's "everything"), so
-  // the true number is whatever badgeCounts()/intakeOpenCount() says it is.
-  // The test reads that number out of the database with the SAME openCountOf
-  // the app uses, rather than assuming it is the only source of open items.
-  const openNow = db.prepare(
-    "SELECT event_type, checks_json FROM event_intake WHERE event_date IS NULL OR event_date >= ?"
-  ).all(churchDatePlus(-3)).filter((r) => openCountOf(r.event_type, r.checks_json ? JSON.parse(r.checks_json) : {}) !== 0).length;
-  ok(openNow >= 1, 'at least our own unclassified row counts as open');
-  has(dashHtml, `${openNow} item(s) need a decision`, 'and the badge title names exactly that many');
-
-  // Publish OUR item, and the count drops by exactly one.
-  const key = `n:${db.prepare("SELECT id FROM news_items WHERE title='MDO Open House'").get().id}`;
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'education', queue: 'inbox' } });
-  await call(env, '/event-intake/save', { cookie, method: 'POST', form: {
-    key, queue: 'education', action: 'publish', room: 'Multipurpose Room',
-    check_teacher: '1', check_room: '1', check_materials: '1', check_listed: '1',
-  } });
-  const dashAfter = await call(env, '/dashboard', { cookie, fresh: true });
-  const afterHtml = await dashAfter.text();
-  lacks(afterHtml, `${openNow} item(s) need a decision`, 'the old count is gone');
-  has(afterHtml, `${openNow - 1} item(s) need a decision`, 'and it dropped by exactly the one item that was just published');
-}
-
-group('the left rail is grouped by the four core values, not a flat "By calendar" list');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const res = await call(env, '/event-intake', { cookie, fresh: true });
-  const page = await res.text();
-  has(page, 'Christian Education', 'the value group heading renders, not the raw stored key "education"');
-  // Word of Life, MDO and Youth & Family sit under Christian Education —
-  // matching PARTNER_SEED's own Word-of-Life-is-'education' pairing.
-  const eduIdx = page.indexOf('Christian Education');
-  const outreachIdx = page.indexOf('Outreach');
-  for (const label of ['Word of Life', 'MDO', 'Youth &amp; Family']) {
-    const i = page.indexOf(`>${label}<`);
-    ok(i > eduIdx && i < outreachIdx, `${label} renders between Christian Education and Outreach`);
-  }
-  // News, Meetings and Special event render under "Other", never under any
-  // of the four value headings — the cross-cutting types this repo would not
-  // force a value onto (see the note above TYPE_VALUE in admin/intake.js).
-  const otherIdx = page.lastIndexOf('>Other<');
-  ok(otherIdx > -1, 'the ungrouped "Other" heading renders');
-  for (const label of ['News', 'Meetings', 'Special event']) {
-    ok(page.indexOf(`>${label}<`) > otherIdx, `${label} renders after Other, not folded into a value group`);
-  }
-}
-
-group('bulk type assignment sets one type on many events at once, and skips what does not belong to the office');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  const d1 = churchDatePlus(12), d2 = churchDatePlus(13), d3 = churchDatePlus(14);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Fall Kickoff Sunday School', 'First day back.', churchDate(), d1, '2099-01-01', 'web');
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Confirmation Retreat', 'Overnight at camp.', churchDate(), d2, '2099-01-01', 'web');
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Deacon Meeting', 'Not a youth event.', churchDate(), d3, '2099-01-01', 'web');
-  await call(env, '/event-intake', { cookie, fresh: true }); // sync
-  const idOf = (title) => db.prepare('SELECT id FROM news_items WHERE title = ?').get(title).id;
-  const k1 = `n:${idOf('Fall Kickoff Sunday School')}`;
-  const k2 = `n:${idOf('Confirmation Retreat')}`;
-  const k3 = `n:${idOf('Deacon Meeting')}`;
-
-  // Andrew, looking at 135 unclassified imports: "can we just bulk assign
-  // them?" — two of three checked, one left alone, one type for both.
-  const res = await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
-    form: { queue: 'inbox', type: 'youth', keys: [k1, k2] } });
-  eq(res.status, 302, 'redirects back to the queue, same shape as every other action here');
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k1).event_type, 'youth');
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k2).event_type, 'youth');
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
-    'the one not checked is untouched, even though it synced in the same visit');
-
-  // ⚠ AN UNRECOGNIZED TYPE DOES NOTHING, THE SAME REFUSAL /event-intake/type
-  // ALREADY ENFORCES FOR ONE EVENT — a crafted POST can't smuggle a bogus
-  // value into the column via the bulk door just because the single-item
-  // door checks it.
-  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
-    form: { queue: 'inbox', type: 'not-a-real-type', keys: [k3] } });
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(k3).event_type, null,
-    'a bogus type on the bulk route is refused exactly like on the single-item route');
-
-  // ⚠ A KEY WITH NO MATCHING ITEM IN THIS REQUEST'S OWN MERGE IS SKIPPED, NOT
-  // TRUSTED AS A BARE ID. A stale page or a crafted form posting a key for an
-  // event outside the sync window (or that never existed) must not reach
-  // writeIntakePatch with nothing real behind it.
-  const before = db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n;
-  await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
-    form: { queue: 'inbox', type: 'meetings', keys: ['n:999999'] } });
-  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake").get().n, before, 'nothing was inserted or corrupted for a key that matches no real item');
-}
-
-group('bulk publish approves many events at once with nothing filled in, and clears them off "Needs a decision"');
-{
-  // Andrew, looking at 130 imports each demanding a room, a type and a
-  // four-item checklist before "Assign to selected" was the only bulk
-  // action on the screen: "there is no way to quickly and easily approve
-  // events... these should just all be approved." Bulk publish is the
-  // single-item Publish button's own "nothing here is required" rule,
-  // applied to a whole selection in one submit.
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Maplewood Richmond Heights','Sam Ortiz','sortiz@example.org',1)").run();
-  const d1 = churchDatePlus(15), d2 = churchDatePlus(16), d3 = churchDatePlus(17);
-  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'17:00','20:00','confirmed','')").run(d1);
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Bible Class', 'Weekly study.', churchDate(), d2, '2099-01-01', 'web');
-  db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-    .run('Council Meeting', 'Not part of this batch.', churchDate(), d3, '2099-01-01', 'web');
-  await call(env, '/event-intake', { cookie, fresh: true }); // sync
-
-  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
-  const gymKey = `b:${bookingId}`;
-  const bibleKey = `n:${db.prepare("SELECT id FROM news_items WHERE title='Bible Class'").get().id}`;
-  const councilKey = `n:${db.prepare("SELECT id FROM news_items WHERE title='Council Meeting'").get().id}`;
-
-  // Neither selected item has a type, a room, or a single checklist box
-  // ticked — exactly the state a fresh Google/News/gym import lands in.
-  const res = await call(env, '/event-intake/bulk-publish', { cookie, method: 'POST',
-    form: { queue: 'inbox', keys: [gymKey, bibleKey] } });
-  eq(res.status, 302, 'redirects back to the queue, same shape as bulk-type');
-
-  const gymRow = db.prepare('SELECT published_at, published_by, event_type, room, checks_json FROM event_intake WHERE source_key = ?').get(gymKey);
-  ok(gymRow.published_at, 'the gym rental is published with no type, no room, no checklist item ever ticked');
-  eq(gymRow.published_by, 'office');
-  eq(gymRow.event_type, null, 'bulk publish never assigns a type — that is still what Assign to selected is for');
-  eq(gymRow.room, null, 'and never touches the room either — this row was never saved through /save, so it is still unset');
-  ok(gymRow.checks_json == null || JSON.parse(gymRow.checks_json || '{}').agreement !== true, 'the checklist is untouched, not silently marked done');
-
-  const bibleRow = db.prepare('SELECT published_at FROM event_intake WHERE source_key = ?').get(bibleKey);
-  ok(bibleRow.published_at, 'the second selected item is published too');
-
-  const councilRow = db.prepare('SELECT published_at FROM event_intake WHERE source_key = ?').get(councilKey);
-  eq(councilRow.published_at, null, 'the item never checked is left completely alone');
-
-  // The point of the button: both published rows are off "Needs a decision"
-  // even though neither one has a type or a finished checklist — only the
-  // untouched Council Meeting is still waiting on the office.
-  const page = await (await call(env, '/event-intake?queue=inbox', { cookie, fresh: true })).text();
-  lacks(page, 'Maplewood Richmond Heights', 'the published gym rental left the "Needs a decision" queue');
-  lacks(page, '>Bible Class<', 'so did the published Bible Class item');
-  has(page, 'Council Meeting', 'the one item nobody acted on is still exactly where it was');
-
-  // A bogus/stale key is skipped, the same refusal bulk-type already enforces.
-  const beforeCount = db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE published_at IS NOT NULL").get().n;
-  await call(env, '/event-intake/bulk-publish', { cookie, method: 'POST',
-    form: { queue: 'inbox', keys: ['n:999999'] } });
-  eq(db.prepare("SELECT COUNT(*) AS n FROM event_intake WHERE published_at IS NOT NULL").get().n, beforeCount,
-    'a key matching no real item in this request’s own merge publishes nothing');
-}
-
-// Three more reports off the same screen: the room list didn't match the
-// church's real spaces, the detail panel's own head (now wrapping eleven
-// type pills across three lines) pushed "Before it publishes" out of view,
-// and there was no way to act on a whole group of same-named events at once
-// ("i could pick all richmond heights and say those are gymn rentals").
-group('the room list is the church’s real spaces, the checklist sits above the type picker, and the list can be filtered by name');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Cub Scouts','Pat Reyes','preyes@example.org',1)").run();
-  const gymDate = churchDatePlus(9);
-  db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (1,?,'18:00','20:00','confirmed','')")
-    .run(gymDate);
-  await call(env, '/event-intake', { cookie, fresh: true });
-  const bookingId = db.prepare('SELECT id FROM gym_bookings ORDER BY id DESC LIMIT 1').get().id;
-  const key = `b:${bookingId}`;
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key, type: 'rental', queue: 'inbox' } });
-
-  const page = await (await call(env, `/event-intake?queue=rental&selected=${encodeURIComponent(key)}`, { cookie, fresh: true })).text();
-
-  for (const room of ['Kitchen', 'Gym', 'Youth Room', '3rd Floor Classroom', 'Multipurpose Room', 'Sanctuary', 'Parking Lot']) {
-    has(page, `>${room}<`, `the room list offers "${room}"`);
-  }
-  for (const stale of ['Fellowship Hall', 'MDO Wing', 'Whole campus', 'Room 4', 'Lawn']) {
-    lacks(page, `>${stale}<`, `and no longer offers the old "${stale}"`);
-  }
-
-  // The checklist ("Office paperwork") now renders before the type pill
-  // row, which used to sit in the fixed head and, at eleven types, wrapped
-  // across three lines pushing everything else down. Reported as wanting the
-  // info box "moved up to the top so I can see it for the event."
-  const checklistAt = page.indexOf('Office paperwork');
-  const pillrowAt = page.indexOf('class="ei-pillrow"');
-  ok(checklistAt >= 0 && pillrowAt >= 0, 'both the checklist and the type picker are on the page');
-  ok(checklistAt < pillrowAt, 'the checklist renders before the type picker, not after it');
-  lacks(page.slice(page.indexOf('class="ei-detail-head"'), page.indexOf('class="ei-detail-body"')), 'ei-pillrow',
-    'and the type picker is no longer inside the fixed head — that was most of what pushed the checklist out of view');
-
-  // The name filter and "select all shown" — Andrew: "i could pick all
-  // richmond heights and say those are gymn rentals, all worship is worship,
-  // all handbells are music." Deep interaction (typing narrows the list,
-  // "select all shown" ticks only what the filter left visible, clearing the
-  // filter never un-ticks anything) was verified directly in a real browser
-  // against this exact markup; this pins the wiring that makes it possible.
-  has(page, 'id="ei-filter"', 'a name filter input is on the page');
-  has(page, 'oninput="tlcEiFilter(this)"', 'wired to filter the list live');
-  has(page, 'id="ei-filter-count"', 'and it says how many of the queue currently match');
-  has(page, 'onclick="tlcEiSelectAllShown(this)"', '"Select all shown" now means what it says — only what the filter left visible');
-  lacks(page, "querySelectorAll('.ei-row-check').forEach(function(c){c.checked=this.checked}",
-    'not the old handler that ticked the whole queue regardless of a filter');
-}
-
-// ⚠ Reported live: "when i assign type, it pops up the confirmation screen,
-// i click ok, then the wheel spins, and then back to the screen with nothing
-// changed, or saved or assigned." The write landed every time — /event-intake
-// /type's own single-row `WHERE source_key = ?` query has no scale problem at
-// all. What was losing it was the very next READ: readIntakeRows() built one
-// `IN (...)` over EVERY non-local key in the sync window, and D1 refuses a
-// prepared statement with too many bound parameters — a real church calendar
-// with recurring weekly services over the 63-day window, plus News and gym,
-// clears that easily (the office's own screenshot showed 86 "Imported from
-// Google" alone). The failure was silent (`.catch(() => ({results: []}))`),
-// so every non-local item read back with dbId:null, type:null, forever.
-//
-// node:sqlite's own bound-parameter ceiling is far above D1's real one, so
-// this cannot be reproduced by just seeding enough rows — the same gap the
-// print sheet's :has()-fallback test hit with a production browser
-// constraint this sandbox's own engine does not share. Simulated the only
-// honest way available: wrap the D1 shim to throw exactly the way D1 does
-// once a single bind() call is handed more than 99 parameters, and seed a
-// window genuinely larger than that so an unchunked query would trip it.
-group('a large intake window is read back in chunks, so D1’s bound-parameter limit cannot silently blank every type');
-{
-  const { db, env } = await boot();
-  const { cookie } = signIn(db, ['intake_manage'], 'office');
-
-  const rawPrepare = env.DB.prepare;
-  env.DB.prepare = (sql) => {
-    const s = rawPrepare(sql);
-    return {
-      first: s.first, all: s.all, run: s.run,
-      bind: (...a) => {
-        const bound = s.bind(...a);
-        return {
-          first: bound.first, run: bound.run,
-          all: async () => {
-            if (a.length > 99) throw new Error('D1_ERROR: too many SQL variables to bind (max 99 per statement)');
-            return bound.all();
-          },
-        };
-      },
-    };
-  };
-
-  // 130 News & Events posts, all inside the sync window — comfortably more
-  // than one 99-parameter chunk.
-  for (let i = 0; i < 130; i++) {
-    db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, expire_date, channels) VALUES (?,?,?,?,?,?)")
-      .run(`Intake Scale Test ${i}`, 'Seeded for the bound-parameter test.', churchDate(), churchDatePlus(1 + (i % 55)), '2099-01-01', 'web');
-  }
-  const idOf = (i) => db.prepare('SELECT id FROM news_items WHERE title = ?').get(`Intake Scale Test ${i}`).id;
-  const keyOf = (i) => `n:${idOf(i)}`;
-
-  const first = await call(env, '/event-intake', { cookie, fresh: true }); // syncs all 130 placeholders
-  eq(first.status, 200, 'the sync itself never trips the bind limit — syncIntakeRows binds one row at a time');
-
-  // A single-item assign, exactly the reported gesture — pick an event well
-  // past the 99th chunked query, so an unchunked read would have missed it.
-  const farKey = keyOf(120);
-  await call(env, '/event-intake/type', { cookie, method: 'POST', form: { key: farKey, type: 'meetings', queue: 'inbox' } });
-  const stored = db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(farKey);
-  eq(stored.event_type, 'meetings', 'the write itself always lands — it is a single-row query with no scale problem');
-
-  const page = await (await call(env, `/event-intake?queue=inbox&selected=${encodeURIComponent(farKey)}`, { cookie, fresh: true })).text();
-  ok(page.includes('Intake Scale Test 120'), 'the selected event renders in the list');
-  // The direct symptom, exactly as reported: a chunked read shows the type
-  // that was just set — its "Meetings" pill in the detail pane renders with
-  // `class="ei-pill ei-pill-on"`, which only appears when `item.type === k`
-  // for the selected item. An unchunked read silently forgets the write
-  // happened, on every single visit, however many times the type is set
-  // again — no pill is ever `on`, whatever was just clicked and confirmed.
-  // ⚠ Checked as the exact rendered class ATTRIBUTE, not a bare substring —
-  // `.ei-pill-on{...}` is also a CSS rule name in this same page's own
-  // stylesheet, so `page.includes('ei-pill-on')` alone is always true and
-  // was caught passing against the unfixed code on the first attempt.
-  ok(page.includes('class="ei-pill ei-pill-on"'), 'the type just assigned to the selected item actually shows as assigned, not "Needs a type" forever');
-
-  // The unambiguous check: bulk-assign a type across two events, one inside
-  // the first chunk and one past it, and confirm BOTH actually wrote — bulk-
-  // type reads before it writes, so a truncated read means dbId:null for
-  // anything past the first chunk and Promise.all([]) silently does nothing.
-  const nearKey = keyOf(10), farBulkKey = keyOf(125);
-  const res = await call(env, '/event-intake/bulk-type', { cookie, method: 'POST',
-    form: { queue: 'inbox', type: 'youth', keys: [nearKey, farBulkKey] } });
-  eq(res.status, 302, 'redirects back to the queue');
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(nearKey).event_type, 'youth',
-    'an event inside the first 99-key chunk gets the bulk type');
-  eq(db.prepare('SELECT event_type FROM event_intake WHERE source_key = ?').get(farBulkKey).event_type, 'youth',
-    'and so does one past it — this is the assertion an unchunked read fails, with dbId read back as null');
-
-  env.DB.prepare = rawPrepare;
 }
 
 group('the public push-alert plumbing is gone; staff subscriptions still filter by audience');
