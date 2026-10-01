@@ -1,8 +1,9 @@
 # Handoff — Christmas Market as an event: split vendor page, site-wide jump bar, five-tab admin
 
-> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+> **Implemented design reference, not current status and not AI startup instructions.** This is the
+> written companion to the prototypes in this folder. The design has been built; the code and tests
+> define current behavior, `AGENTS.md` is the sole agent instruction file, and unfinished items are in
+> [docs/OPEN-WORK.md](../docs/OPEN-WORK.md). Verify dated claims against the code before relying on them.
 
 
 **Repo:** `timothystl/website` (branch `main`)
@@ -144,7 +145,7 @@ Tab state in the query string (`/market?tab=copy`) so a link into a tab works an
 | **Vendors** (default) | the four count tiles, the applications toggle, the list, the drawer, CSV | `market_manage` |
 | **Page & copy** | the two page cards (`/christmasmarket`, `/christmasmarket/vendors`) with Edit / View, the unpublished-edits banner with **Compare & publish**, and the drag-to-reorder section list for the vendor page | `pages_edit` |
 | **Money & dates** | the seven `market_*` fields (left panel) and the fund / provider / Square links (right panel) | fields `settings_manage`; payment `giving_manage` |
-| **Volunteers** | read-only counts **and roster** pulled from ChMS, + link out to `serve.timothystl.org/christmasmarket` | `market_manage` |
+| **Volunteers** | read-only counts **and roster** pulled from Connect (formerly ChMS), + link out to `serve.timothystl.org/christmasmarket` | `market_manage` |
 | **Photos** | the event's photo folder, drop targets, offered to both pages' gallery blocks | `ministries_edit` or `pages_edit` |
 
 A tab the reader cannot see is **not rendered as a disabled tab** — it is absent, and the bare-header case in `admin/market.js` already handles a reader with no `market_manage`. Keep that.
@@ -153,7 +154,7 @@ A tab the reader cannot see is **not rendered as a disabled tab** — it is abse
 
 - **Page & copy** — the section list is `panelList()` with its existing reorder POST; reordering writes the blocks' `sort`. "Compare & publish" reuses the Pages editor's own publish path; do not build a second one. The row for the application block carries the amber note that fee, dates, open/closed and the nine clauses live there.
 - **Money & dates** — same forms and routes as today (`/market/settings`, `/market/fund`, `/market/payment`), just rendered under a tab. Keep the live "a vendor will be asked $31.20 / $93" line, computed with `priceBreakdown()`. Keep the stale-bookmark behaviour from `/settings?edit=market_table_fee`.
-- **Volunteers** — the source is `timothystl/connect` (the `tlc-chms` worker, which also serves `serve.timothystl.org`); signups live in its D1 and its API is `src/api-admin.js`. Follow the existing precedent for cross-app reads — the website admin already queries ChMS for member data for newsletter sync — rather than inventing a new transport, and **never** scrape or iframe the public volunteer page.
+- **Volunteers** — the source is `timothystl/connect` (the Connect worker, now `timothy-connect`, which also serves `serve.timothystl.org`); signups live in its D1 and its API is `src/api-admin.js`. Follow the existing precedent for cross-app reads — the website admin already queries ChMS for member data for newsletter sync — rather than inventing a new transport, and **never** scrape or iframe the public volunteer page.
 
   Add one read endpoint on the ChMS side, scoped to a signup slug: `GET /api/signups/christmasmarket/summary` →
 

@@ -59,6 +59,13 @@ This repository owns public pages, Website Admin, newsletters, calendar, public 
 Christmas Market, gym rentals, giving presentation, and the current payroll backend.
 Connect owns people/Giving; myMDO owns childcare. A Finance payroll relay does not move ownership.
 
+The application family is separate repositories and Workers: Connect (`timothystl/Connect`,
+`timothy-connect`), Finance (`timothystl/finance`, `timothy-finance-app`, split out of Connect October 1,
+2026), this Website, myMDO (`timothystl/myMDO`), app-launcher, and ministry-study. Cross-product design:
+[digital-architecture](https://github.com/timothystl/digital-architecture). Names like
+`chms_forward_outbox` and `CHMS_INTAKE_API_KEY` are live legacy identifiers for the Connect forward;
+do not rename them casually.
+
 Production has three Workers:
 - `timothy-website`: `site-worker.js` and `public/`, configured by `wrangler-site.toml`.
 - `timothy-website-admin`: `website-admin-worker.js`, D1 `timothy-website-db`, R2
@@ -79,7 +86,7 @@ Use Node 22 and the applicable suites in `.github/workflows/test.yml` and
 `docs/TESTING.md`. The workflow syntax-checks/imports modules, runs Admin/Worker suites,
 and runs the public-page browser gate. Use focused browser checks for the changed surface;
 editor changes also need the TinyMCE asset and self-hosted boot checks.
-Do not use Connect's nonexistent-in-this-repo built-scripts command as a release requirement.
+This repository has no root `package.json`, build step, or Connect-style built-scripts check.
 
 Every push to main triggers `.github/workflows/deploy.yml`, deploying Site, Admin, and Links.
 One serialized release records an Admin version-only commit, then deploys all three Workers
@@ -88,3 +95,14 @@ commit. The completed workflow, rather than the version commit alone, confirms d
 Merge completed work after applicable checks and verify that automatic release; no extra
 permission is needed merely because a merge deploys. For Markdown-only changes, the same
 automatic workflow may run, but do not add a manual redeploy or version bump.
+
+## Documentation map
+
+Canonical set in `docs/`: [ARCHITECTURE](docs/ARCHITECTURE.md), [DATA-OWNERSHIP](docs/DATA-OWNERSHIP.md),
+[OPERATIONS](docs/OPERATIONS.md), [SECURITY](docs/SECURITY.md), [TESTING](docs/TESTING.md),
+[DEVELOPMENT](docs/DEVELOPMENT.md), [SECRETS](docs/SECRETS.md) (names only), [VERSIONING](docs/VERSIONING.md),
+decisions in [docs/adr/](docs/adr/), and unfinished work in [docs/OPEN-WORK.md](docs/OPEN-WORK.md). The
+Cloudflare token audit and rotation map is
+[CLOUDFLARE_TOKENS.md](https://github.com/timothystl/Connect/blob/main/docs/CLOUDFLARE_TOKENS.md). The
+`design_handoff_*` directories are implemented design references, not instructions. Git history
+preserves retired plans.

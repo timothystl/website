@@ -1,6 +1,9 @@
-# Visual page editor — Food Pantry rollout
+# Visual page editor
 
-The production editor is enabled at **https://admin.timothystl.org/pages/foodpantry/edit**. Other pages retain their existing editor in this first rollout. No page records are seeded, migrated, replaced, or published by this release. The local sample stays local.
+The visual editor opens for every canonical page at `/pages/<id>/edit` (for example
+`https://admin.timothystl.org/pages/foodpantry/edit`); `admin/pages.js` loads it unconditionally. It began
+as a Food Pantry-only rollout. Opening a page never seeds, migrates, replaces, or publishes its records.
+The local sample in `tools/editor-pilot/` stays local.
 
 ## Try it
 

@@ -1,18 +1,35 @@
-# Security & Reliability Remediation Plan
+# Security and Reliability Remediation Plan
 
-> **Security reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+Source: executive assessment, August 23, 2026. Re-tested against the code on October 1, 2026:
+items that were fixed (RP-06, RP-17) and obsolete sequencing/"done" sections were removed; the rest
+stay because each is still open or could not be confirmed. Tracking summary: [docs/OPEN-WORK.md](docs/OPEN-WORK.md).
+`AGENTS.md` is the sole agent instruction file; verify anything here against current code before acting.
 
+Codes are stable (`RP-nn`) so a PR or commit can reference one. Items marked **[MOCKUP FIRST]** need a
+design pass before code. Where a finding names `website-admin-worker.js`, the file is now
+`website-admin-worker.js`; `tlc-newsletter-db` is now `timothy-website-db`; `tlc-volunteer-db` belongs to
+Connect, not this repository.
 
-Source: Executive assessment, 2026-08-23. This plan turns each finding into a
-scoped, sequenced piece of work with an owner role, acceptance criteria and a
-test to prove it. Nothing in this document has been implemented yet — it is
-the plan the assessment asked for. Items marked **[MOCKUP FIRST]** need a
-design pass before code, per the assessment's own instruction.
+## Status as of October 1, 2026
 
-Codes are stable (`RP-nn`, "remediation plan") so a PR or commit can reference
-one directly, the same convention `FX-nn` uses elsewhere in this repo.
+| Code | Status |
+|---|---|
+| RP-01 | Open, re-tested: prayer/contact push bodies still quote the message; delivery is by audience only |
+| RP-02, RP-03 | Open, re-tested: CSV export and coordinator email include sensitive fields; no `sensitive_data_view` permission |
+| RP-04 | Open, re-tested: event and Market delete write the full row (including `sensitive_json`) to the audit log |
+| RP-05 | Open: `deploy.yml` is independent of `test.yml`; branch protection not inspected |
+| RP-06 | Fixed (the hardcoded-date assertion no longer exists); section removed |
+| RP-07 | Open, re-tested for the schema marker (stamped unconditionally). The Market vendor migration still resumes only when the destination is empty |
+| RP-08 | Partly addressed: recovery drills exist (`verify-d1-recovery.yml`, `verify-r2-recovery.yml`); no scheduled backup job or restore document was found. Needs a decision on what counts as done |
+| RP-09 | Open, re-tested: group delete hard-deletes invoices, bookings, and recurrences with no audit entry |
+| RP-10 | Open, re-tested: the route proxies this repository's `main` branch, not a pinned commit |
+| RP-11 | Partly addressed: an optional Cloudflare Access identity exchange exists (`admin/shared-staff-login.js`, see docs/SECURITY.md); enforcement in production is unverified |
+| RP-12, RP-13 | Open, re-tested |
+| RP-14 | Largely moot for new submissions: the screener no longer holds mail (`admin/forms.js`); previously held rows are unverified |
+| RP-15 | Unverified: needs a production check that `TURNSTILE_SECRET_KEY` is set |
+| RP-16 | Not re-tested |
+| RP-18, RP-19 | Open, re-tested |
+| RP-20 to RP-24, RP-26 | Not re-tested |
 
 ---
 
@@ -31,7 +48,7 @@ verify it's actually fixed (not just "looks fixed" — this repo's own test
 suites are full of examples where the obvious check was vacuous; every
 acceptance test below should be written to fail against the *current* code
 first, then pass after the fix, the same discipline this file already uses
-throughout its CLAUDE.md history).
+throughout its history).
 
 ---
 
@@ -65,7 +82,7 @@ account receives zero pushes and the body of any push that *is* sent contains
 no message text. Verify non-vacuously by reverting the filter and confirming
 the test fails.
 
-**Owner:** whoever holds `admin/webpush.js` + `tlc-admin-worker.js` push
+**Owner:** whoever holds `admin/webpush.js` + `website-admin-worker.js` push
 trigger call sites. No design input needed — this is a straightforward filter.
 
 ---
@@ -180,7 +197,7 @@ independently of `.github/workflows/test.yml`. `main` is unprotected.
    with `test` as a required job before the `deploy` job (`needs: test`).
 3. The version auto-bump (`.github/workflows/deploy.yml`) already has logic
    to detect a manual version bump on the merge commit (see "The auto-bump
-   stops overwriting a version somebody chose" in CLAUDE.md) — that logic is
+   stops overwriting a version somebody chose" in the former CLAUDE.md, now in Git history) — that logic is
    unaffected by gating deploy behind tests, just needs to still run after.
 
 **Acceptance test:** push a commit that fails a test → assert no deploy job
@@ -188,25 +205,6 @@ runs (check via a deliberately-broken test on a throwaway branch/PR, not on
 `main`).
 
 **Owner:** whoever holds repo admin / CI config. No app code changes.
-
----
-
-### RP-06 — Fix the one failing test before anything else lands
-
-**Finding:** `test/admin-redesign.test.mjs:1732` currently fails because it
-hardcodes a date (Aug 21) that has become a past date relative to "today."
-
-**Fix:** the assertion should compute its test date relative to the current
-date (e.g., `churchDatePlus(N)` for some `N` days out) rather than a literal
-past-tense string, matching the `admin/when.js` discipline this repo already
-uses everywhere else for exactly this class of bug.
-
-**Acceptance test:** the suite is green today and stays green a year from
-now without being touched again.
-
-**Owner:** first PR in this whole plan — nothing else should merge onto a
-red suite (see RP-05, and see CLAUDE.md's own repeated point: "a suite with
-one known failure stops being read for the second one").
 
 ---
 
@@ -246,7 +244,7 @@ repo's own review history, and already reproduced once in production —
 statement in the schema block throwing → assert the marker is NOT stamped and
 the block re-runs on the next request.
 
-**Owner:** `tlc-admin-worker.js` migration block + market migration
+**Owner:** `website-admin-worker.js` migration block + market migration
 specifically.
 
 ---
@@ -260,7 +258,7 @@ restore script, no restore drill exist anywhere in this repo or its CI.
 1. **D1**: Cloudflare D1 supports point-in-time recovery on paid plans and
    `wrangler d1 export` for logical dumps. Add a scheduled GitHub Action
    (daily) that runs `wrangler d1 export --output backup-$(date).sql` for
-   both `tlc-newsletter-db` and `tlc-volunteer-db`, and uploads the result to
+   both `timothy-website-db` (the volunteer database belongs to Connect), and uploads the result to
    a separate, access-controlled R2 bucket or external object store (not the
    same bucket serving public images — a compromise of one shouldn't
    compromise the backup).
@@ -271,7 +269,7 @@ restore script, no restore drill exist anywhere in this repo or its CI.
    point-in-time recovery; confirm the project tier and enable/verify this
    is on. This is outside this repo (it's a Supabase project setting), so
    it's a manual step to confirm — flagged the same way `TURNSTILE_SECRET_KEY`
-   and other manual steps are flagged elsewhere in CLAUDE.md.
+   and other manual steps are flagged elsewhere in the former CLAUDE.md.
 4. **Restore drill**: quarterly, someone actually restores a D1 export into
    a scratch database and confirms the app boots against it. Document the
    steps in a `docs/RESTORE.md` so this isn't tribal knowledge.
@@ -325,30 +323,28 @@ assessment's "UI improvements" section explicitly asks for this).
 
 ### RP-10 — Pin the TinyMCE asset source instead of proxying mutable `main`
 
-**Finding:** `tlc-admin-worker.js`'s `/assets/tinymce/` route proxies
+**Finding:** `website-admin-worker.js`'s `/assets/tinymce/` route proxies
 `raw.githubusercontent.com/.../main` at request time. A change to that
 upstream `main` branch — accidental or malicious — reaches every admin
 browser without a Cloudflare deploy on this side.
 
 **Fix:** the existing route already versions by path segment
-(`/assets/tinymce/7.9.3/...`) per the CLAUDE.md history — the gap is that it
+(`/assets/tinymce/7.9.3/...`) — the gap is that it
 proxies `main` rather than a tag/commit pinned to that version. Change the
 upstream fetch to a specific commit SHA or release tag matching `7.9.3`
 (GitHub raw content supports fetching by SHA:
 `raw.githubusercontent.com/<owner>/<repo>/<sha>/...`), so the version in the
 URL and the version actually served are the same guarantee. Alternatively,
 and more robustly: vendor the exact files into this repo under
-`admin/vendor/tinymce/` (the CLAUDE.md history references this directory
-already existing for the same library) so there is no runtime dependency on
+`admin/vendor/tinymce/` (the directory already exists for the same library) so there is no runtime dependency on
 GitHub's raw content service at all.
 
-**Acceptance test:** `test/tinymce-selfhost.test.mjs` (already exists per
-CLAUDE.md) is extended to assert the proxied URL contains a commit SHA/tag,
+**Acceptance test:** `test/tinymce-selfhost.test.mjs` (exists) is extended to assert the proxied URL contains a commit SHA/tag,
 not a branch name, or — if vendored — that no outbound fetch happens at all
 during a full editor boot (a variant of the existing "no request leaves the
 origin" assertion).
 
-**Owner:** `tlc-admin-worker.js` TinyMCE asset route, or a one-time vendoring
+**Owner:** `website-admin-worker.js` TinyMCE asset route, or a one-time vendoring
 commit under `admin/vendor/tinymce/`.
 
 ---
@@ -383,7 +379,7 @@ session/permission system as the authorization layer underneath it (Access
 authenticates *who*, this repo's permissions decide *what*). Revisit
 in-app TOTP only if Access doesn't fit the office's actual identity setup.
 
-**Acceptance test:** an unauthenticated request to any `/admin.timothystl.org`
+**Acceptance test:** an unauthenticated request to any `admin.timothystl.org`
 path is challenged for a second factor before reaching the app; a session
 established without completing the second factor cannot reach any
 `payroll_manage`-gated route.
@@ -414,7 +410,7 @@ older unused tokens remain valid after a new request.
 the second token validates. Flood `/forgot-password` → assert it starts
 refusing after the same threshold login already uses.
 
-**Owner:** `tlc-admin-worker.js` password reset routes.
+**Owner:** `website-admin-worker.js` password reset routes.
 
 ---
 
@@ -436,7 +432,7 @@ real username with a wrong password → assert they're within a small,
 consistent tolerance. Flood one username from rotating IPs → assert it's
 throttled.
 
-**Owner:** `tlc-admin-worker.js` login route, `admin/auth.js`.
+**Owner:** `website-admin-worker.js` login route, `admin/auth.js`.
 
 ---
 
@@ -447,18 +443,16 @@ they can be picked up opportunistically by whoever's already in that file.
 
 | Code | Finding | Fix |
 |---|---|---|
-| RP-14 | Held form submissions retained indefinitely | Add a cap (e.g., 1 year) with a "review before this expires" nudge on the Filtered Mail badge, since held mail is deliberately not auto-pruned today (by design, per CLAUDE.md) — this needs a policy call on the exact cutoff, not just code. |
-| RP-15 | Confirm Turnstile is actually configured in production | One `wrangler secret list` check; this repo's own CLAUDE.md already flags `TURNSTILE_SECRET_KEY` as an unfinished manual step (FX-05) — verify it's done. |
+| RP-14 | Held form submissions retained indefinitely | Add a cap (e.g., 1 year) with a "review before this expires" nudge on the Filtered Mail badge, since held mail is deliberately not auto-pruned today (by design) — this needs a policy call on the exact cutoff, not just code. |
+| RP-15 | Confirm Turnstile is actually configured in production | One `wrangler secret list` check; the former CLAUDE.md flagged `TURNSTILE_SECRET_KEY` as an unfinished manual step (FX-05) — verify it's done. |
 | RP-16 | Event capacity race (read-then-insert) | `SELECT ... FOR UPDATE`-equivalent isn't available in D1; use a D1 transaction (`env.DB.batch`) with a `CHECK` constraint or a post-insert re-verify-and-rollback pattern, mirroring the gym slot's partial-unique-index approach where a real constraint can express the rule. |
-| RP-17 | Gym overlap race (only exact-duplicate slots are indexed) | Since overlap can't be expressed as a unique index, add an application-level re-check inside a transaction immediately before commit, accepting a small residual race window is now milliseconds instead of the full request. |
 | RP-18 | `gym_invoices` money as float | Migrate `total_hours`, `rate`, `total_amount` to integer (cents / minutes) — same shape as `admin/db.js`'s newer `site_event_registrations` columns. Needs a migration + a sweep of every read/write site (this file's own DSN-5 finding). |
 | RP-19 | Payroll's Supabase schema/RPCs/grants live outside version control | Export the current schema (`pg_dump --schema-only`) and RPC definitions into `supabase/` in this repo (or a linked ops repo) so they're reviewable and diffable, matching how everything else in this codebase is source-controlled. |
-| RP-20 | Voters' documents rely on obscurity, not auth | Policy call, not a bug — needs a decision from Andrew whether `/voters` should require a login. If yes, gate behind the existing session system with a narrow `voters_view` permission; if no, keep `X-Robots-Tag: noindex` (already done per FX-12) and document the decision in CLAUDE.md the way FX-12 already documents the reasoning. |
+| RP-20 | Voters' documents rely on obscurity, not auth | Policy call, not a bug — needs a decision from Andrew whether `/voters` should require a login. If yes, gate behind the existing session system with a narrow `voters_view` permission; if no, keep `X-Robots-Tag: noindex` (already done per FX-12) and document the decision in docs/SECURITY.md. |
 | RP-21 | Batch gym slot validation instead of per-slot queries | Already scoped as FX-23 in this repo's own review — one query for blocked dates in range, one for conflicts in range, instead of two per submitted slot. |
 | RP-22 | Bound unbounded admin reads (gym dashboard scans, media screen) | Already scoped as FX-22/FX-32 — add date bounds and `LIMIT`s. |
 | RP-23 | `parentName()` O(n²) | Already scoped as FX-35 — swap to a `Map`. |
 | RP-24 | Schema work runs in the request path on cold isolates | Already scoped as FX-40 — this is a larger structural project (moving migrations out of the hot path entirely, e.g. via a one-time deploy hook) and should stay its own effort. |
-| RP-25 | Duplicate indexes, dead scheduler code, stale `PROJECT-PLAN.md` | Housekeeping — batch into one cleanup PR once the higher-priority tracks are underway, so it doesn't compete for review attention with security fixes. |
 | RP-26 | Add a small Playwright smoke suite to CI | The browser suites (`test/editor.test.mjs`, `test/public-page.test.mjs`, etc.) already exist but are deliberately excluded from CI per `.github/workflows/test.yml`. Pick the 5–10 highest-value ones (login flow, publish flow, a payment path) and add them to CI as a fast smoke pass, leaving the full browser suite as a manual/pre-release check. |
 
 ---
@@ -482,37 +476,3 @@ they're tracked alongside their code counterparts above rather than lost:
    ordinary "Exported" toast this admin already uses.
 
 ---
-
-## Sequencing
-
-```
-Week 1        RP-06 (fix red test) → RP-05 (gate deploy on tests, protect main)
-Week 1-2      RP-01 (push scoping) — small, high-value, no design needed
-Week 1-2      RP-08 (backups) — starts immediately, no code dependency
-Week 2-3      RP-10 (pin TinyMCE), RP-12, RP-13 (auth hardening)
-Week 2-4      RP-07 (transactional migrations)
-Week 3-5      [MOCKUP] RP-02/RP-03 sensitive-data UI → implement
-Week 3-5      [MOCKUP] RP-09 archive/void UI → implement
-Week 4-6      RP-04 (audit redaction), RP-11 (MFA/Access — needs a decision first)
-Ongoing       Track D items, picked up opportunistically
-```
-
-Tracks A and B should not wait on each other — they touch almost entirely
-different files. Track C's MFA item (RP-11) is the one item genuinely
-blocked on a decision (Access vs. in-app TOTP) rather than on code, so it's
-worth raising that question with Andrew/Dinger early even though
-implementation lands later.
-
----
-
-## What "done" looks like for this plan
-
-- Every RP-nn item above has a merged PR referencing its code, with the
-  acceptance test described (or a stronger one) actually in the suite and
-  passing.
-- `test/admin-redesign.test.mjs` and the full `admin/*.test.mjs` set are
-  green, in CI, gating every deploy (RP-05, RP-06).
-- The security status screen (mockup item 3) shows every item in this plan's
-  Track A–C as either "done" or "not applicable," in one place, so this
-  becomes a living record rather than a document that goes stale the way
-  several sections of `CLAUDE.md` are noted to have gone stale in the past.

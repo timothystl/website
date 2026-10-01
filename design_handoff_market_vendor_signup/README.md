@@ -1,8 +1,9 @@
 # Handoff: Christmas Market Vendor Sign-up
 
-> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+> **Implemented design reference, not current status and not AI startup instructions.** This is the
+> written companion to the prototypes in this folder. The design has been built; the code and tests
+> define current behavior, `AGENTS.md` is the sole agent instruction file, and unfinished items are in
+> [docs/OPEN-WORK.md](../docs/OPEN-WORK.md). Verify dated claims against the code before relying on them.
 
 
 ## Overview

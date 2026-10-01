@@ -1,14 +1,11 @@
 # Handoff: /news redesign and the 1b site language
 
-> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+> **Implemented design reference, not current status and not AI startup instructions.** This is the
+> written companion to the prototypes in this folder. The design has been built; the code and tests
+> define current behavior, `AGENTS.md` is the sole agent instruction file, and unfinished items are in
+> [docs/OPEN-WORK.md](../docs/OPEN-WORK.md). Verify dated claims against the code before relying on them.
 
 
-> **Building with Claude Code? Paste `KICKOFF_PROMPT.md` as your first message** — it points the agent at the right files in the right order and asks it to verify against the repo before writing code.
->
-> **The build plan itself is `CLAUDE_CODE_BRIEF.md`** — a phased build plan with a Phase 0 verification list of the six things most likely to break the plan, plus acceptance criteria and known gaps.
->
 > **Start with `Handoff.dc.html`** — the same specification as this file, with screenshots of every screen and state, annotated block stacks, colour swatches, the three editor flows, and a done-means checklist. Open it directly in a browser. This markdown is the plain-text mirror, for pasting into an issue tracker.
 > Screenshots live in `screens/`.
 
@@ -233,8 +230,6 @@ Below ~640px: banner heights drop to 300/360/420, hero headline to 36px, section
 
 | File | What it is |
 |---|---|
-| `KICKOFF_PROMPT.md` | Paste-ready first message for Claude Code. |
-| `CLAUDE_CODE_BRIEF.md` | Phased build plan written for an implementing agent. |
 | `Handoff.dc.html` | The illustrated handoff — read this first. |
 | `Site Prototype - 1b.dc.html` | The functional prototype — eight working pages. Behavioral reference. |
 | `screens/` | Full-resolution screenshots of all four pages and the editor states. |
@@ -255,4 +250,4 @@ Open any `.dc.html` directly in a browser. `image-slot` drops are local to the p
 4. `cards` (extends `cardgrid` with `logos` + `feature`), then extend `newsfeed`, `calendar`, `servicetimes`, `textphoto`.
 5. Inspector controls for the new fields; half-width pairing; the canvas rules.
 6. Reseed `/news` in `admin/site-pages.js`, publish, then delete the hardcoded `#page-news` markup from `public/index.html` — the repo's rule is that deletion lags publication by a few weeks.
-7. Then **Worship, Ministries, Our Values, Home** — in that order of risk. Home last: most bespoke markup, most visitors, least room for a bad week. This matches `CLAUDE_CODE_BRIEF.md`; if the two ever disagree, the brief wins.
+7. Then **Worship, Ministries, Our Values, Home** — in that order of risk. Home last: most bespoke markup, most visitors, least room for a bad week.
