@@ -124,6 +124,9 @@ credentials belong to Connect, see Connect's `SECRETS.md`).
 
 ## GitHub Actions deploy and recovery
 
+These are repository-level secrets (no GitHub environment). The cross-repository token audit and
+rotation map is [CLOUDFLARE_TOKENS.md](https://github.com/timothystl/Connect/blob/main/docs/CLOUDFLARE_TOKENS.md).
+
 | Name | Type | Read by | What it does | If missing or wrong | Where to change |
 |---|---|---|---|---|---|
 | `CLOUDFLARE_API_TOKEN` | GH secret | `deploy.yml` | Deploys Site, Admin, and Links Workers | Every push-to-main release fails; nothing deploys | Cloudflare, My Profile, API Tokens (Workers edit scope); update in GitHub |

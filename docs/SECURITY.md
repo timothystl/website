@@ -27,4 +27,7 @@ narrow backend dependency; durable replay and bounded retries prevent silent los
 the Website authoritative for Connect data.
 
 Authentication, capability, credential, payment, migration, binding, and public-route changes need
-focused negative-path tests, rollback planning, and explicit production approval.
+focused negative-path tests and a rollback plan before release.
+
+Known unresolved findings, re-tested against the code, are tracked in [OPEN-WORK.md](OPEN-WORK.md) and
+described in full in [SECURITY-REMEDIATION-PLAN.md](../SECURITY-REMEDIATION-PLAN.md).

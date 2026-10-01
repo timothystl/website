@@ -1,6 +1,6 @@
 # Admin workspace functionality
 
-Full rollout implementation, September 23, 2026. The existing Admin theme is retained; the mockup's color and typography redesign is a separate decision. Release status is recorded in the pull request and deployment workflow.
+Implemented September 23, 2026. The existing Admin theme is retained; the mockup's color and typography redesign is a separate decision.
 
 ## Entry points
 

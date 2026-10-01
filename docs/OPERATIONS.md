@@ -1,63 +1,71 @@
 # Operations
 
-`.github/workflows/deploy.yml` runs on every push to `main` and deploys the Site, Admin, and Links
-Workers. After all three succeed, the version job may increment the Admin patch version, redeploy
-Admin, and push a `[skip ci]` version commit. This behavior is intentional current release policy.
+## Releases
 
-Use a normal branch, complete applicable checks, and merge finished work under
-[AGENTS.md](../AGENTS.md). A requested routine release does not need another approval because
-main auto-deploys. Record the released revision and verify workflow completion. Roll back the affected Worker to a known-good deployment or redeploy a
-reviewed commit, then perform bounded public/login/API checks. Application rollback does not undo
-D1/R2 state.
+`.github/workflows/deploy.yml` runs on every push to `main` and deploys the Site, Admin, and Links
+Workers from one recorded checkout. One serialized job records an Admin version-only commit
+(`admin/helpers.js` `VERSION`, `[skip ci]`), then deploys all three Workers. The workflow shares one
+concurrency lock, never cancels a release in progress, and skips a stale queued run before any
+production write (`.github/scripts/prepare-release.sh`; `admin/release-order.test.mjs`).
+
+- The completed workflow run, not the version commit, confirms deployment. The version commit records
+  an intended release.
+- If a deployment fails, rerun it while its version-only child is still the current `main`, or release
+  newer `main`. Cloudflare does not deploy three Workers atomically, so a failure can leave them on
+  different revisions until the rerun.
+- The commit SHA identifies a deployed build exactly; see [VERSIONING.md](VERSIONING.md).
+
+Use a normal branch, complete the applicable checks ([TESTING.md](TESTING.md)), and merge finished work
+under [AGENTS.md](../AGENTS.md). A requested routine release needs no further approval. To roll back,
+redeploy the affected Worker to a known-good deployment or a reviewed commit, then check the public
+site, login, and an API route. Application rollback does not undo D1 or R2 state.
 
 The production resources are defined in `wrangler-site.toml`, `wrangler.toml`, and
-`wrangler-links.toml`. Inspect with Wrangler dry runs before configuration changes. Never print
-secret values or private form/payroll/renter/vendor records.
+`wrangler-links.toml`. Inspect with Wrangler dry runs before configuration changes. Never print secret
+values or private form, payroll, renter, or vendor records. Names, purposes, and rotation locations
+for every Worker secret, variable, binding, and GitHub Actions secret are in [SECRETS.md](SECRETS.md);
+the Cloudflare token audit and rotation map is
+[CLOUDFLARE_TOKENS.md](https://github.com/timothystl/Connect/blob/main/docs/CLOUDFLARE_TOKENS.md).
 
-Website-to-Connect replay status and manual retry use [the dedicated runbook](CHMS_FORWARD_RECOVERY.md).
+## Integrations
 
-## Recovery and integration checkpoint — September 15, 2026
+- `CONNECT_WORKER` targets `timothy-connect`. Contact/prayer forwarding and the Market volunteer
+  integration depend on that name. The binding resolves by name, so renaming Connect's Worker
+  requires updating `wrangler.toml` here. Failed forwards and manual retry:
+  [CHMS_FORWARD_RECOVERY.md](CHMS_FORWARD_RECOVERY.md).
+- Website hosts the payroll backend that Finance (`timothystl/finance`, Worker `timothy-finance-app`)
+  reaches through its `PAYROLL_SERVICE` binding to `timothy-website-admin`. The relay does not move
+  payroll ownership; shared staff login and the payroll migration are unfinished
+  ([DATA-OWNERSHIP.md](DATA-OWNERSHIP.md)). Renaming this Worker requires redeploying Finance.
+- The Stax public giving mockup (`give-stax-mockup.js`) is Website-owned; Connect keeps the giving
+  backend. It is not a live-provider cutover.
 
-The [D1 recovery workflow](https://github.com/timothystl/website/actions/runs/34658846953)
-and [R2 recovery workflow](https://github.com/timothystl/website/actions/runs/34659001060)
-both completed successfully September 11. Tooling lives in `scripts/verify-d1-recovery.sh`,
-`scripts/verify-r2-recovery.sh` and their matching workflows. These are completed recovery
-exercises, not proof of a retained backup's current custody or freshness.
+## Recovery
 
-The `CONNECT_WORKER` service binding now targets `timothy-connect`; the
-[September 15 release](https://github.com/timothystl/website/actions/runs/35017196124)
-succeeded. Contact/prayer forwarding and Market volunteer integration depend on this target.
-Website still hosts the payroll backend consumed by new Finance's authenticated relay.
-Shared staff login and payroll ownership migration are not completed by that relay.
+Tooling is `scripts/verify-d1-recovery.sh` and `scripts/verify-r2-recovery.sh` with the matching
+`verify-d1-recovery.yml` and `verify-r2-recovery.yml` workflows (dispatched manually with an exact
+`main` SHA and a reason). Completed drills show the procedure works; they are not proof of a retained
+backup's current custody or freshness.
 
-## Overhaul checkpoint — September 18, 2026
+## Resource names
 
-Published-block rendering cleanup and domain route extraction are complete. Payroll remains
-here; a Finance relay does not transfer its backend. Shared staff login remains unfinished.
-The latest reviewed production workflow succeeded at `7348eaa5d`, followed by its version commit.
-Stax public mockup relocation #610 and Connect #1037 merged and deployed during this review;
-the mockup is Website-owned while Connect retains its backend. This is not a live-provider cutover.
-See the [current overhaul plan](https://github.com/timothystl/digital-architecture/blob/main/architecture/11-overhaul-readiness-and-execution-plan.md).
+The Admin Worker, D1 database, and R2 bucket were renamed to `timothy-website-admin`,
+`timothy-website-db`, and `timothy-website-images` on September 28, 2026, and the public Worker and
+links Worker to `timothy-website` and `timothy-links` the same day; hostnames and binding names did not
+change. The old database and bucket remain untouched as the rollback path until retired after a
+retention window. See [NAMING-CUTOVER.md](NAMING-CUTOVER.md).
 
-## Website Admin naming cutover — September 28, 2026
+## Newsletter
 
-Worker `tlc-newsletter-admin` became `timothy-website-admin` (renamed in place in the dashboard),
-D1 `tlc-newsletter-db` became `timothy-website-db`, and R2 `tlc-news-images` became
-`timothy-website-images`, following [NAMING-CUTOVER.md](NAMING-CUTOVER.md). The old database and
-bucket remain untouched as the rollback path until retired after a retention window. Recovery
-drills now target the new names.
+Website Admin reads two Brevo list numbers from Cloudflare (Workers, `timothy-website-admin`, Settings,
+Variables and Secrets): `BREVO_LIST_ID` is the full weekly list (4) and `BREVO_TEST_LIST_ID` is the test
+list (2). There is no built-in fallback for either. A missing setting shows an error (newsletter sends)
+or fails the signup with a logged message, rather than using another list. Set `BREVO_TEST_LIST_ID`
+to 2 before sending a test issue. `admin/brevo-list-config.test.mjs` guards against a hardcoded fallback.
+Never send a real newsletter to test a deployment.
 
-The public-site Worker `timothystl-site` became `timothy-website` and `tlc-links` became
-`timothy-links` (both renamed in place in the dashboard September 28; `tlc-links-worker.js` is now
-`links-worker.js`). Hostnames are unchanged.
-
-## Newsletter list settings — September 29, 2026
-
-Website Admin reads two Brevo list numbers from Cloudflare (Workers → `timothy-website-admin` → Settings →
-Variables and Secrets): `BREVO_LIST_ID` is the full weekly list (**4**) and `BREVO_TEST_LIST_ID` is the
-test list (**2**). There is no built-in fallback for either. A missing setting shows an error (newsletter
-sends) or fails the signup with a logged message, rather than quietly using another list. Set
-`BREVO_TEST_LIST_ID` to 2 before sending a test issue. `admin/brevo-list-config.test.mjs` guards against a
-hardcoded fallback returning.
-
-Names, purposes, and rotation locations for every Worker secret, variable, binding, and GitHub Actions secret are in [SECRETS.md](SECRETS.md).
+Each issue has one durable schedule lock (`schedule_operation`, [ADR 0003](adr/0003-newsletter-lock-gym-overlap-and-release-order.md)).
+If a Worker is forcibly terminated mid-operation the lock intentionally stays set. An operator must
+inspect that issue's saved campaign in Brevo, verify no request is still in flight, reconcile the
+campaign state, and only then clear `schedule_operation`. Do not add automatic expiry. A lost
+draft-creation response can leave an unscheduled orphan draft, but it cannot send.

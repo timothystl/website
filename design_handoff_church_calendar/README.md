@@ -1,19 +1,19 @@
 # Handoff: Custom Church Calendar (timothystl.org)
 
-> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+> **Implemented design reference, not current status and not AI startup instructions.** This is the
+> written companion to the prototypes in this folder. The design has been built; the code and tests
+> define current behavior, `AGENTS.md` is the sole agent instruction file, and unfinished items are in
+> [docs/OPEN-WORK.md](../docs/OPEN-WORK.md). Verify dated claims against the code before relying on them.
 
 
 > **Two prototypes live in this folder, from two separate Claude Design
 > handoffs sharing one project.** `Calendar Directions.dc.html` (this
 > README) is the public `/calendar` page and the printed month sheet —
-> shipped as "The calendar is ours now" in `CLAUDE.md`. `Event Intake.dc.html`
+> implemented (`admin/calendar.js`, `test/public-calendar.test.mjs`). `Event Intake.dc.html`
 > plus `support.js` is the office's own triage screen over that same feed,
-> a **separate, later handoff** — shipped as "Event Intake — the office's
-> own triage queue" in `CLAUDE.md`, built in `admin/intake.js` and
-> `admin/intake-page.js`. Read `CLAUDE.md` first; this file only describes
-> the calendar prototype below.
+> a **separate, later handoff**; that standalone screen has since been retired (see
+> `docs/CALENDAR_GOOGLE_WORKFLOW.md`; `admin/intake.js` now only holds shared event types and rooms).
+> This file only describes the calendar prototype below.
 
 ## Overview
 Replace the Google Calendar iframe on `/calendar` (and the embed on `/news`) with a

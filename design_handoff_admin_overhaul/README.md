@@ -1,13 +1,14 @@
 # Timothy Lutheran Admin — Full Overhaul Spec
 
-> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
-> agent instruction file. Do not preload this document; open it only for a task that needs it,
-> and verify dated claims against current code, tests, configuration, and live behavior.
+> **Implemented design reference, not current status and not AI startup instructions.** This is the
+> written companion to the prototypes in this folder. The design has been built; the code and tests
+> define current behavior, `AGENTS.md` is the sole agent instruction file, and unfinished items are in
+> [docs/OPEN-WORK.md](../docs/OPEN-WORK.md). Verify dated claims against the code before relying on them.
 
 
 Handoff for the redesign of `admin.timothystl.org`. Two prototypes, twenty sections, one interaction pattern.
 
-Everything here is designed against the **real schema** in `tlc-admin-worker.js` and `admin/db.js` — table and column names in this document are the ones already in the D1 database unless marked **NEW**.
+Everything here is designed against the **real schema** in `website-admin-worker.js` and `admin/db.js` — table and column names in this document are the ones already in the D1 database unless marked **NEW**.
 
 ---
 
@@ -32,7 +33,6 @@ Two design goals govern every decision below:
 | `Site Editor Prototype.dc.html` | The page/block editor (from the earlier phase of this work) |
 | `support.js` | Runtime for the two prototype files — **not** production code |
 | `screenshots/*.png` | 26 captured states, referenced throughout this document |
-| `IMPLEMENTATION-PHASES.md` | Phased build plan with completion criteria |
 
 Open either `.dc.html` directly in a browser. Nothing to install.
 

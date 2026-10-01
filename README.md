@@ -1,19 +1,18 @@
 # Timothy Church Website
 
-This repository owns the public church website and Website Admin, including pages, navigation,
+Public church website and Website Admin for Timothy Lutheran Church: pages and navigation,
 newsletters, calendar, public forms, Christmas Market, gym rentals, public giving links, and the
-current payroll surface.
+current payroll backend. People and Giving are owned by Connect; childcare by myMDO; Finance
+(`timothystl/finance`) relays payroll to this repository.
+
+Three Cloudflare Workers, all deployed from this repository: `timothy-website` (public site),
+`timothy-website-admin` (Admin), and `timothy-links`. A push or merge to `main` releases all three.
 
 Start with [AGENTS.md](AGENTS.md). Current references:
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Local development](docs/DEVELOPMENT.md)
+- [Architecture](docs/ARCHITECTURE.md) and [decisions](docs/adr/)
+- [Local development](docs/DEVELOPMENT.md) and [testing](docs/TESTING.md)
 - [Data ownership](docs/DATA-OWNERSHIP.md)
-- [Operations](docs/OPERATIONS.md)
-- [Security](docs/SECURITY.md)
-- [Testing](docs/TESTING.md)
+- [Operations](docs/OPERATIONS.md), [secrets and settings](docs/SECRETS.md), [security](docs/SECURITY.md)
 - [Website-to-Connect recovery](docs/CHMS_FORWARD_RECOVERY.md)
-
-A merge or push to `main` automatically deploys all three production Workers. Treat every merge as
-a production release: complete the applicable checks and verify deployment under AGENTS.md,
-without a repeated approval question.
+- [Open work](docs/OPEN-WORK.md)

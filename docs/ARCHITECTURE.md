@@ -8,19 +8,26 @@ Production has three Cloudflare Workers:
   and runs scheduled-page promotion every 15 minutes.
 - `timothy-links` (`links-worker.js`) serves the utility links surface.
 
-Published page blocks are authoritative. The Site Worker edge-renders initial page bodies; client
+Published page blocks are authoritative ([ADR 0002](adr/0002-published-blocks-are-authoritative.md)). The Site Worker edge-renders initial page bodies; client
 navigation uses the same published-block model. `/api/pages?chrome=1` returns global chrome and
 `/api/pages?id=<pageId>` returns one page body when needed.
 
 Website Admin forwards bounded contact/prayer and Market operations to Connect. Failed forward
-copies use a durable outbox and the recovery procedure in `CHMS_FORWARD_RECOVERY.md`. The public
-Site Worker has no direct Connect binding.
+copies use a durable outbox and the recovery procedure in [CHMS_FORWARD_RECOVERY.md](CHMS_FORWARD_RECOVERY.md).
+The public Site Worker has no direct Connect binding.
+
+Related applications are separate repositories and Workers: Connect (`timothystl/Connect`,
+`timothy-connect`: people, Giving, Serve), Finance (`timothystl/finance`, `timothy-finance-app`),
+and myMDO (`timothystl/myMDO`). Ownership boundaries are in [DATA-OWNERSHIP.md](DATA-OWNERSHIP.md);
+cross-product design lives in [digital-architecture](https://github.com/timothystl/digital-architecture).
+Decisions: [docs/adr/](adr/).
 
 ## Routing style — one thing to know before reading `website-admin-worker.js`
 
-Unlike `chms`'s per-domain handler-function dispatch, `website-admin-worker.js` (~13,600 lines) is a
-single flat request handler: routes are matched inline as `if (path === '...' && method === '...')`
-blocks in one long chain, in the same file, with the actual logic factored out into the `admin/*.js`
+Unlike Connect's per-domain handler-function dispatch, `website-admin-worker.js` (~8,900 lines; several
+domains, such as gym, pages, ministries, and sermons, have moved into `admin/*.js` route handlers) is
+mostly one flat request handler: routes are matched inline as `if (path === '...' && method === '...')`
+blocks in one long chain, in the same file, with the logic factored out into the `admin/*.js`
 modules it imports from at the top. There is no central route table or permission-gate array to
 scan first — the permission check for each route is a `hasPermission(user, '...')` call written
 directly at that route's own `if` block. When tracing a route, search for its exact path string in
@@ -50,7 +57,7 @@ that; this table is only for finding the right one.
 | `intake.js` | Event types and rooms shared by Calendar & events (`workspace.js`, `calendar.js`) — what's left of the retired Event Intake / Office follow-up screen. |
 | `market.js` / `market-page-seed.js` / `market-vendors-apply-seed.js` | The Christmas Market vendor application (replaced a Google Form + spreadsheet). |
 | `square.js` | Square checkout links per vendor, and the webhook that confirms payment. |
-| `gym.js` | Gym rental booking and its route handler (large — 5,300+ lines). |
+| `gym.js` | Gym rental booking and its route handler (large — 5,400 lines). |
 | `forms.js` | Public contact/prayer/subscribe intake: screening, storage, the Filtered Mail review page. |
 | `spam.js` | Pure spam-screening functions for the public forms — no D1, no fetch. |
 | `exif.js` | Strips EXIF (including GPS) from staff-uploaded photos. |
@@ -65,6 +72,17 @@ that; this table is only for finding the right one.
 | `payroll-report.js` | Builds the emailed payroll report (CSV + PDF) from the exact same figures the payroll screen and its own CSV/print already use — "one report shape, N destinations." |
 | `pdf.js` | A minimal dependency-free PDF writer (Workers has no headless browser to render one); sets text in Finance's Figtree/Outfit, embedded from the generated `pdf-fonts.js` subsets. |
 | `give-landing-seed.js` / `redesign-seeds.js` / `native-form-page-seed.js` / `school-calendar-seed.js` | Hand-authored page/block seeds for surfaces the generic extractor has no model for (a live spam-screened form, a hand-tuned redesign page, etc). |
+| `calendar-google.js` / `calendar-google-client.js` | Google Calendar scheduling for Calendar & events: server-side read/create/update with ETag checks, and the browser-side client. See [CALENDAR_GOOGLE_WORKFLOW.md](CALENDAR_GOOGLE_WORKFLOW.md). |
+| `workspace.js` / `workspace-client.js` | The Calendar & events and Shared content workspaces; see [ADMIN-WORKSPACE.md](ADMIN-WORKSPACE.md). |
+| `visual-editor.js` / `visual-assets.js` / `visual-design.js` / `visual-layout.js` | The visual page editor layered onto the block editor; see [VISUAL-EDITOR.md](VISUAL-EDITOR.md). |
+| `editor-shared.js` | Block-editor scaffolding shared by Site Pages and Ministries, plus the self-filling data bundle every published page renders with. |
+| `ministries.js` | Ministries admin: list, metadata screen, per-ministry posts; the old second block editor now only redirects. |
+| `sermons.js` | Sermon series/notes admin (distinct from `sermons-feed.js`, the YouTube feed). |
+| `class-schedule.js` | A Bible class's meeting time as structured data so the calendar can show it. |
+| `newsletter-schedule.js` | The per-issue schedule lock that keeps one Brevo campaign per issue; see [ADR 0003](adr/0003-newsletter-lock-gym-overlap-and-release-order.md). |
+| `gym-income-report.js` | Gym rental income read by Finance over its service binding, with the same caller proof as the payroll relay. |
+| `shared-staff-login.js` | Exchange of a Cloudflare Access identity for a Website Admin session; see [SECURITY.md](SECURITY.md). |
+| `db-attribution.js` | Per-request D1 query-count attribution for observability. |
 | `when.js` | Church-local (Central time) date/day-part helpers — the Worker itself always runs in UTC. |
 
 `admin/vendor/tinymce/` is the self-hosted editor — see "Editor constraint" below.
@@ -86,12 +104,12 @@ renter/payment detail) and nothing more.
 
 Two real integration points reach outside this repo, both worth knowing before touching either:
 
-1. **Website → Connect (`chms`), the forward outbox.** Contact/prayer form submissions and Market
+1. **Website → Connect, the forward outbox.** Contact/prayer form submissions and Market
    operations get forwarded to Connect via the `CONNECT_WORKER` service binding
    (`forwardToChms`/`retryChmsForwards` in `admin/forms.js`). A failed forward is retried through a
-   durable outbox rather than lost — see `docs/CHMS_FORWARD_RECOVERY.md` for the recovery
+   durable outbox rather than lost — see [CHMS_FORWARD_RECOVERY.md](CHMS_FORWARD_RECOVERY.md) for the recovery
    procedure. The public Site Worker has no direct Connect binding at all; only Website Admin does.
-2. **Finance (`chms`'s `apps/finance/*`) → Website, the payroll relay.** Finance runs its own
+2. **Finance (`timothystl/finance`) → Website, the payroll relay.** Finance runs its own
    separate app and has no payroll data of its own — every payroll figure it shows is relayed live
    from this repo's existing payroll system (`admin/payroll.html`'s screen, its `/sb/*` Supabase
    proxy, and `/payroll/email`) and never stored in Finance. Finance authenticates each relayed
@@ -106,7 +124,10 @@ Two real integration points reach outside this repo, both worth knowing before t
 
 ## Editor constraint
 
-TinyMCE is self-hosted from `admin/vendor/tinymce/`; the cloud subscription has lapsed. Never add
-a TinyMCE Cloud API key, cloud script, paid editor load, or CDN dependency. After any editor or
+TinyMCE is self-hosted from `admin/vendor/tinymce/`; the cloud subscription has lapsed. The Admin Worker
+serves it at `/assets/tinymce/<version>/...` by fetching the committed files from this repository's
+`main` branch on GitHub (so it is self-hosted but not pinned; see RP-10 in
+[docs/OPEN-WORK.md](OPEN-WORK.md)). Never add a TinyMCE Cloud API key, cloud script, paid editor
+load, or CDN dependency. After any editor or
 vendor-asset change, run the TinyMCE asset tests and the self-hosted browser boot test
 (`test/tinymce-selfhost.test.mjs`).

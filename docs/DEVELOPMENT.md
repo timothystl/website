@@ -25,7 +25,7 @@ node test/links-page.test.mjs
 node test/give-page.test.mjs
 ```
 
-That set is the required-before-merge list from `AGENTS.md`. The remaining Playwright suites
+That set is the core of the Node portion of `.github/workflows/test.yml`, which CI runs on every pull request; the workflow file is authoritative and also runs a few more suites. The remaining Playwright suites
 (`test/public-page.test.mjs`, `test/tinymce-selfhost.test.mjs`, `test/shell-layout.test.mjs`, and
 the rest listed at the bottom of `.github/workflows/test.yml`) need a browser — install once with
 `npx playwright install --with-deps chromium`, or use the Chromium already at
@@ -43,7 +43,7 @@ far this gets you depends on which Worker:
   the giving page, `run_worker_first` hostname routing, and clean-URL/404 handling all work with
   no external dependency.
 - **`timothy-links`** (`npx wrangler dev --config wrangler-links.toml`) has no bindings at all.
-- **`tlc-newsletter-admin`** (`npx wrangler dev`, the default `wrangler.toml`) is the least
+- **`timothy-website-admin`** (`npx wrangler dev`, the default `wrangler.toml`) is the least
   self-contained of the three. `wrangler dev`'s local mode gives you a fresh local D1 and R2
   automatically — schema is fine (every table is created by an idempotent
   `CREATE TABLE IF NOT EXISTS ...` the first time a route touches `env.DB`, the same
@@ -52,16 +52,16 @@ far this gets you depends on which Worker:
   setup/seed routes yourself, or work against `admin/*.test.mjs`'s fixtures instead of a fresh UI
   for anything that needs existing data.
 
-  The `CONNECT_WORKER` service binding (to `tlc-chms`) has no local target: `wrangler dev` will
-  either fail to resolve it or (with `--remote`) reach the *real* production `tlc-chms` Worker,
+  The `CONNECT_WORKER` service binding (to `timothy-connect`) has no local target: `wrangler dev` will
+  either fail to resolve it or (with `--remote`) reach the *real* production `timothy-connect` Worker,
   which you almost never want while iterating. The safe default is to leave it unresolved and
   expect `forwardToChms`/Market-operation calls to fail into the durable outbox
-  (`chms_forward_outbox`) rather than deliver — that's the intended degrade path, not a bug (see
-  `docs/CHMS_FORWARD_RECOVERY.md`). Do not point local `wrangler dev` at production D1/R2 by
+  (`chms_forward_outbox`; "chms" is Connect's former name) rather than deliver — that's the intended
+  degrade path, not a bug (see [CHMS_FORWARD_RECOVERY.md](CHMS_FORWARD_RECOVERY.md)). Do not point local `wrangler dev` at production D1/R2 by
   passing production IDs into a local config; the shared `wrangler.toml` already carries the real
   `timothy-website-db`/`timothy-website-images` names and IDs; run it in default (local) mode.
 
-None of the three `wrangler-*.toml` files define a separate staging environment — unlike `chms`,
+None of the three `wrangler-*.toml` files define a separate staging environment — unlike Connect,
 this repository has only production Cloudflare resources. There is no `wrangler dev --env staging`
 to reach for.
 
