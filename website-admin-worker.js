@@ -6,7 +6,7 @@ import { CALENDAR_LINK_SCHEMA, CALENDAR_NEWS_LINK_INDEX, calendarLink, refreshCa
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_OVERLAP_TRIGGERS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_CHMS_FORWARD_OUTBOX, DB_INIT_CHMS_FORWARD_OUTBOX_INDEX, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_PUSH_LOG, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
+import { TINYMCE_HEAD, TINYMCE_VERSION, TINYMCE_UPSTREAM, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_OVERLAP_TRIGGERS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_CHMS_FORWARD_OUTBOX, DB_INIT_CHMS_FORWARD_OUTBOX_INDEX, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_PUSH_LOG, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES, DB_INIT_EVENT_INTAKE,
          DB_INIT_CALENDAR_CATEGORIES, DB_INIT_CALENDAR_CATEGORIES_COLOR,
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
@@ -39,7 +39,7 @@ import { renderListSection, renderDrawer, renderFormSection, primaryCell, status
 import { section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { dayKey, monthKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
-import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
+import { hashPassword, verifyPasswordOrDummy, loginThrottled, resetRequestThrottled, createPasswordReset, findPasswordReset, consumePasswordReset, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
 import { handleGymIncomeContract } from './admin/gym-income-report.js';
 import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
@@ -1426,7 +1426,7 @@ export default {
         return new Response('Not found', { status: 404 });
       }
       const upstream = await fetch(
-        'https://raw.githubusercontent.com/timothystl/website/main/admin/vendor/tinymce/' + rel,
+        TINYMCE_UPSTREAM + rel,
         { cf: { cacheEverything: true, cacheTtl: 86400 } },
       );
       if (!upstream.ok) return new Response('Not found', { status: 404 });
@@ -4349,13 +4349,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       if (method === 'POST') {
         const form = await request.formData();
         const email = (form.get('email') || '').trim().toLowerCase();
-        if (email) {
+        const ip = request.headers.get('CF-Connecting-IP') || '';
+        // RP-12: throttled per address and per IP. The answer is the same
+        // message either way, so the limit reveals nothing about the account.
+        if (email && !(await resetRequestThrottled(env.DB, ip, email))) {
+          await logAudit(env.DB, { id: null, username: '' }, 'reset_requested', 'auth', email, ip, null, null);
           const user = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND active = 1').bind(email).first().catch(() => null);
           if (user) {
-            const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('');
-            const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-            await env.DB.prepare('INSERT INTO password_resets (token, user_id, expires_at, used, created_at) VALUES (?, ?, ?, 0, ?)')
-              .bind(token, user.id, expiresAt, new Date().toISOString()).run();
+            const token = await createPasswordReset(env.DB, user.id);
             const origin = new URL(request.url).origin;
             const resetLink = `${origin}/reset-password?token=${token}`;
             await sendTransactionalEmail(env, {
@@ -4374,8 +4375,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       const token = url.searchParams.get('token') || '';
       if (method === 'GET') {
         if (!token) return new Response('', { status: 302, headers: { Location: '/forgot-password' } });
-        const row = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0').bind(token).first().catch(() => null);
-        if (!row || new Date(row.expires_at) < new Date()) {
+        const row = await findPasswordReset(env.DB, token);
+        if (!row) {
           return forgotPasswordPage('', 'That reset link has expired or already been used. Request a new one below.');
         }
         return resetPasswordPage(token);
@@ -4386,15 +4387,15 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         const password = form.get('password') || '';
         const password2 = form.get('password2') || '';
         if (!formToken) return new Response('', { status: 302, headers: { Location: '/forgot-password' } });
-        const row = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0').bind(formToken).first().catch(() => null);
-        if (!row || new Date(row.expires_at) < new Date()) {
+        const row = await findPasswordReset(env.DB, formToken);
+        if (!row) {
           return forgotPasswordPage('', 'That reset link has expired or already been used. Request a new one below.');
         }
         if (!password || password.length < 8) return resetPasswordPage(formToken, 'Password must be at least 8 characters.');
         if (password !== password2) return resetPasswordPage(formToken, 'Passwords do not match.');
         const hash = await hashPassword(password);
         await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, row.user_id).run();
-        await env.DB.prepare('UPDATE password_resets SET used = 1 WHERE token = ?').bind(formToken).run();
+        await consumePasswordReset(env.DB, formToken);
         await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.user_id).run();
         return loginPage('', 'Password updated. Please sign in with your new password.');
       }
@@ -4435,23 +4436,20 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     }
     if (path === '/login' && method === 'POST') {
       const ip = request.headers.get('CF-Connecting-IP') || '';
-      // Rate limit: block after 10 failures from the same IP in 15 minutes.
-      // Reuses audit_log rows written on each failure — no extra table needed.
-      if (ip) {
-        const recent = await env.DB.prepare(
-          `SELECT COUNT(*) as n FROM audit_log WHERE action = 'login_failed' AND entity_label = ? AND created_at > datetime('now', '-15 minutes')`
-        ).bind(ip).first().catch(() => ({ n: 0 }));
-        if ((recent?.n || 0) >= 10) {
-          return loginPage('Too many failed attempts. Please wait 15 minutes before trying again.');
-        }
-      }
       const form = await request.formData();
-      const username = (form.get('username') || '').trim();
+      const username = (form.get('username') || '').trim().slice(0, 100);
       const password = form.get('password') || '';
+      // RP-13: block after 10 failures from one address OR against one
+      // username, whichever address they come from.
+      if (await loginThrottled(env.DB, ip, username)) {
+        return loginPage('Too many failed attempts. Please wait 15 minutes before trying again.');
+      }
       const user = username
         ? await env.DB.prepare('SELECT * FROM users WHERE username = ? AND active = 1').bind(username).first().catch(() => null)
         : null;
-      if (user && await verifyPassword(password, user.password_hash)) {
+      // Always pays for one password hash, found or not (RP-13).
+      const passwordOk = await verifyPasswordOrDummy(password, user ? user.password_hash : null);
+      if (user && passwordOk) {
         const token = await createSession(env.DB, user);
         return new Response('', {
           status: 302,

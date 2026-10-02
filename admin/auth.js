@@ -149,6 +149,79 @@ export async function verifyPassword(password, stored) {
   return timingSafeEqual(hash, expected);
 }
 
+// RP-13: a well-formed hash that matches no password. Verifying against it
+// costs exactly what verifying a real account costs, so "no such username" and
+// "wrong password" take the same time and cannot be told apart by stopwatch.
+const DUMMY_PASSWORD_HASH = 'pbkdf2:100000:' + '0'.repeat(32) + ':' + '0'.repeat(64);
+
+export async function verifyPasswordOrDummy(password, stored) {
+  if (stored) return verifyPassword(password, stored);
+  await verifyPassword(password, DUMMY_PASSWORD_HASH);
+  return false;
+}
+
+// ── LOGIN / RESET THROTTLING ──────────────────────────────────
+// RP-12/13: counted from audit_log rows, the way per-IP login throttling
+// always was, so no new table is needed. A username is throttled whatever
+// address the attempts come from, so rotating IPs does not help.
+export const LOGIN_FAIL_LIMIT = 10;
+export const RESET_REQUEST_IP_LIMIT = 5;
+export const RESET_REQUEST_ADDRESS_LIMIT = 3;
+
+async function countAudit(db, where, bind, cutoff) {
+  const r = await db.prepare(
+    `SELECT COUNT(*) as n FROM audit_log WHERE ${where} AND created_at > ?`
+  ).bind(...bind, cutoff).first().catch(() => ({ n: 0 }));
+  return r?.n || 0;
+}
+
+// created_at is written as an ISO string (see logAudit), so the window is
+// computed here rather than with SQLite's datetime(), which formats differently.
+const since = (ms) => new Date(Date.now() - ms).toISOString();
+
+export async function loginThrottled(db, ip, username) {
+  const cutoff = since(15 * 60 * 1000);
+  if (ip && await countAudit(db, `action = 'login_failed' AND entity_label = ?`, [ip], cutoff) >= LOGIN_FAIL_LIMIT) return true;
+  if (username && await countAudit(db, `action = 'login_failed' AND username = ?`, [username], cutoff) >= LOGIN_FAIL_LIMIT) return true;
+  return false;
+}
+
+export async function resetRequestThrottled(db, ip, email) {
+  const cutoff = since(60 * 60 * 1000);
+  if (ip && await countAudit(db, `action = 'reset_requested' AND entity_label = ?`, [ip], cutoff) >= RESET_REQUEST_IP_LIMIT) return true;
+  if (email && await countAudit(db, `action = 'reset_requested' AND entity_id = ?`, [email], cutoff) >= RESET_REQUEST_ADDRESS_LIMIT) return true;
+  return false;
+}
+
+// ── PASSWORD RESET TOKENS (RP-12) ─────────────────────────────
+// Only a SHA-256 of the token is stored, so a read of the database (a backup,
+// an export) yields nothing that can be used at /reset-password.
+export async function hashResetToken(token) {
+  const bits = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(token)));
+  return 'sha256:' + Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Issues a new token and voids every earlier one for the same account.
+export async function createPasswordReset(db, userId) {
+  const token = randomHex(32);
+  await db.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(userId).run();
+  await db.prepare('INSERT INTO password_resets (token, user_id, expires_at, used, created_at) VALUES (?, ?, ?, 0, ?)')
+    .bind(await hashResetToken(token), userId, new Date(Date.now() + 60 * 60 * 1000).toISOString(), new Date().toISOString()).run();
+  return token;
+}
+
+export async function findPasswordReset(db, token) {
+  if (!token) return null;
+  const row = await db.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0')
+    .bind(await hashResetToken(token)).first().catch(() => null);
+  if (!row || new Date(row.expires_at) < new Date()) return null;
+  return row;
+}
+
+export async function consumePasswordReset(db, token) {
+  await db.prepare('UPDATE password_resets SET used = 1 WHERE token = ?').bind(await hashResetToken(token)).run();
+}
+
 // ── SESSION MANAGEMENT ────────────────────────────────────────
 
 function randomHex(bytes) {
@@ -261,6 +334,18 @@ export function hasPermission(user, permission) {
 
 // ── AUDIT LOG ────────────────────────────────────────────────
 
+// RP-04: the audit log is read by anyone with audit_view, which is a wider
+// audience than sensitive_data_view. Sensitive registration data (allergies,
+// medical notes) is therefore removed here, at write time, so no caller can
+// copy it into the log by passing a whole row.
+const AUDIT_REDACTED_KEYS = ['sensitive_json'];
+export function redactAuditState(state) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return state;
+  const out = { ...state };
+  for (const k of AUDIT_REDACTED_KEYS) if (k in out) out[k] = '[redacted]';
+  return out;
+}
+
 export async function logAudit(db, user, action, entityType, entityId, entityLabel, beforeState, afterState) {
   try {
     await db.prepare(
@@ -274,8 +359,8 @@ export async function logAudit(db, user, action, entityType, entityId, entityLab
       entityType,
       String(entityId ?? ''),
       entityLabel || '',
-      beforeState != null ? JSON.stringify(beforeState) : null,
-      afterState  != null ? JSON.stringify(afterState)  : null,
+      beforeState != null ? JSON.stringify(redactAuditState(beforeState)) : null,
+      afterState  != null ? JSON.stringify(redactAuditState(afterState))  : null,
       new Date().toISOString()
     ).run();
   } catch (_) { /* never let audit failure break the main action */ }
