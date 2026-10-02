@@ -16,15 +16,15 @@ Connect, not this repository.
 |---|---|
 | RP-01 | Open, re-tested: prayer/contact push bodies still quote the message; delivery is by audience only |
 | RP-02, RP-03 | Open, re-tested: CSV export and coordinator email include sensitive fields; no `sensitive_data_view` permission |
-| RP-04 | Open, re-tested: event and Market delete write the full row (including `sensitive_json`) to the audit log |
+| RP-04 | Fixed for new entries October 2, 2026 (redacted in `logAudit`); older audit rows still need a one-time scrub |
 | RP-05 | Open: `deploy.yml` is independent of `test.yml`; branch protection not inspected |
 | RP-06 | Fixed (the hardcoded-date assertion no longer exists); section removed |
 | RP-07 | Open, re-tested for the schema marker (stamped unconditionally). The Market vendor migration still resumes only when the destination is empty |
 | RP-08 | Partly addressed: recovery drills exist (`verify-d1-recovery.yml`, `verify-r2-recovery.yml`); no scheduled backup job or restore document was found. Needs a decision on what counts as done |
-| RP-09 | Open, re-tested: group delete hard-deletes invoices, bookings, and recurrences with no audit entry |
-| RP-10 | Open, re-tested: the route proxies this repository's `main` branch, not a pinned commit |
+| RP-09 | Partly fixed October 2, 2026: group and invoice deletes are now audited; archive-instead-of-delete and atomic booking creation remain open |
+| RP-10 | Fixed October 2, 2026: the route fetches from a pinned commit (`TINYMCE_UPSTREAM`) |
 | RP-11 | Partly addressed: an optional Cloudflare Access identity exchange exists (`admin/shared-staff-login.js`, see docs/SECURITY.md); enforcement in production is unverified |
-| RP-12, RP-13 | Open, re-tested |
+| RP-12, RP-13 | Fixed October 2, 2026 (hashed single-use reset tokens, per-address/IP throttles, per-username login lockout, dummy hash) |
 | RP-14 | Largely moot for new submissions: the screener no longer holds mail (`admin/forms.js`); previously held rows are unverified |
 | RP-15 | Unverified: needs a production check that `TURNSTILE_SECRET_KEY` is set |
 | RP-16 | Not re-tested |

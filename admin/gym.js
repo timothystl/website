@@ -7,6 +7,7 @@ import { sendTransactionalEmail } from './email.js';
 import { renderListSection, primaryCell, statusPill } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { pushToAllSubscribers } from './webpush.js';
+import { logAudit } from './auth.js';
 
 // ── PAPERWORK CHECKLIST (moved from the retired Event Intake "Office
 // follow-up" screen) ─────────────────────────────────────────
@@ -3084,6 +3085,18 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
       // ── DELETE GROUP ──────────────────────────────────────────
       if (path.startsWith('/gym-rentals/groups/delete/') && method === 'POST') {
         const gid = parseInt(path.split('/').pop(), 10);
+        // RP-09: a permanent delete leaves a record of what went. The group's
+        // access token is a credential, so it is left out of the copy.
+        const doomed = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(gid).first().catch(() => null);
+        if (doomed) {
+          const counts = await env.DB.prepare(
+            `SELECT (SELECT COUNT(*) FROM gym_invoices WHERE group_id=?1) AS invoices,
+                    (SELECT COUNT(*) FROM gym_bookings WHERE group_id=?1) AS bookings,
+                    (SELECT COUNT(*) FROM gym_recurrences WHERE group_id=?1) AS recurrences`
+          ).bind(gid).first().catch(() => ({}));
+          const { access_token, ...rest } = doomed;
+          await logAudit(env.DB, currentUser, 'delete', 'gym_group', gid, doomed.name || '', { ...rest, ...counts }, null);
+        }
         await env.DB.prepare('DELETE FROM gym_invoices WHERE group_id=?').bind(gid).run();
         await env.DB.prepare('DELETE FROM gym_bookings WHERE group_id=?').bind(gid).run();
         await env.DB.prepare('DELETE FROM gym_recurrences WHERE group_id=?').bind(gid).run();
@@ -5097,6 +5110,8 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
       // ── DELETE INVOICE ────────────────────────────────────────
       if (path.startsWith('/gym-rentals/invoices/delete/') && method === 'POST') {
         const iid = parseInt(path.split('/').pop(), 10);
+        const doomed = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(iid).first().catch(() => null);
+        if (doomed) await logAudit(env.DB, currentUser, 'delete', 'gym_invoice', iid, doomed.invoice_date || '', doomed, null);
         await env.DB.prepare('DELETE FROM gym_invoices WHERE id=?').bind(iid).run();
         return new Response('', { status: 302, headers: { Location: '/gym-rentals/invoices?msg=deleted' } });
       }

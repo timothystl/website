@@ -22,6 +22,10 @@
 // against the new core — a broken editor that no reload fixes. Versioning the
 // path means an upgrade changes every URL at once.
 export const TINYMCE_VERSION = '7.9.3';
+// RP-10: the files are fetched from this exact commit, never from a branch. A
+// change to `main` (accidental or hostile) cannot reach an admin browser; moving
+// to a new TinyMCE means vendoring it, then pointing this at the commit that has it.
+export const TINYMCE_UPSTREAM = 'https://raw.githubusercontent.com/timothystl/website/2e753a83c6687b360842397b3d5d944bb9bd7ce2/admin/vendor/tinymce/';
 export const TINYMCE_BASE = `/assets/tinymce/${TINYMCE_VERSION}`;
 
 // ⚠ NOTHING IS INITIALIZED AT PAGE LOAD, and self-hosting is not a reason to go

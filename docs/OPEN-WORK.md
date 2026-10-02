@@ -13,13 +13,9 @@ acceptance test for each.
 |---|---|
 | RP-01 push payloads quote prayer/contact text and go to every staff subscriber | `website-admin-worker.js` contact and prayer push sends `message.slice(0, 150)`; `pushToAllSubscribers` filters by audience only (`admin/webpush.js`) |
 | RP-02 / RP-03 sensitive registration fields | `registrationsCsv` in `admin/events.js` includes `sensitive_json`; the field hint says "Kept out of the plain export column"; the coordinator email lists sensitive fields; no `sensitive_data_view` permission exists |
-| RP-04 deleted registrations keep sensitive data in the audit log | Event and Market delete handlers pass the full `before` row to `logAudit` |
+| RP-04 audit log history still holds old sensitive data | New deletes are redacted at write time (`redactAuditState` in `admin/auth.js`); audit rows written before October 2, 2026 may still contain `sensitive_json` and need a one-time, logged scrub |
 | RP-05 deploy is not gated on tests | `deploy.yml` has no dependency on `test.yml`; branch protection could not be inspected (unverified) |
 | RP-07 schema version stamped even when statements fail | `website-admin-worker.js` writes `_schema_version` unconditionally after the migration block |
-| RP-09 gym group delete is a hard delete with no audit entry | `/gym-rentals/groups/delete/` in `admin/gym.js` |
-| RP-10 TinyMCE assets are proxied from this repo's mutable `main` | `/assets/tinymce/` route in `website-admin-worker.js` fetches `raw.githubusercontent.com/timothystl/website/main/admin/vendor/tinymce/` |
-| RP-12 password-reset tokens plaintext, unthrottled, older tokens stay valid | `/forgot-password` in `website-admin-worker.js` |
-| RP-13 login throttle is per-IP and skips hashing for unknown usernames | `/login` POST in `website-admin-worker.js` |
 | RP-18 gym invoice money stored as `REAL` | `gym_invoices` in `admin/db.js` |
 | RP-19 payroll Supabase schema/functions not in this repository | no `supabase/` directory (the data lives in myMDO's Supabase project) |
 | RP-08, RP-11, RP-14, RP-15, RP-16, RP-20 to RP-24, RP-26 | not re-tested, or need a production check or a policy decision; see the plan |
