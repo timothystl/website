@@ -73,7 +73,7 @@ group('the values that had drifted');
   // Columns that were missing or invented.
   eq(columnsOf('ministries').map((c) => c.label).join(','), 'Ministry,Short link,In menu,Status',
     'Ministries shows a Short link column and no Value column');
-  eq(columnsOf('news').map((c) => c.label).join(','), 'Post,Published,Expires,Status',
+  eq(columnsOf('news').map((c) => c.label).join(','), 'Post,Date,Expires,Status',
     'News has no Value column — the chip sits beside the title');
   eq(columnsOf('ed').map((c) => c.label).join(','), 'Class,Schedule,Leader,Status',
     'Christian Ed has no Value column either');
