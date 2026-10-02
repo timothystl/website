@@ -661,6 +661,10 @@ export function renderField(f) {
   const hint = f.hint ? `<p class="tlc-hint">${esc(f.hint)}</p>` : '';
 
   switch (f.kind) {
+    // Fields side by side; wraps to one column on a narrow screen.
+    case 'row':
+      return `<div class="tlc-fieldrow">${(f.fields || []).map((x) => renderField(x)).join('')}</div>`;
+
     case 'static':
       return `<div class="tlc-field">${label}<div class="tlc-static">${f.html != null ? f.html : esc(f.value)}</div>${hint}</div>`;
 
@@ -1491,6 +1495,9 @@ export const TABS_CSS = `
 .tlc-tab:hover{color:var(--tlc-ink);}
 .tlc-tab.is-on{color:var(--tlc-ink);border-bottom-color:var(--tlc-navy,#1E2D4A);}
 .tlc-tab:focus-visible{outline:2px solid var(--tlc-navy,#1E2D4A);outline-offset:-2px;border-radius:8px;}
+/* Row fields sit side by side. */
+.tlc-field textarea[rows="2"]{min-height:0;}
+.tlc-fieldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;}
 button.tlc-tab{background:none;border:0;border-bottom:3px solid transparent;cursor:pointer;}
 button.tlc-tab.is-on{border-bottom-color:var(--tlc-navy,#1E2D4A);}
 `;

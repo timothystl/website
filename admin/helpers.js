@@ -1176,7 +1176,7 @@ export function tinymceField({ id, name, value = '', minHeight = 200, label = ''
 
 // The seven call sites, each now one line. Kept as named functions rather than
 // inlined so the routes do not have to know the id and name of every field.
-export const tinymceEditorSection = (v = '') => tinymceField({ id: 'body-editor', name: 'body', value: v, minHeight: 260, label: 'Full text', labelNote: '— optional, shown when reader clicks "Read more"' });
+export const tinymceEditorSection = (v = '', minHeight = 260) => tinymceField({ id: 'body-editor', name: 'body', value: v, minHeight, label: 'Full text', labelNote: '— optional, shown when reader clicks "Read more"' });
 export const tinymcePostSection = (v = '') => tinymceField({ id: 'post-editor', name: 'body', value: v, minHeight: 260, label: 'Post content' });
 export const tinymceSermonSection = (v = '') => tinymceField({ id: 'sermon-editor', name: 'outline', value: v, minHeight: 260, label: 'Notes / outline' });
 export const tinymceYouthSection = (v = '') => tinymceField({ id: 'youth-editor', name: 'content', value: v, minHeight: 320, label: 'Page content' });
