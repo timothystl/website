@@ -2399,6 +2399,12 @@ ${classesJs}
               <span class="tlc-primary-title">${item.pinned ? '<span class="tlc-pin" title="Pinned to the top" aria-label="Pinned">▲</span>' : ''}${escapeHtml(item.title)}${item.value ? ` ${valueChip(item.value)}` : ''}</span>
               <span class="tlc-primary-sub">${escapeHtml((item.summary || '').slice(0, 80))}</span>
             </span></div>`,
+          // The day the event itself happens (a multi-day one shows its span),
+          // as distinct from the day the post goes up. Plain announcements
+          // have no event date and read as a dash.
+          item.event_date
+            ? escapeHtml(item.event_end_date && item.event_end_date !== item.event_date ? `${item.event_date} – ${item.event_end_date}` : item.event_date)
+            : '<span style="color:#6A6858;">—</span>',
           escapeHtml(item.publish_date || '—'),
           expires,
           status,
