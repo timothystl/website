@@ -2472,15 +2472,17 @@ ${renderListSection({
       tabs: [
         { key: 'general', label: 'General', fields: [
         { name: 'title', label: 'Title', value: item ? item.title : '', required: true, placeholder: 'Easter services — April 20' },
+        { kind: 'row', fields: [
         { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
-          hint: 'Optional. A post with one sorts by the event rather than by when it was written \u2014 and appears on the church calendar, the printed month and the weekly email, without being entered anywhere else.' },
+          hint: 'Optional. Puts the post on the church calendar.' },
         // ⚠ THE FIELD THAT ENDS THE RETYPING. Without a time, a post could
         // only ever be an all-day chip, so a 7:00 pm meeting had to be typed
         // into the newsletter by hand and into Google by hand. Leaving it
         // blank is still a real answer — an all-day event — which is why
         // there is no default and no placeholder time.
         { kind: 'date', name: 'event_end_date', label: 'Through', value: item ? (item.event_end_date || '') : '',
-          hint: 'Optional. For something that runs several days \u2014 a break, a camp, a week of testing. One entry rather than five.' },
+          hint: 'Optional. For a multi-day event.' },
+        ] },
         // \u26a0 FORCES A CHOICE RATHER THAN LETTING A BLANK TIME MEAN "ALL DAY"
         // BY DEFAULT. A blank time used to be read as a real answer, and it
         // still is once this is checked \u2014 but leaving it unchecked AND the
@@ -2492,14 +2494,17 @@ ${renderListSection({
         { kind: 'toggle', name: 'event_all_day', label: 'All day event',
           value: item ? (!!item.event_date && !item.event_time) : false,
           on: 'All day', off: 'Has a start time',
-          hint: 'Only checked events skip the start time. Leave this off and fill in a start time below for anything that happens at a specific hour.' },
+          hint: 'Leave this off and fill in a start time for anything at a specific hour.' },
+        { kind: 'row', fields: [
         { kind: 'text', type: 'time', name: 'event_time', label: 'Starts at', value: item ? (item.event_time || '') : '',
-          hint: 'Required unless this is an all-day event (above). Church time, always.' },
+          hint: 'Required unless all day. Church time.' },
         { kind: 'text', type: 'time', name: 'event_end_time', label: 'Ends at', value: item ? (item.event_end_time || '') : '',
-          hint: 'Optional. The calendar page shows only the start; this is what a subscribed phone uses to draw how long it runs.' },
+          hint: 'Optional.' },
+        ] },
+        { kind: 'row', fields: [
         { kind: 'text', name: 'event_location', label: 'Where', value: item ? (item.event_location || '') : '',
           placeholder: 'e.g. Fellowship Hall',
-          hint: 'Optional. Shown on the event and carried into a subscribed calendar.' },
+          hint: 'Optional.' },
         // ⚠ Only offered on a post that HAS an event date, because only
         // those reach the calendar at all. Offering it on an announcement
         // would be a control that looks live and does nothing.
@@ -2507,34 +2512,39 @@ ${renderListSection({
           value: item ? (item.calendar_category || '') : '',
           options: [{ value: '', label: '— work it out from the value above —' }]
             .concat(newsCalCats.map((c) => ({ value: c.key, label: c.name }))),
-          hint: 'Only used when the post has an event date. Sets which category it files under on the church calendar — the same list a Google event\u2019s color chooses from. Change the list under Pages \u2192 Calendar.' },
+          hint: 'Only used when the post has an event date.' },
+        ] },
         ] },
         { key: 'details', label: 'Details', fields: [
-        { kind: 'textarea', name: 'summary', label: 'Summary', rows: 3, value: item ? (item.summary || '') : '',
-          placeholder: 'Two or three sentences.', hint: 'What shows on the card, before anybody clicks through.' },
-        { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '') },
+        { kind: 'textarea', name: 'summary', label: 'Summary', rows: 2, value: item ? (item.summary || '') : '',
+          placeholder: 'Two or three sentences.', hint: 'What shows on the card.' },
+        { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '', 110) },
         { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Header image</label>
           <input type="hidden" name="image_url" id="image_url_val" value="">
           <input type="file" id="image_url_file" accept="image/*">
           <div id="image-url-status" class="tlc-hint"></div>
           <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
-          <p class="tlc-hint">Optional. Shown as the card thumbnail.</p></div>` },
+          </div>` },
         // ⚠ The value column has existed since v3.0.0 and the list filters on
         // it, but no form ever set one — so every post was untagged and the
         // filter could never match. Same shape of bug as the tap counter.
-        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves. Used by the filters and the values report.</p></div>` },
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves.</p></div>` },
+        { kind: 'row', fields: [
         { kind: 'choice', name: 'theme', label: 'Theme', value: item ? (item.theme || '') : '',
           options: [{ value: '', label: '— none —' }].concat(THEMES.map((t) => ({ value: t, label: t }))) },
         { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
           options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
         ] },
+        ] },
         { key: 'publishing', label: 'Publishing', fields: [
         { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
           <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
-          <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them. A dated post is on the calendar either way \u2014 tick <strong>Church calendar only</strong> for a date that belongs on the month but is not news anybody wants to read a paragraph about.</p></div>` },
+          <p class="tlc-hint">A dated post is on the calendar either way. <strong>Church calendar only</strong> keeps it off the news page.</p></div>` },
+        { kind: 'row', fields: [
         { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
         { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
-          hint: 'The post hides itself after this date. Clear it only for something genuinely permanent.' },
+          hint: 'The post hides itself after this date.' },
+        ] },
         { kind: 'toggle', name: 'pinned', label: 'Pin to the top', value: item ? !!item.pinned : false,
           on: 'Pinned', off: 'In date order',
           hint: 'A pinned post sits above the rest until you unpin it.' },
