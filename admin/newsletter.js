@@ -2469,37 +2469,9 @@ ${renderListSection({
       deleteConfirm: `Delete “${(item && item.title) || 'this post'}”? It disappears from the website.`,
       wide: true,
       note: 'Expiry is what keeps the site honest — a post with an expire date disappears without anyone remembering to delete it.',
-      fields: [
+      tabs: [
+        { key: 'general', label: 'General', fields: [
         { name: 'title', label: 'Title', value: item ? item.title : '', required: true, placeholder: 'Easter services — April 20' },
-        { kind: 'textarea', name: 'summary', label: 'Summary', rows: 3, value: item ? (item.summary || '') : '',
-          placeholder: 'Two or three sentences.', hint: 'What shows on the card, before anybody clicks through.' },
-        // ⚠ The value column has existed since v3.0.0 and the list filters on
-        // it, but no form ever set one — so every post was untagged and the
-        // filter could never match. Same shape of bug as the tap counter.
-        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves. Used by the filters and the values report.</p></div>` },
-        // ⚠ Only offered on a post that HAS an event date, because only
-        // those reach the calendar at all. Offering it on an announcement
-        // would be a control that looks live and does nothing.
-        { kind: 'choice', name: 'calendar_category', label: 'On the calendar, this is',
-          value: item ? (item.calendar_category || '') : '',
-          options: [{ value: '', label: '— work it out from the value above —' }]
-            .concat(newsCalCats.map((c) => ({ value: c.key, label: c.name }))),
-          hint: 'Only used when the post has an event date. Sets which category it files under on the church calendar — the same list a Google event\u2019s color chooses from. Change the list under Pages \u2192 Calendar.' },
-        { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '') },
-        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Header image</label>
-          <input type="hidden" name="image_url" id="image_url_val" value="">
-          <input type="file" id="image_url_file" accept="image/*">
-          <div id="image-url-status" class="tlc-hint"></div>
-          <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
-          <p class="tlc-hint">Optional. Shown as the card thumbnail.</p></div>` },
-        { kind: 'choice', name: 'theme', label: 'Theme', value: item ? (item.theme || '') : '',
-          options: [{ value: '', label: '— none —' }].concat(THEMES.map((t) => ({ value: t, label: t }))) },
-        { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
-          options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
-        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
-          <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
-          <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them. A dated post is on the calendar either way \u2014 tick <strong>Church calendar only</strong> for a date that belongs on the month but is not news anybody wants to read a paragraph about.</p></div>` },
-        { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
         { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
           hint: 'Optional. A post with one sorts by the event rather than by when it was written \u2014 and appears on the church calendar, the printed month and the weekly email, without being entered anywhere else.' },
         // ⚠ THE FIELD THAT ENDS THE RETYPING. Without a time, a post could
@@ -2528,11 +2500,45 @@ ${renderListSection({
         { kind: 'text', name: 'event_location', label: 'Where', value: item ? (item.event_location || '') : '',
           placeholder: 'e.g. Fellowship Hall',
           hint: 'Optional. Shown on the event and carried into a subscribed calendar.' },
+        // ⚠ Only offered on a post that HAS an event date, because only
+        // those reach the calendar at all. Offering it on an announcement
+        // would be a control that looks live and does nothing.
+        { kind: 'choice', name: 'calendar_category', label: 'On the calendar, this is',
+          value: item ? (item.calendar_category || '') : '',
+          options: [{ value: '', label: '— work it out from the value above —' }]
+            .concat(newsCalCats.map((c) => ({ value: c.key, label: c.name }))),
+          hint: 'Only used when the post has an event date. Sets which category it files under on the church calendar — the same list a Google event\u2019s color chooses from. Change the list under Pages \u2192 Calendar.' },
+        ] },
+        { key: 'details', label: 'Details', fields: [
+        { kind: 'textarea', name: 'summary', label: 'Summary', rows: 3, value: item ? (item.summary || '') : '',
+          placeholder: 'Two or three sentences.', hint: 'What shows on the card, before anybody clicks through.' },
+        { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '') },
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Header image</label>
+          <input type="hidden" name="image_url" id="image_url_val" value="">
+          <input type="file" id="image_url_file" accept="image/*">
+          <div id="image-url-status" class="tlc-hint"></div>
+          <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
+          <p class="tlc-hint">Optional. Shown as the card thumbnail.</p></div>` },
+        // ⚠ The value column has existed since v3.0.0 and the list filters on
+        // it, but no form ever set one — so every post was untagged and the
+        // filter could never match. Same shape of bug as the tap counter.
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves. Used by the filters and the values report.</p></div>` },
+        { kind: 'choice', name: 'theme', label: 'Theme', value: item ? (item.theme || '') : '',
+          options: [{ value: '', label: '— none —' }].concat(THEMES.map((t) => ({ value: t, label: t }))) },
+        { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
+          options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
+        ] },
+        { key: 'publishing', label: 'Publishing', fields: [
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
+          <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
+          <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them. A dated post is on the calendar either way \u2014 tick <strong>Church calendar only</strong> for a date that belongs on the month but is not news anybody wants to read a paragraph about.</p></div>` },
+        { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
         { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
           hint: 'The post hides itself after this date. Clear it only for something genuinely permanent.' },
         { kind: 'toggle', name: 'pinned', label: 'Pin to the top', value: item ? !!item.pinned : false,
           on: 'Pinned', off: 'In date order',
           hint: 'A pinned post sits above the rest until you unpin it.' },
+        ] },
       ],
     });
   };
