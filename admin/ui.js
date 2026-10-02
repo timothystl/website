@@ -604,7 +604,21 @@ export function renderFormSection(cfg) {
     saveLabel = 'Save changes', cancelHref = '', cancelLabel = 'Cancel',
     deleteAction = '', deleteConfirm = 'Delete this? This cannot be undone.',
     deleteLabel = 'Delete', note = '', enctype = '', extraHead = '', wide = false,
+    tabs = null,
   } = cfg;
+
+  // `tabs` ([{ key, label, fields }]) splits a long form into panels that
+  // switch in the browser. It is still ONE <form> — every panel's fields post
+  // together on a single Save, so no tab can be left unsaved.
+  const tabbed = Array.isArray(tabs) && tabs.length > 1;
+  const cardInner = tabbed
+    ? `<div class="tlc-tabs" role="tablist" data-form-tabs>${tabs.map((t, i) =>
+        `<button type="button" role="tab" class="tlc-tab${i === 0 ? ' is-on' : ''}" id="ftab-${esc(t.key)}" aria-controls="fpanel-${esc(t.key)}" aria-selected="${i === 0 ? 'true' : 'false'}" data-ftab="${esc(t.key)}">${esc(t.label)}</button>`).join('')}</div>
+      ${tabs.map((t, i) => `<div role="tabpanel" id="fpanel-${esc(t.key)}" aria-labelledby="ftab-${esc(t.key)}" data-fpanel="${esc(t.key)}"${i === 0 ? '' : ' hidden'}>${(t.fields || []).map((f) => renderField(f)).join('')}</div>`).join('')}
+      ${body}
+      <script>(function(){var n=document.querySelector('[data-form-tabs]');if(!n)return;var bs=[].slice.call(n.querySelectorAll('[data-ftab]'));function show(k){bs.forEach(function(b){var on=b.getAttribute('data-ftab')===k;b.classList.toggle('is-on',on);b.setAttribute('aria-selected',on?'true':'false');b.tabIndex=on?0:-1;var p=document.getElementById('fpanel-'+b.getAttribute('data-ftab'));if(p)p.hidden=!on;});}bs.forEach(function(b,i){b.addEventListener('click',function(){show(b.getAttribute('data-ftab'));});b.addEventListener('keydown',function(e){var j=e.key==='ArrowRight'?i+1:e.key==='ArrowLeft'?i-1:-1;if(j<0)return;j=(j+bs.length)%bs.length;e.preventDefault();show(bs[j].getAttribute('data-ftab'));bs[j].focus();});});bs.forEach(function(b,i){if(i)b.tabIndex=-1;});var f=n.closest('form');if(f)f.addEventListener('invalid',function(e){var p=e.target.closest&&e.target.closest('[data-fpanel]');if(p&&p.hidden)show(p.getAttribute('data-fpanel'));},true);})();</script>`
+    : `${fields.map((f) => renderField(f)).join('')}
+      ${body}`;
 
   return `<div class="tlc-section">
   <header class="tlc-section-head">
@@ -617,8 +631,7 @@ export function renderFormSection(cfg) {
   ${extraHead}
   <form method="${esc(method)}" action="${esc(action)}"${enctype ? ` enctype="${esc(enctype)}"` : ''} class="tlc-form${wide ? ' tlc-form--wide' : ''}">
     <div class="tlc-form-card">
-      ${fields.map((f) => renderField(f)).join('')}
-      ${body}
+      ${cardInner}
     </div>
     ${note ? `<p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>${esc(note)}</span></p>` : ''}
     <div class="tlc-form-foot">
@@ -1478,6 +1491,8 @@ export const TABS_CSS = `
 .tlc-tab:hover{color:var(--tlc-ink);}
 .tlc-tab.is-on{color:var(--tlc-ink);border-bottom-color:var(--tlc-navy,#1E2D4A);}
 .tlc-tab:focus-visible{outline:2px solid var(--tlc-navy,#1E2D4A);outline-offset:-2px;border-radius:8px;}
+button.tlc-tab{background:none;border:0;border-bottom:3px solid transparent;cursor:pointer;}
+button.tlc-tab.is-on{border-bottom-color:var(--tlc-navy,#1E2D4A);}
 `;
 
 export const PANEL_LIST_CSS = `

@@ -522,19 +522,24 @@ ${sidebarShell('events', currentUser, '', badges)}
 <div class="tlc-wrap">
   ${renderFormSection({
     title: 'New event',
-    purpose: 'Six questions. Everything past this — the registration form’s own fields, the price, whether it takes payment — is set on the event’s own screen afterward.',
+    purpose: 'Three short tabs. Everything past this — the registration form’s own fields, the price, whether it takes payment — is set on the event’s own screen afterward.',
     action: '/events/new',
     cancelHref: '/events',
     saveLabel: 'Create event',
-    fields: [
+    tabs: [
+      { key: 'basics', label: 'Basics', fields: [
       { name: 'name', label: 'What is it called?', required: true, placeholder: 'Vacation Bible School' },
       { name: 'date_label', label: 'When (in words)', placeholder: 'June 9–13, 2027', hint: 'Printed exactly as written — this is not parsed into a real date.' },
       { name: 'hours_label', label: 'Hours (in words)', placeholder: '9am–noon' },
       { name: 'coordinator_email', label: 'Coordinator email', type: 'email', hint: 'Where a sign-up is sent, and the address shown if something goes wrong.' },
+      ] },
+      { key: 'signups', label: 'Sign-ups & more', fields: [
       { kind: 'toggle', name: 'has_registration', label: 'Takes sign-ups', value: 1, on: 'Yes', off: 'No', hint: 'A public form, with fields the coordinator decides on the next screen.' },
       { kind: 'toggle', name: 'has_payment', label: 'Takes a payment', value: 0, on: 'Yes', off: 'No', hint: 'A card fee gets added on top, the same way the Christmas Market’s does.' },
       { kind: 'toggle', name: 'has_volunteers', label: 'Has a volunteer roster', value: 0, on: 'Yes', off: 'No', hint: 'Read from Serve (serve.timothystl.org) — see the Volunteers tab once the event exists.' },
       { kind: 'toggle', name: 'has_photos', label: 'Has its own photographs', value: 0, on: 'Yes', off: 'No' },
+      ] },
+      { key: 'page', label: 'Its page', fields: [
       {
         kind: 'choice', name: 'existing_page_id', label: 'Its page', value: '',
         options: [{ value: '', label: 'Create a new page' }, ...existingPages.map((p) => ({ value: p.id, label: `Use the existing page — ${p.title || p.id} (${p.slug || p.id})` }))],
@@ -545,6 +550,7 @@ ${sidebarShell('events', currentUser, '', badges)}
         options: [{ value: '', label: 'A blank page' }, ...(sources.results || []).map((s) => ({ value: s.page_registration_id, label: `A copy of ${s.name || s.id}’s page` }))],
         hint: 'Only used when "Its page" above is left as Create a new page. A copy carries over everything on that page — its own words included — as a starting point to edit down, not a finished page.',
       },
+      ] },
     ],
   })}
 </div>`, 'New event');
