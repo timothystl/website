@@ -111,5 +111,14 @@ group('RP-09 permanent deletes leave an audit entry');
   ok(/const \{ access_token, \.\.\.rest \}/.test(gym), 'the group’s access token is kept out of the audit copy');
 }
 
+group('RP-01 push alerts do not quote messages or name people');
+{
+  const worker = readFileSync(new URL('../website-admin-worker.js', import.meta.url), 'utf8');
+  ok(!/message\.slice\(0, 150\)/.test(worker), 'no push body is built from message text');
+  ok(!/title: 'New prayer request from/.test(worker), 'prayer push does not name the person');
+  ok(!/title: 'New message from ' \+/.test(worker), 'contact push does not name the person');
+  ok(!/value\.contact_name \|\| value\.contact_email \|\| 'Someone'/.test(worker), 'event sign-up push does not name the person');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
