@@ -14,7 +14,7 @@ Connect, not this repository.
 
 | Code | Status |
 |---|---|
-| RP-01 | Open, re-tested: prayer/contact push bodies still quote the message; delivery is by audience only |
+| RP-01 | Fixed October 5, 2026: push alerts no longer quote message text or name the sender (staff keep the full text inside Website Admin). Push history already stored before this date still holds old text. |
 | RP-02, RP-03 | Open, re-tested: CSV export and coordinator email include sensitive fields; no `sensitive_data_view` permission |
 | RP-04 | Fixed for new entries October 2, 2026 (redacted in `logAudit`); older audit rows still need a one-time scrub |
 | RP-05 | Open: `deploy.yml` is independent of `test.yml`; branch protection not inspected |

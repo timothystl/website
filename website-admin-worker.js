@@ -3651,7 +3651,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         // just a faster way to notice it than checking email, same reasoning
         // as every other trigger here (see admin/webpush.js callers).
         ctx.waitUntil(pushToAllSubscribers(env, {
-          title: 'New message from ' + (name || 'the website'), body: message.slice(0, 150),
+          title: 'New message from the website', body: 'Open Website Admin to read it.',
           tag: 'contact-message', url: '/dashboard',
         }));
         // Confirmation email to the sender. Skipped for anything that scored as
@@ -3708,7 +3708,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
         ctx.waitUntil(pushToAllSubscribers(env, {
-          title: 'New prayer request from ' + (name || 'the website'), body: message.slice(0, 150),
+          title: 'New prayer request', body: 'Open Website Admin to read it.',
           tag: 'prayer-message', url: '/dashboard',
         }));
         // Confirmation email to the sender — suppressed for suspect messages,
@@ -4135,7 +4135,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
 
         ctx.waitUntil(pushToAllSubscribers(env, {
           title: `${ev.name || 'Event'} sign-up`,
-          body: `${value.contact_name || value.contact_email || 'Someone'}${waitlisted ? ' (waitlisted)' : ''}`,
+          body: waitlisted ? 'New sign-up (waitlisted).' : 'New sign-up.',
           tag: `event-${eventId}`, url: '/events',
         }));
 

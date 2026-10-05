@@ -11,7 +11,6 @@ acceptance test for each.
 
 | Item | Evidence it is still open |
 |---|---|
-| RP-01 push payloads quote prayer/contact text and go to every staff subscriber | `website-admin-worker.js` contact and prayer push sends `message.slice(0, 150)`; `pushToAllSubscribers` filters by audience only (`admin/webpush.js`) |
 | RP-02 / RP-03 sensitive registration fields | `registrationsCsv` in `admin/events.js` includes `sensitive_json`; the field hint says "Kept out of the plain export column"; the coordinator email lists sensitive fields; no `sensitive_data_view` permission exists |
 | RP-04 audit log history still holds old sensitive data | New deletes are redacted at write time (`redactAuditState` in `admin/auth.js`); audit rows written before October 2, 2026 may still contain `sensitive_json` and need a one-time, logged scrub |
 | RP-05 deploy is not gated on tests | `deploy.yml` has no dependency on `test.yml`; branch protection could not be inspected (unverified) |
