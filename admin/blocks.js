@@ -917,9 +917,12 @@ export const BLOCK_DEFS = {
   embed: {
     label: 'Embed', glyph: '⧉',
     align: true,
-    defaults: { title: '', spaceAbove: 24, spaceBelow: 24, url: '', embedHeight: 'm' },
+    defaults: { title: '', spaceAbove: 24, spaceBelow: 24, url: '', embedHeight: 'm', giveShow: 'button' },
     url: true, urlLabel: 'Paste the embed code, or just the address', richBody: true, embedGate: true,
     choices: [
+      { key: 'giveShow', label: 'A Tithe.ly giving form shows as', def: 'button',
+        options: [{ key: 'button', label: 'A Give button' }, { key: 'inline', label: 'The form on the page' }],
+        note: 'Only applies to a Tithe.ly giving form. A button opens the form over the page; the form on the page shows it right here.' },
       { key: 'embedHeight', label: 'How tall', def: 'm', options: EMBED_HEIGHTS,
         note: 'A tall page like a Google Form usually wants Tall; a short player like a podcast episode usually wants Short.' },
     ],
@@ -6160,6 +6163,15 @@ function renderInner(b, opts) {
     // not framed: the form is a full page and looks wrong squeezed into one.
     let tithelyHost = false;
     try { tithelyHost = !!src && new URL(src).hostname === 'give.tithe.ly'; } catch (_) {}
+    if (tithelyHost && b.giveShow === 'inline') {
+      // The form is built for a narrow column: centered, never stretched across
+      // the page, and tall enough (900px at least) that it does not scroll inside itself.
+      const h = Math.max(px, 900);
+      const frame = opts.editing
+        ? `<div style="border:1px solid #DCE1E7;border-radius:9px;padding:26px;text-align:center;background:#F7F9FB;color:#8A8898;font-size:13px">Tithe.ly giving form shows here</div>`
+        : `<iframe src="${esc(src)}" title="${esc(b.title || 'Give')}" loading="lazy" allow="payment" style="display:block;width:100%;height:${h}px;border:0;border-radius:12px;background:#fff"></iframe>`;
+      return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}<div style="max-width:680px;margin:0 auto;width:100%">${frame}</div></div>`;
+    }
     if (tithelyHost) {
       const btn = opts.editing
         ? `<span class="tlcb-btn">Give</span>`
