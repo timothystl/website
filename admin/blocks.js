@@ -2751,11 +2751,11 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    clipped by anything the page does with overflow. That also puts it outside
    .tlcb-page, so none of the --tlcb-* properties reach it and every color
    here is written out. */
-.tlcb-gp{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.72);display:flex;align-items:center;justify-content:center;padding:16px;}
+.tlcb-gp{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.72);display:flex;align-items:center;justify-content:center;padding:12px;}
 .tlcb-gp[hidden]{display:none;}
-.tlcb-gp-box{position:relative;width:100%;max-width:520px;height:min(92vh,860px);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.35);}
+.tlcb-gp-box{position:relative;width:100%;max-width:720px;height:min(94vh,940px);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.35);}
 .tlcb-gp-box iframe{width:100%;height:100%;border:0;display:block;}
-.tlcb-gp-x{position:absolute;top:8px;right:8px;z-index:1;width:34px;height:34px;border:0;border-radius:50%;background:rgba(11,60,92,.9);color:#fff;font-size:20px;line-height:1;cursor:pointer;}
+.tlcb-gp-x{position:fixed;top:12px;right:12px;z-index:2;width:38px;height:38px;border:0;border-radius:50%;background:#fff;color:#0B3C5C;box-shadow:0 2px 10px rgba(0,0,0,.3);font-size:20px;line-height:1;cursor:pointer;}
 .tlcb-lb{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.92);
   display:flex;align-items:center;justify-content:center;gap:8px;padding:24px;}
 .tlcb-lb[hidden]{display:none;}
