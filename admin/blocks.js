@@ -2751,6 +2751,11 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    clipped by anything the page does with overflow. That also puts it outside
    .tlcb-page, so none of the --tlcb-* properties reach it and every color
    here is written out. */
+.tlcb-gp{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.72);display:flex;align-items:center;justify-content:center;padding:16px;}
+.tlcb-gp[hidden]{display:none;}
+.tlcb-gp-box{position:relative;width:100%;max-width:520px;height:min(92vh,860px);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.35);}
+.tlcb-gp-box iframe{width:100%;height:100%;border:0;display:block;}
+.tlcb-gp-x{position:absolute;top:8px;right:8px;z-index:1;width:34px;height:34px;border:0;border-radius:50%;background:rgba(11,60,92,.9);color:#fff;font-size:20px;line-height:1;cursor:pointer;}
 .tlcb-lb{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.92);
   display:flex;align-items:center;justify-content:center;gap:8px;padding:24px;}
 .tlcb-lb[hidden]{display:none;}
@@ -4438,6 +4443,65 @@ const LIGHTBOX_SCRIPT = '<script>' + `
   })();
 ` + '<\/script>';
 
+// ── THE TITHE.LY GIVE BUTTON OPENS THE FORM OVER THE PAGE ────────────────────
+// The Embed block's Give button (see the embed render) keeps its real
+// href — no-JS, a new tab and a shared link all still reach the form — and in
+// public rendering also carries data-tl-give-pop, which this script intercepts
+// to show the same form in a window over the page, the way Tithe.ly's own
+// button does. Our own overlay, not Tithe.ly's script: nothing third-party is
+// loaded or run here, and the frame can only ever hold the address the button
+// already links to (give.tithe.ly, gated by allowedEmbedSrc).
+//
+// ⚠ Guarded like every other block script: idempotent, delegated off document,
+// appended only in public rendering.
+//
+// ⚠ No backticks anywhere in this string. It lives inside a template literal
+// and one would end it, breaking the module while still passing node --check.
+const GIVE_POPUP_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcGivePop) return;
+    window.__tlcGivePop = 1;
+    var box = null, frame = null, opener = null;
+    function build() {
+      if (box) return;
+      box = document.createElement('div');
+      box.className = 'tlcb-gp';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
+      box.setAttribute('aria-label', 'Give');
+      box.hidden = true;
+      box.innerHTML = '<div class="tlcb-gp-box"><button type="button" class="tlcb-gp-x" aria-label="Close">&#215;</button>' +
+        '<iframe title="Give" allow="payment"></iframe></div>';
+      document.body.appendChild(box);
+      frame = box.querySelector('iframe');
+      box.querySelector('.tlcb-gp-x').addEventListener('click', close);
+      box.addEventListener('click', function (e) { if (e.target === box) close(); });
+    }
+    function open(a) {
+      build();
+      opener = a;
+      frame.src = a.href;
+      box.hidden = false;
+      document.body.style.overflow = 'hidden';
+      box.querySelector('.tlcb-gp-x').focus();
+    }
+    function close() {
+      if (!box || box.hidden) return;
+      box.hidden = true;
+      frame.src = 'about:blank';
+      document.body.style.overflow = '';
+      if (opener && opener.focus) opener.focus();
+    }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a[data-tl-give-pop]') : null;
+      if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+      e.preventDefault();
+      open(a);
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  })();
+` + '<\/script>';
+
 // ── THE LETTER BLOCK'S OWN LINKS OPEN THE OVERLAY, NOT A NEW PAGE ────────────
 // Every "Read this week" / older-letter link this block renders keeps its
 // real href="/news/<id>" (a shared link, a new tab, no-JS all still work) —
@@ -6099,8 +6163,8 @@ function renderInner(b, opts) {
     if (tithelyHost) {
       const btn = opts.editing
         ? `<span class="tlcb-btn">Give</span>`
-        : `<a class="tlcb-btn" href="${esc(src)}" target="_blank" rel="noopener">Give</a>`;
-      return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}<div class="tlcb-btns">${btn}</div></div>`;
+        : `<a class="tlcb-btn" href="${esc(src)}" target="_blank" rel="noopener" data-tl-give-pop>Give</a>`;
+      return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}<div class="tlcb-btns">${btn}</div>${opts.editing ? '' : GIVE_POPUP_SCRIPT}</div>`;
     }
     const inner = src && !opts.editing
       ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Embed')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
