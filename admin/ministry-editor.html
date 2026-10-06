@@ -2176,7 +2176,10 @@ function inspectorSections(b, d) {
     out += '<div class="ed-sec"><label class="ed-lab" for="edUrl">' + esc(d.urlLabel || 'Link') + '</label>' +
       (isDest
         ? linkField('url', b.url, '/where-it-goes', 'edUrl')
-        : '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…">') +
+        : (d.embedGate
+          // Pasted embed code runs long and wraps; a one-line box hides most of it.
+          ? '<textarea class="ed-field" id="edUrl" data-in="url" data-k="url" rows="9" spellcheck="false" placeholder="https://… or the embed code" style="resize:vertical;min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:12px;">' + esc(b.url) + '</textarea>'
+          : '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…">')) +
       embedNote +
       '</div>';
   }
