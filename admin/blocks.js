@@ -1658,6 +1658,12 @@ export const EMBED_HOSTS = [
 export function allowedEmbedSrc(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
+  // Tithe.ly's own "Give" button snippet: a <button data-form="ID"> plus a
+  // script. The script is never kept or run; only the form id is, and the
+  // block draws its own button linking to that form (see the embed render).
+  const tithely = raw.match(/<button\b[^>]*\btithely-give-button\b[^>]*\bdata-form\s*=\s*["']([A-Za-z0-9-]{8,64})["']/i)
+    || raw.match(/<button\b[^>]*\bdata-form\s*=\s*["']([A-Za-z0-9-]{8,64})["'][^>]*\btithely-give-button\b/i);
+  if (tithely) return 'https://give.tithe.ly/?formId=' + tithely[1];
   const tagMatch = raw.match(/<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
   const candidate = tagMatch ? tagMatch[1] : raw;
   const safe = safeUrl(candidate);
@@ -6086,6 +6092,16 @@ function renderInner(b, opts) {
     // said before anything is ever saved.
     const src = allowedEmbedSrc(b.url);
     const px = (EMBED_HEIGHTS.find((h) => h.key === b.embedHeight) || EMBED_HEIGHTS[1]).px;
+    // A Tithe.ly giving form is shown as a Give button that opens the form,
+    // not framed: the form is a full page and looks wrong squeezed into one.
+    let tithelyHost = false;
+    try { tithelyHost = !!src && new URL(src).hostname === 'give.tithe.ly'; } catch (_) {}
+    if (tithelyHost) {
+      const btn = opts.editing
+        ? `<span class="tlcb-btn">Give</span>`
+        : `<a class="tlcb-btn" href="${esc(src)}" target="_blank" rel="noopener">Give</a>`;
+      return `<div class="tlcb-stack">${renderHead(opts, b)}${renderBody(opts, b, def)}<div class="tlcb-btns">${btn}</div></div>`;
+    }
     const inner = src && !opts.editing
       ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Embed')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
       : `<div style="border:1px solid #DCE1E7;border-radius:9px;padding:26px;text-align:center;background:#F7F9FB;color:#8A8898;font-size:13px">${src ? 'Embed' : 'Paste an embed code, or the address it points to, in the panel on the right.'}</div>`;
