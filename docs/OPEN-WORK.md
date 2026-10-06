@@ -33,9 +33,11 @@ acceptance test for each.
 
 ## Editor and giving rollout (from the retired block-editor rollout notes)
 
-- Confirm the `give.timothystl.org` landing page blocks are published in production
-  (`/pages/give-landing/edit`) and that a real gift went through afterward. Unverified; the old
-  note said the draft was seeded but unpublished.
+- `give.timothystl.org` now redirects (302) to the Tithe.ly form in the `give_url` setting
+  (2026-10-06, Andrew). The old landing page, its block editor page (`give-landing`), the amount
+  tiers and funds are dormant; remove them (`give-landing.js` rendering, `give-landing-seed.js`, the
+  giving blocks, the Giving tab) once the redirect has been in production a while. The Stax mockup
+  at `/stax-mockup` is unchanged.
 - `/music` video cards need real YouTube URLs (`admin/site-pages.js` still carries a generic
   channel link). Content work.
 - Launch photography for the news redesign (about eight real photographs) was listed as a known gap.

@@ -1,4 +1,4 @@
-// ── give.timothystl.org STILL TAKES MONEY ────────────────────────────────────
+// ── give.timothystl.org: THE LINKS STILL CHARGE THE RIGHT AMOUNT ────────────────────────────────────
 //
 // The giving page moved onto the block editor. Every other test in this repo
 // asks whether a page RENDERS; this one asks whether it TRANSACTS, which is a
@@ -255,73 +255,41 @@ group('the fund selector only appears when there is a choice to make');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-group('site-worker: published blocks are what the visitor gets');
+group('site-worker: give.timothystl.org redirects to the Tithe.ly form');
 {
+  // The hostname no longer renders a page (2026-10-06): every path goes
+  // straight to the form. 302, never cached, because the address is a setting.
   const w = await freshWorker();
-  const blocks = [sanitizeBlock({ type: 'amounts', title: 'Ladder', items: [{ amount: '15', period: 'week', body: '<p>Devotionals.</p>' }] })];
-  stubAdmin({
-    html: renderPage(blocks, { template: 'standard', withCss: false, data: { give: { baseUrl: BASE, tiers: [], funds: [] } } }),
-    css: '<style id="tlcb-css"></style>',
-    appearance: { bar: '#4A5E3A', rule: '#C9973A', ink: '#FFFFFF', name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations', logo: '/logo.png', logoShape: 'round' },
-    details: { address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139', email: 'office@timothystl.org' },
-    baseUrl: BASE, tiers: [{ amount: 15, url: '', isDefault: true }], funds: [],
-  });
-  const body = await (await getGive(w)).text();
-  has(body, 'Ladder', 'the published blocks render');
-  has(body, 'amount=1500', 'with a working link');
-  hasNot(body, 'Your Gift Continues His Work', 'and the hardcoded fallback body is NOT also emitted');
-  has(body, 'tlcb-css', 'the block stylesheet ships');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-group('site-worker: an unpublished page falls back with the REAL amounts');
-{
-  const w = await freshWorker();
-  // This is the state every deploy starts in, and it is not an error. The
-  // important part is that the fallback uses the amounts and base link the
-  // admin just returned, not the constants compiled into give-landing.js —
-  // dropping to hardcoded amounts here would quietly undo the office's own
-  // Amount Tiers.
-  stubAdmin({
-    html: '', css: '',
-    appearance: null, details: null,
-    baseUrl: BASE,
-    tiers: [{ amount: 42, url: '', isDefault: true }],
-    funds: [{ id: 1, name: 'General Fund', tithelyFundId: '', isDefault: true }],
-  });
-  const body = await (await getGive(w)).text();
-  has(body, 'Your Gift Continues His Work', 'the hardcoded body renders');
-  has(body, 'amount=4200', 'using the admin’s own amount, not a compiled-in one');
-  // ⚠ Not `$30`: that string legitimately appears in the hardcoded ministry
-  // ladder, which is narrative copy rather than a tier. The tiers are the
-  // CHIPS, so that is what to look at.
-  has(body, 'data-amount="42"', 'the chip row is built from the admin’s tiers');
-  hasNot(body, 'data-amount="30"', 'and not from the compiled-in fallback ones');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-group('site-worker: the page still gives when the admin is unreachable');
-{
-  const w = await freshWorker();
-  stubAdmin(null, { fail: true });
+  stubAdmin({ html: '<p>ignored</p>', css: '', baseUrl: BASE, tiers: [{ amount: 15, url: '', isDefault: true }], funds: [] });
   const res = await getGive(w);
-  const body = await res.text();
-  eq(res.status, 200, 'an admin outage is still a 200');
-  has(body, 'Your Gift Continues His Work', 'the hardcoded page renders');
-  has(body, 'give.tithe.ly', 'and it can still reach Tithe.ly');
-  has(body, 'amount=', 'with a prefilled amount');
-  has(body, 'Back to timothystl.org', 'and the way home is not lost with it');
+  eq(res.status, 302, 'the root is a redirect');
+  eq(res.headers.get('Location'), BASE, 'to the give_url setting');
+  eq(res.headers.get('Cache-Control'), 'no-store', 'which browsers must not cache');
+  const deep = await getGive(w, '/easter');
+  eq(deep.status, 302, 'a deep link from a printed QR code redirects too');
+  eq(deep.headers.get('Location'), BASE, 'to the same form');
 }
 
-group('site-worker: a nonsense response is treated as no response');
+group('site-worker: the redirect survives an unreachable or nonsense admin');
+{
+  let w = await freshWorker();
+  stubAdmin(null, { fail: true });
+  let res = await getGive(w);
+  eq(res.status, 302, 'an admin outage is still a redirect');
+  has(res.headers.get('Location'), 'give.tithe.ly', 'to the compiled-in Tithe.ly form');
+
+  w = await freshWorker();
+  stubAdmin({ html: '', tiers: [], baseUrl: 'javascript:alert(1)', funds: [] });
+  res = await getGive(w);
+  has(res.headers.get('Location'), 'https://give.tithe.ly', 'a non-https address is never redirected to');
+}
+
+group('site-worker: assets and the processor paths are still answered here');
 {
   const w = await freshWorker();
-  // A truncated or half-migrated payload must not produce a page with no
-  // amounts on it. `tiers` being an array is the test of a usable response.
-  stubAdmin({ html: '', tiers: 'not-an-array' });
-  const body = await (await getGive(w)).text();
-  has(body, 'Your Gift Continues His Work', 'falls all the way back');
-  has(body, 'give.tithe.ly', 'and still transacts');
+  stubAdmin({ html: '', tiers: [], baseUrl: BASE, funds: [] });
+  eq(await (await getGive(w, '/logo.png')).text(), 'asset', 'an image path serves the asset, not a redirect');
+  eq((await getGive(w, '/stax-mockup')).status, 200, 'the Stax mockup is untouched');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,31 +305,6 @@ group('on a phone the button comes before the case for pressing it');
   // Scoped to the giving widget, not to pairs generally — every other pair on
   // the site reads correctly top-to-bottom.
   hasNot(BLOCK_CSS, '.tlcb-pair > .tlcb{order:-1', 'and pairs are not reversed generally');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-group('the chrome: a way home, and assets that are not the page');
-{
-  const w = await freshWorker();
-  stubAdmin({
-    html: '', css: '', baseUrl: BASE, tiers: [{ amount: 15, url: '', isDefault: true }], funds: [],
-    appearance: { bar: '#4A5E3A', rule: '#C9973A', ink: '#FFFFFF', name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations', logo: '/logo.png', logoShape: 'round' },
-    details: { address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139', email: 'office@timothystl.org' },
-  });
-  const body = await (await getGive(w)).text();
-  has(body, 'https://timothystl.org', 'there is a way back to the site');
-  has(body, 'Back to timothystl.org', 'as a named link, not only the logo');
-  has(body, '#4A5E3A', 'the masthead takes its color from the Appearance record');
-  has(body, 'from our Neighborhood to the Nations', 'and its tagline');
-  has(body, '6704 Fyler Ave', 'the footer reads the church details');
-
-  // ⚠ This branch used to answer EVERY path on this hostname with the giving
-  // page, so the masthead logo and the favicon this very page asks for were
-  // served an HTML document instead of an image. Silently — no error, no log.
-  const logo = await getGive(w, '/logo.png');
-  eq(await logo.text(), 'asset', 'an image path on this hostname serves the asset, not the page');
-  const ico = await getGive(w, '/images/favicon-32x32.png');
-  eq(await ico.text(), 'asset', 'and so does the favicon the page references');
 }
 
 // ── THE CLIENT MIRROR CANNOT DRIFT ───────────────────────────────────────────
