@@ -2,7 +2,7 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
-import { renderGiveLandingHtml, renderGiveBlocksHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
+import { FALLBACK_BASE_URL } from './give-landing.js';
 import { renderGiveStaxMockupHtml, applePayDomainPlaceholderResponse } from './give-stax-mockup.js';
 import { APPLE_PAY_DOMAIN_ASSOCIATION } from './apple-pay-domain-association.js';
 
@@ -729,26 +729,13 @@ async function getSettingUrl(key, fallback) {
   return fallback;
 }
 
-// ── give.timothystl.org, in ONE request ──────────────────────────────────────
-// This used to be three separate cached subrequests — amounts, funds, and the
-// base link — each with its own cache entry and its own way of failing. They
-// are now one call to /api/give-page, which also carries the page's published
-// blocks (if anybody has published them), the editable masthead and the church
-// details for the footer.
-//
-// ⚠ ONE ROUND TRIP, THREE LEVELS OF FALLING BACK, and the order is the whole
-// point on the page that takes the money:
-//
-//   1. the admin answers and the page has been published  → render the blocks
-//   2. the admin answers and it has not                   → render the
-//      hardcoded body with the REAL amounts and base link it just returned
-//   3. the admin cannot be reached at all                 → render the
-//      hardcoded body from the last good response, or from the constants in
-//      give-landing.js if there has never been one
-//
-// Level 3 still takes a gift. That is not a nicety: an admin outage must never
-// mean somebody arriving from a bulletin insert finds a page that cannot
-// accept their offering.
+// ── give.timothystl.org → Tithe.ly ───────────────────────────────────────────
+// give.timothystl.org no longer renders a page of its own: it sends the visitor
+// straight to the Tithe.ly giving form (2026-10-06, Andrew — one page between a
+// donor and the form was one too many). The form's address is the `give_url`
+// setting, read through /api/give-page and cached; if the admin cannot be
+// reached the last good answer is used, and failing that the address compiled
+// into give-landing.js, so a bulletin QR code still lands on a form that works.
 async function getGivePage() {
   const now = Date.now();
   if (givePageCache && now - givePageCacheTime < CACHE_TTL) return givePageCache;
@@ -785,9 +772,7 @@ export default {
     // give.timothystl.org — standalone giving landing page, not part of the main SPA.
     // Same Worker, different hostname (same pattern used in the chms repo for
     // connect.timothystl.org) — serves one single-purpose page regardless of path.
-    // As of v4.24.0 the page itself is editable in the block editor, not just
-    // its amounts — see getGivePage() above for the three ways this can be
-    // answered and why the last one still has to take a gift.
+    // It now redirects to the Tithe.ly form — see getGivePage() above.
     if (url.hostname === 'give.timothystl.org') {
       // ⚠ Assets first, and this is a real bug fix rather than tidying. This
       // branch used to answer EVERY path on this hostname with the giving
@@ -802,8 +787,8 @@ export default {
       }
 
       // Stax Giving MOCKUP (see give-stax-mockup.js) — a sandbox-only prototype alongside the
-      // real Tithe.ly page this branch otherwise serves for every other path. Checked before the
-      // real give page so it never falls through to it. The actual gift/matching logic lives in
+      // Tithe.ly redirect this branch otherwise answers every other path with. Checked before the
+      // redirect so it never falls through to it. The actual gift/matching logic lives in
       // the chms repo's Worker; this page's own JS calls it cross-origin.
       if (url.pathname === '/stax-mockup') {
         return new Response(renderGiveStaxMockupHtml(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
@@ -812,21 +797,12 @@ export default {
         return applePayDomainPlaceholderResponse();
       }
 
+      // ⚠ 302, not 301: the destination is a setting the office can change (and
+      // the processor may change), and browsers cache a 301 indefinitely.
       const page = await getGivePage();
-      if (page && page.html) {
-        return new Response(renderGiveBlocksHtml(page.html, page.css, page.appearance, page.details), {
-          headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-        });
-      }
-      return new Response(renderGiveLandingHtml(
-        page ? page.tiers : FALLBACK_TIERS,
-        (page && page.baseUrl) || FALLBACK_BASE_URL,
-        page ? page.funds : FALLBACK_FUNDS,
-        page && page.appearance,
-        page && page.details,
-      ), {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' },
-      });
+      const target = (page && typeof page.baseUrl === 'string' && /^https:\/\//.test(page.baseUrl))
+        ? page.baseUrl : FALLBACK_BASE_URL;
+      return new Response(null, { status: 302, headers: { 'Location': target, 'Cache-Control': 'no-store' } });
     }
 
     // Apple Pay domain verification for Square (Christmas Market vendors) —

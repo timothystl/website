@@ -343,9 +343,9 @@ group('the Apple Pay placeholder names what is missing, not fake verification co
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-group('the real give page and its assets are unaffected by the new routes');
+group('the real give redirect and its assets are unaffected by the new routes');
 {
-  // Root path still needs the admin fetch (the real give page's normal behavior) — restore a
+  // Root path still needs the admin fetch (the redirect target is a setting) — restore a
   // working stub only for this group so the earlier throwing stub does not leak into it.
   globalThis.fetch = async (input) => {
     const url = String(input && input.url ? input.url : input);
@@ -355,9 +355,9 @@ group('the real give page and its assets are unaffected by the new routes');
     return new Response('{}', { status: 200 });
   };
   const root = await get('/');
-  ok(root.status === 200, 'root path still responds 200');
+  ok(root.status === 302, 'root path still redirects to Tithe.ly');
   const rootHtml = await root.text();
-  hasNot(rootHtml, 'MOCKUP', 'the real give page never carries the mockup banner');
+  hasNot(rootHtml, 'MOCKUP', 'the redirect never carries the mockup banner');
 
   const asset = await get('/logo.png');
   const assetBody = await asset.text();
