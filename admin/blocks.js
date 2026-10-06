@@ -1639,7 +1639,7 @@ export function obfuscateMailtoLinks(html) {
 // general embed-anything box.
 export const EMBED_HOSTS = [
   'docs.google.com', 'forms.gle', 'drive.google.com', 'calendar.google.com',
-  'tithe.ly', 'squareup.com', 'open.spotify.com', 'podcasts.apple.com',
+  'tithe.ly', 'give.tithe.ly', 'squareup.com', 'open.spotify.com', 'podcasts.apple.com',
   'connect.timothystl.org', 'serve.timothystl.org', 'mdo.timothystl.org',
 ];
 
