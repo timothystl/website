@@ -265,7 +265,9 @@ document.addEventListener('submit', async function (e) {
     if (!r.ok || d.error) throw new Error(d.error || 'Error');
     form.style.display = 'none';
     msg.style.color = '#2E7D32';
-    msg.textContent = "You're on the list! 🎉 Look for us in your inbox.";
+    msg.textContent = d.confirm
+      ? "Almost there! Check your email and click the link to confirm."
+      : "You're on the list! 🎉 Look for us in your inbox.";
   } catch (err) {
     msg.style.color = '#B00020';
     msg.textContent = err.message || 'Something went wrong. Please try again.';

@@ -43,7 +43,7 @@ import { hashPassword, verifyPasswordOrDummy, loginThrottled, resetRequestThrott
 import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
 import { handleGymIncomeContract } from './admin/gym-income-report.js';
 import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
-import { sendTransactionalEmail, buildWebHtml, getBrevoListCount } from './admin/email.js';
+import { sendTransactionalEmail, buildWebHtml, getBrevoListCount, requestNewsletterOptin } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildReportPdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
@@ -533,6 +533,23 @@ async function getChmsFundSuggestions(env) {
 // Reject anything that isn't an http(s) URL — guards Link Card saves against
 // javascript:/data: payloads that would otherwise render as a clickable,
 // script-executing link on links.timothystl.org.
+// The two pages a newsletter signer can land on in this Worker: "check your
+// email" after a plain-HTML signup block posts here, and "you're subscribed"
+// after the confirmation link. Under /api/ deliberately — that prefix is the
+// part of admin.timothystl.org the public is meant to reach. Self-contained, no
+// admin chrome: the person reading it is a visitor, not staff.
+function subscribeNoticePage(title, body) {
+  const e = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${e(title)} · Timothy Lutheran Church</title>
+<style>body{margin:0;background:#f4f1ea;color:#1f2a44;font-family:Georgia,serif;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+main{background:#fff;border-radius:14px;max-width:480px;width:100%;padding:36px 28px;text-align:center;box-shadow:0 8px 30px rgba(31,42,68,.08)}
+h1{font-weight:normal;font-size:26px;margin:0 0 14px}p{font-size:16px;line-height:1.6;margin:0 0 24px}
+a{display:inline-block;background:#1f2a44;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold}</style>
+</head><body><main><h1>${e(title)}</h1><p>${e(body)}</p><a href="https://timothystl.org">Back to timothystl.org</a></main></body></html>`,
+    { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
 function isSafeCardUrl(value) {
   if (typeof value !== 'string' || !value) return false;
   try {
@@ -3729,8 +3746,19 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     }
 
     // ── PUBLIC: newsletter subscribe API ──
+    if (path === '/api/subscribe/confirmed' && method === 'GET') {
+      return subscribeNoticePage('You\u2019re subscribed', 'Thank you for confirming. The Timothy Lutheran newsletter will start arriving in your inbox. We\u2019re glad you\u2019re with us.');
+    }
+
     if (path === '/api/subscribe' && method === 'POST') {
       const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      // The plain-HTML newsletter blocks post here as an ordinary form, so a
+      // person — not a script reading JSON — sees whatever comes back. Give
+      // them a page instead of raw {"success":true}.
+      const wantsPage = (request.headers.get('Accept') || '').includes('text/html');
+      const done = () => wantsPage
+        ? subscribeNoticePage('Almost there \u2014 check your email', 'We just sent you an email. Click the button in it to confirm, and you\u2019ll be on the list. If it doesn\u2019t arrive in a few minutes, look in your spam or promotions folder.')
+        : new Response(JSON.stringify({ success: true, confirm: true }), { headers: corsH });
       try {
         const form = await request.formData();
         const email = (form.get('email') || '').trim().toLowerCase();
@@ -3747,7 +3775,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           token: form.get('form_token'),
           turnstileToken: form.get('cf-turnstile-response'),
         });
-        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsH });
+        if (screen.held) return done();
         // Add to Brevo contacts list. No fallback list: a missing setting must fail loudly
         // rather than quietly filing subscribers on the test list.
         const listId = parseInt(env.BREVO_LIST_ID || '0', 10);
@@ -3755,21 +3783,31 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           console.error('Newsletter signup failed: BREVO_LIST_ID is not configured');
           return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
         }
-        const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
-          method: 'POST',
-          headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, attributes: { FIRSTNAME: name }, listIds: [listId], updateEnabled: true })
-        });
-        if (!brevoRes.ok && brevoRes.status !== 204) {
-          const err = await brevoRes.json().catch(() => ({}));
-          // Status 400 with code "duplicate_parameter" means already on list — treat as success
-          if (!(err.code === 'duplicate_parameter' || brevoRes.status === 400)) {
-            throw new Error(err.message || 'Email service error');
+        // Double opt-in: Brevo emails a confirmation link and only adds them
+        // to the list on the click — see requestNewsletterOptin(). If that path
+        // is broken (template could not be made, Brevo refused) the signup is
+        // added directly as before rather than lost.
+        const optin = await requestNewsletterOptin(env, { email, name, listId });
+        if (!optin.ok) {
+          console.error('Newsletter opt-in unavailable, adding directly:', optin.error);
+          const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
+            method: 'POST',
+            headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, attributes: { FIRSTNAME: name }, listIds: [listId], updateEnabled: true })
+          });
+          if (!brevoRes.ok && brevoRes.status !== 204) {
+            const err = await brevoRes.json().catch(() => ({}));
+            // Status 400 with code "duplicate_parameter" means already on list — treat as success
+            if (!(err.code === 'duplicate_parameter' || brevoRes.status === 400)) {
+              throw new Error(err.message || 'Email service error');
+            }
           }
         }
-        // Log to D1 (ignore duplicate emails)
+        // Log to D1 (ignore duplicate emails). Until they click, this row is
+        // what shows them on Subscribers as waiting to confirm.
         await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)').bind(email, name || null).run();
-        return new Response(JSON.stringify({ success: true }), { headers: corsH });
+        if (!optin.ok && !wantsPage) return new Response(JSON.stringify({ success: true }), { headers: corsH });
+        return done();
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
       }
@@ -7213,16 +7251,16 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       // rather than hidden behind a filter of its own.
       for (const [email, s] of bySource) {
         listRows.push({
-          filter: 'website',
+          filter: ['website', 'waiting-to-confirm'],
           search: `${email} ${s.name || ''}`.toLowerCase(),
           cells: [
             primaryCell(s.name || email, s.name ? email : 'No name on file'),
             'Website signup',
             escapeHtml((s.joined || '').slice(0, 10) || '—'),
-            statusPill('warn', 'Not in Brevo'),
+            statusPill('warn', 'Waiting to confirm'),
           ],
           actions: '',
-          warn: 'Signed up on the website but not showing in the Brevo list yet, so they are not receiving the email.',
+          warn: 'Signed up on the website but has not clicked the link in the confirmation email yet, so they are not receiving the newsletter. If you know them, ask them to check their spam folder.',
         });
       }
 
