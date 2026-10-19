@@ -459,3 +459,89 @@ img{max-width:100% !important;height:auto !important;}
 export function buildWebHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt) {
   return JSON.stringify({ subject, pastorNote, events, ministryContent, ministryType, publishedAt });
 }
+
+// ── NEWSLETTER DOUBLE OPT-IN ─────────────────────────────────
+// A website signup is no longer put straight on the list. Brevo emails the
+// address a confirmation link, and only a click adds them. It is the one guard
+// a script cannot get past: in October 2026 bots fed ~770 strangers'
+// addresses through the signup, and even a bot that loads the form properly
+// cannot click a link in someone else's inbox.
+//
+// The confirmation email is a Brevo transactional template tagged "optin"
+// (Brevo's requirement) whose link is the {{ doubleoptin }} placeholder.
+// Self-provisioning, like the form-token key: created through the API on first
+// use and its id kept in site_settings, so there is nothing for staff to set
+// up. The office can reword it afterwards in Brevo under Templates — the id
+// stays the same, so edits there are what goes out.
+export const OPTIN_TEMPLATE_SETTING = 'brevo_optin_template_id';
+export const OPTIN_REDIRECT_URL = 'https://admin.timothystl.org/api/subscribe/confirmed';
+
+export function optinTemplateHtml() {
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f1ea;font-family:Georgia,serif;color:#1f2a44;">
+<div style="max-width:520px;margin:0 auto;padding:36px 24px;">
+  <div style="background:#ffffff;border-radius:12px;padding:32px 28px;">
+    <h1 style="font-size:24px;font-weight:normal;margin:0 0 16px;">One click and you're in</h1>
+    <p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Thank you for signing up for the Timothy Lutheran Church newsletter. Please confirm that this is your email address, and we'll start sending you news, events, and encouragement from our church family.</p>
+    <p style="margin:26px 0;"><a href="{{ doubleoptin }}" style="display:inline-block;background:#1f2a44;color:#ffffff;text-decoration:none;padding:13px 26px;border-radius:8px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Yes, subscribe me</a></p>
+    <p style="font-size:14px;line-height:1.6;color:#5b6475;margin:0;">If you didn't sign up, you can ignore this email. You won't be added, and we won't write again.</p>
+  </div>
+  <p style="font-size:12px;color:#8a8898;text-align:center;margin:18px 0 0;font-family:Arial,sans-serif;">Timothy Lutheran Church · 6704 Fyler Ave · St. Louis, MO 63139</p>
+</div></body></html>`;
+}
+
+export async function ensureOptinTemplate(env) {
+  try {
+    const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(OPTIN_TEMPLATE_SETTING).first();
+    const stored = parseInt(row?.value || '0', 10);
+    if (stored) return stored;
+  } catch (_) {}
+  if (!env.BREVO_API_KEY) return null;
+  try {
+    const resp = await fetch('https://api.brevo.com/v3/smtp/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': env.BREVO_API_KEY },
+      body: JSON.stringify({
+        templateName: 'Newsletter signup — please confirm (website)',
+        subject: 'Please confirm your Timothy Lutheran newsletter signup',
+        sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+        replyTo: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org',
+        htmlContent: optinTemplateHtml(),
+        tag: 'optin',
+        isActive: true,
+      }),
+    });
+    if (!resp.ok) { console.error('Brevo opt-in template create failed:', resp.status, await resp.text().catch(() => '')); return null; }
+    const { id } = await resp.json();
+    if (!id) return null;
+    await env.DB.prepare('INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)').bind(OPTIN_TEMPLATE_SETTING, String(id)).run();
+    return id;
+  } catch (e) {
+    console.error('Brevo opt-in template create failed:', e?.message);
+    return null;
+  }
+}
+
+// Asks Brevo to send the confirmation email. Returns { ok: true } when Brevo
+// accepted it, or { error } so the caller can fall back to adding directly —
+// a signup must never be lost because the confirmation path is broken.
+export async function requestNewsletterOptin(env, { email, name, listId }) {
+  const templateId = await ensureOptinTemplate(env);
+  if (!templateId) return { error: 'no opt-in template' };
+  try {
+    const resp = await fetch('https://api.brevo.com/v3/contacts/doubleOptinConfirmation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': env.BREVO_API_KEY },
+      body: JSON.stringify({
+        email,
+        attributes: name ? { FIRSTNAME: name } : {},
+        includeListIds: [listId],
+        templateId,
+        redirectionUrl: OPTIN_REDIRECT_URL,
+      }),
+    });
+    if (resp.ok) return { ok: true };
+    return { error: `Brevo opt-in error ${resp.status}: ${await resp.text().catch(() => '')}` };
+  } catch (e) {
+    return { error: e?.message || 'Brevo opt-in failed' };
+  }
+}
