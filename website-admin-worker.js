@@ -7179,6 +7179,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         const a = c.attributes || {};
         return !!(a.HARD_BOUNCE || a.HARDBOUNCE || a.BOUNCED || a.BOUNCE);
       };
+      let subscribedCount = 0;
       const listRows = brevoContacts.map((c) => {
         const email = String(c.email || '');
         const local = bySource.get(email.toLowerCase());
@@ -7190,6 +7191,8 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         // whether the address still works — so the row carries both.
         const filters = [local ? 'website' : 'added-by-office'];
         if (isBounced) filters.push('bounced');
+        else filters.push(unsub ? 'unsubscribed' : 'subscribed');
+        if (!isBounced && !unsub) subscribedCount++;
         return {
           filter: filters,
           search: `${email} ${name}`.toLowerCase(),
@@ -7235,7 +7238,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
   ${renderListSection({
     key: 'subscribers',
     title: sectionCfg('subscribers').title,
-    purpose: `${sectionCfg('subscribers').purpose}${brevoTotal !== null ? ` ${pluralise(brevoTotal, 'person', 'people')} in the Brevo list.` : ''}`,
+    purpose: `${sectionCfg('subscribers').purpose}${brevoTotal !== null ? ` ${pluralise(brevoTotal, 'person', 'people')} in the Brevo list, ${subscribedCount} still subscribed.` : ''}`,
     action: { label: sectionCfg('subscribers').action, href: '/subscribers/import' },
     search: sectionCfg('subscribers').search,
     filters: filtersOf('subscribers'),

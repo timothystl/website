@@ -200,7 +200,7 @@ export const SECTIONS = {
   },
   subscribers: {
     label: 'Subscribers', glyph: '✉', title: 'Subscribers', purpose: 'People signed up for the weekly email, whether they joined on the website or were added by the office.',
-    action: 'Import CSV', search: 'Search by email or name', filters: ['All', 'Website', 'Added by office', 'Bounced'],
+    action: 'Import CSV', search: 'Search by email or name', filters: ['All', 'Subscribed', 'Unsubscribed', 'Website', 'Added by office', 'Bounced'],
     columns: [['Person', '2.2fr'], ['Source', '1.2fr'], ['Joined', '1.2fr'], ['Status', '1fr']],
     note: 'Read-only mirror of the mail provider plus local signups. Unsubscribes come back from the provider — never delete by hand to remove someone.'
   },
