@@ -256,6 +256,39 @@ group('one address firing repeatedly is no longer held, screening is off');
   eq(other.held, false, 'a different visitor was never at risk of this anyway');
 }
 
+// ── newsletter signups: the one form still gated ────────────────────────────
+group('a scripted newsletter signup is held; a real one goes through');
+{
+  const { env } = freshEnv();
+  sentEmails = [];
+  const secret = (await formConfig(env), (await env.DB.prepare("SELECT value FROM site_settings WHERE key='form_token_secret'").first()).value);
+  const token = await signFormToken(secret, Date.now() - 30_000);
+
+  const real = await screenSubmission(env, req({ ip: '203.0.113.20' }), { kind: 'subscribe', name: 'Ann', email: 'ann@example.com', message: '', token });
+  eq(real.held, false, 'a signup from the website form is not held');
+
+  const fast = await screenSubmission(env, req({ ip: '203.0.113.21' }), { kind: 'subscribe', name: '', email: 'quick@example.com', message: '', token: await signFormToken(secret, Date.now()) });
+  eq(fast.held, false, 'nor is one autofilled quickly');
+
+  const bot = await screenSubmission(env, req({ ip: '203.0.113.22' }), { kind: 'subscribe', name: '', email: 'stranger@example.com', message: '', token: '' });
+  eq(bot.held, true, 'a signup posted straight at the API with no token is held');
+  ok(bot.reasons.some(r => r.includes('no form token')), 'and says why');
+  const row = await env.DB.prepare('SELECT * FROM form_submissions WHERE id=?').bind(bot.id).first();
+  eq(row.status, 'held', 'stored as held');
+  eq(row.email, 'stranger@example.com', 'with the address kept, so it can be released');
+
+  const forged = await screenSubmission(env, req({ ip: '203.0.113.23' }), { kind: 'subscribe', email: 'f@example.com', message: '', token: '123.abc' });
+  eq(forged.held, true, 'a forged token is held');
+
+  const results = [];
+  for (let i = 0; i < 5; i++) results.push(await screenSubmission(env, req({ ip: '198.51.100.50' }), { kind: 'subscribe', email: `p${i}@example.com`, message: '', token }));
+  eq(results[2].held, false, 'three signups from one address in an hour are fine (a family)');
+  eq(results[3].held, true, 'the fourth is held');
+
+  const contact = await screenSubmission(env, req({ ip: '203.0.113.24' }), { kind: 'contact', name: 'A', email: 'a@b.co', message: 'hi', token: '' });
+  eq(contact.held, false, 'the contact form is still never held — the gate is for signups only');
+}
+
 // ── retention ────────────────────────────────────────────────────────────────
 group('retention');
 {
@@ -268,6 +301,12 @@ group('retention');
   ok(!rows.includes('old'), 'a delivered record older than 30 days is pruned');
   ok(rows.includes('recent'), 'a recent one is kept for the rate limit');
   ok(rows.includes('held'), 'a held message is never pruned, however old');
+  raw.prepare("INSERT INTO form_submissions (kind, email, status, created_at) VALUES ('subscribe','old@x.co','held',datetime('now','-40 days'))").run();
+  raw.prepare("INSERT INTO form_submissions (kind, email, status, created_at) VALUES ('subscribe','new@x.co','held',datetime('now','-3 days'))").run();
+  await pruneSubmissions(env);
+  const subs = (await env.DB.prepare("SELECT email FROM form_submissions WHERE kind='subscribe'").all()).results.map(r => r.email);
+  ok(!subs.includes('old@x.co'), 'a held signup older than 30 days is pruned');
+  ok(subs.includes('new@x.co'), 'a recent held signup is kept for release');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
