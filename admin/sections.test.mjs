@@ -61,7 +61,7 @@ group('the values that had drifted');
   eq(section('notices').filters.join(','), 'All,Showing,Hidden', 'Notices filters on Showing/Hidden');
   eq(section('staff').filters.join(','), 'All,On the website,Hidden', 'Staff filters on being on the website');
   eq(section('sermons').filters.join(','), 'All,Active series,Missing media', 'Sermons filters on missing media');
-  eq(section('subscribers').filters.join(','), 'All,Website,Added by office,Bounced', 'Subscribers filters by source');
+  eq(section('subscribers').filters.join(','), 'All,Subscribed,Unsubscribed,Website,Added by office,Bounced', 'Subscribers filters by status and by source');
   eq(section('media').filters.join(','), 'All,Photos,Files,Needs alt text,Over 1 MB,Unused', 'Media has six filters');
 
   eq(section('subscribers').action, 'Import CSV', 'Subscribers imports a CSV rather than adding one by one');
