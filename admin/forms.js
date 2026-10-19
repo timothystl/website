@@ -9,7 +9,7 @@
 // /filtered, where one click releases it — sending the email that was withheld
 // and forwarding it on to ChMS exactly as if it had come through cleanly.
 
-import { scoreSubmission, signFormToken, verifyFormToken, SUSPECT_SUBJECT_PREFIX } from './spam.js';
+import { scoreSubmission, signupHoldReasons, signFormToken, verifyFormToken, SUSPECT_SUBJECT_PREFIX } from './spam.js';
 import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { renderListSection, renderDrawer, primaryCell } from './ui.js';
@@ -98,11 +98,15 @@ export async function screenSubmission(env, request, sub) {
   const tokenState = await verifyFormToken(sub.token, secret);
   const turnstile = await verifyTurnstile(env, sub.turnstileToken, ip);
 
+  // A signup's flood count is signups only: someone who just sent a prayer
+  // request and then joins the newsletter is not a flood.
   let recentFromIp = 0;
   if (ip) {
     try {
       const row = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM form_submissions WHERE ip = ? AND created_at >= datetime('now','-1 hour')"
+        sub.kind === 'subscribe'
+          ? "SELECT COUNT(*) AS n FROM form_submissions WHERE ip = ? AND kind = 'subscribe' AND created_at >= datetime('now','-1 hour')"
+          : "SELECT COUNT(*) AS n FROM form_submissions WHERE ip = ? AND created_at >= datetime('now','-1 hour')"
       ).bind(ip).first();
       recentFromIp = (row?.n || 0) + 1; // counting this one
     } catch (_) {}
@@ -132,8 +136,15 @@ export async function screenSubmission(env, request, sub) {
   // held from before this shipped. It just no longer decides what happens to
   // a submission — every one, honeypot included, is delivered exactly as if
   // it had scored clean.
-  const held = false;
+  //
+  // The one exception is a newsletter signup, gated on its own narrower rule
+  // — see signupHoldReasons() in admin/spam.js for why.
+  const signupReasons = sub.kind === 'subscribe'
+    ? signupHoldReasons({ honeypot: sub.honeypot }, { tokenState, recentFromIp })
+    : [];
+  const held = signupReasons.length > 0;
   const suspect = false;
+  if (held) result.reasons = [...new Set([...signupReasons, ...result.reasons])];
 
   // A held message is stored in full — it has to be readable to be released.
   // A delivered one is not: the email in the office inbox is the record, and
@@ -162,11 +173,16 @@ export async function screenSubmission(env, request, sub) {
 // Delivered rows exist only to power the per-address rate limit and to give
 // staff a little context on the Filtered page; they are pruned aggressively so
 // the table never becomes a shadow archive of everyone's prayer requests. Held
-// rows stay until someone releases or deletes them.
+// rows stay until someone releases or deletes them — except held signups,
+// which go after thirty days (see below).
 export async function pruneSubmissions(env) {
   try {
     await env.DB.prepare("DELETE FROM form_submissions WHERE status='delivered' AND created_at < datetime('now','-30 days')").run();
     await env.DB.prepare("DELETE FROM form_submissions WHERE status='released' AND created_at < datetime('now','-90 days')").run();
+    // A held signup is almost always a stranger's address a script entered.
+    // Thirty days is long enough to notice a real one and release it; keeping
+    // the rest longer would only be holding other people's email addresses.
+    await env.DB.prepare("DELETE FROM form_submissions WHERE status='held' AND kind='subscribe' AND created_at < datetime('now','-30 days')").run();
   } catch (_) {}
 }
 

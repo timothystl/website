@@ -3425,6 +3425,19 @@ function tlcFormData(form) {
   return fd;
 }
 
+// The newsletter blocks a page can carry are plain HTML forms that post
+// straight to /api/subscribe, with no script of their own. That endpoint sets
+// aside any signup without a form token (scripted list-bombing arrives that
+// way), so the token is slipped in as a hidden field on the way out.
+document.addEventListener('submit', function (e) {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement) || !/\/api\/subscribe$/.test(form.action)) return;
+  if (!tlcFormToken || form.querySelector('input[name="form_token"]')) return;
+  const input = document.createElement('input');
+  input.type = 'hidden'; input.name = 'form_token'; input.value = tlcFormToken;
+  form.appendChild(input);
+}, true);
+
 // ── CONTACT FORM ──────────────────────────────────────────────
 // Guarded: /contact is the one page whose hardcoded fallback is still live
 // (its published blocks are missing the required native form — see

@@ -240,6 +240,13 @@ document.addEventListener('keydown', function (e) {
   e.preventDefault();
   toggleSignup(header.closest('.signup-card'));
 });
+// The signup endpoint quietly sets aside anything without a form token —
+// that is how a script posting straight at it gets caught — so this page
+// fetches one on load, the same way the main site does.
+var signupToken = fetch('https://admin.timothystl.org/api/form-config')
+  .then(function (r) { return r.json(); })
+  .then(function (d) { return d.token || ''; })
+  .catch(function () { return ''; });
 document.addEventListener('submit', async function (e) {
   var card = e.target.closest && e.target.closest('.signup-card');
   if (!card) return;
@@ -250,7 +257,10 @@ document.addEventListener('submit', async function (e) {
   btn.disabled = true; btn.textContent = 'Subscribing…';
   msg.style.color = ''; msg.textContent = '';
   try {
-    var r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: new FormData(form) });
+    var fd = new FormData(form);
+    var token = await signupToken;
+    if (token) fd.append('form_token', token);
+    var r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: fd });
     var d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Error');
     form.style.display = 'none';

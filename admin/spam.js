@@ -11,6 +11,7 @@
 // unchanged and still called on every submission, purely so the score/reasons
 // keep being logged and the machinery is a flip of one boolean away from
 // being turned back on — it just no longer decides what happens to a message.
+// The exception is newsletter signups — see signupHoldReasons() below.
 //
 // Design rule, as originally written, kept for when this is re-enabled: a
 // church must never lose a real prayer request. Nothing here rejects a
@@ -255,6 +256,34 @@ export function scoreSubmission(sub = {}, signals = {}) {
 
   const verdict = score >= HOLD_SCORE ? 'spam' : score >= SUSPECT_SCORE ? 'suspect' : 'clean';
   return { score, verdict, reasons };
+}
+
+// ── NEWSLETTER SIGNUPS: the one form that is still gated ─────────────────────
+// Screening of the contact and prayer forms is off (see screenSubmission() in
+// admin/forms.js), but a signup is different in kind. Holding one back costs
+// a real person, at worst, a signup the office can release in one click; it
+// is not a prayer request going unread. And the attack on it is real: from
+// October 2026 scripts posted well over a thousand strangers' addresses
+// straight at /api/subscribe ("list bombing" — signing real people up to
+// things they never asked for), every one of them with no form token, a few
+// IPs submitting twenty-plus an hour. Each landed on the Brevo list, which is
+// both unfair to those people and a fast way to wreck the church's sending
+// reputation.
+//
+// So a signup is set aside — held, never discarded — when it plainly did not
+// come from someone filling in the form on the website: no token, a forged
+// one, the honeypot filled, or a flood from one address. An 'unavailable'
+// token (our own signing key unreadable) never counts against anyone, and
+// neither does 'too-fast' or 'expired': autofill is quick, and tabs stay open.
+export const SIGNUP_MAX_PER_IP_HOUR = 3;
+export function signupHoldReasons(sub = {}, signals = {}) {
+  const reasons = [];
+  if (sub.honeypot) reasons.push('hidden honeypot field was filled in');
+  if (signals.tokenState === 'missing') reasons.push('no form token — posted straight at the signup address');
+  if (signals.tokenState === 'invalid') reasons.push('forged or tampered form token');
+  const recent = Number(signals.recentFromIp || 0);
+  if (recent > SIGNUP_MAX_PER_IP_HOUR) reasons.push(`${recent} signups from this address in the last hour`);
+  return reasons;
 }
 
 // ── FORM TOKEN ────────────────────────────────────────────────
