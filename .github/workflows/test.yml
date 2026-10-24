@@ -74,6 +74,9 @@ jobs:
             node "$f"
           done
 
+      - name: Newsletter confirmation cannot be bypassed
+        run: node --experimental-loader ./test/html-loader.mjs test/newsletter-confirmation.test.mjs
+
       - name: Shared staff login exchange
         run: node test/shared-staff-login.test.mjs
 
@@ -176,6 +179,7 @@ jobs:
           node test/public-page.test.mjs
           node test/workspace-browser.test.mjs
           node test/public-calendar.test.mjs
+          NEWSLETTER_BROWSER=1 node --experimental-loader ./test/html-loader.mjs test/newsletter-confirmation.test.mjs
 
 # Other browser suites not run here, and why:
 #

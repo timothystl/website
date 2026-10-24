@@ -799,12 +799,13 @@ li{margin-bottom:6px;}
 
     <span class="toc-anchor" id="filtered-tab"></span>
     <h3>Filtered Mail tab</h3>
-    <p><span class="badge badge--amber">Screening is off</span> As of 2026-08-25, nothing arriving through the contact, prayer, subscribe, Christmas Market vendor, or event sign-up forms is held back or flagged any more — every submission is delivered normally, exactly as if it had scored perfectly clean. This was switched off because it was doing more harm than good: a misconfigured piece of it (a Cloudflare Turnstile check with no site key ever saved) was causing ordinary, real submissions to be scored "suspect," which silently suppressed the sender's own confirmation email and put a spam-sounding marker on the office's copy that some receiving mail providers (Gmail, at least) then filed straight into Spam — undoing the whole point of "deliver it anyway."</p>
-    <p>This screen still works for anything that was already sitting here from before — <strong>nothing is ever deleted automatically</strong>, and a held message is stored here in full, along with the reasons it was flagged. Click <strong>This is real — send it to me</strong> and it is emailed to the office exactly as it would have arrived, and passed along to Connect.</p>
-    <p>The scoring itself (marketing vocabulary, bulk-mail opt-out lines, message floods, Turnstile) is still computed and logged in the background — it simply no longer holds or flags anything. It can be switched back on later (a developer change, in <code>admin/forms.js</code>), but doing that safely first means actually saving a Turnstile site key on this screen — see <strong>Extra protection</strong> below.</p>
+    <p>Newsletter signups with missing or invalid form tokens, a filled spam-trap field, or excessive requests are held here for review. Contact and prayer messages continue to be delivered normally.</p>
+    <p>For a held newsletter signup, <strong>Release and send confirmation</strong> clears the spam hold and requests a confirmation email. The address joins the mailing list only after clicking that email's link. If the request fails, the signup stays pending; open the released signup and choose <strong>Retry confirmation email</strong>. Other held messages use <strong>Release to inbox</strong> to send to the office and Connect.</p>
+    <p>Held newsletter signups are removed after 30 days. Released records are removed after 90 days; pending signup addresses remain on Subscribers.</p>
 
     <span class="toc-anchor" id="subscribers-tab"></span>
     <h3>Subscribers tab</h3>
+    <p>New signups must confirm by email before joining the mailing list. If the confirmation request fails, the signup stays pending and the visitor can submit the form again to retry. Existing subscribers stay on the list.</p>
     <p><span class="badge badge--sage">Live</span> View the email newsletter subscriber list. Shows all subscribers, their status, and when they subscribed. You can search or export the list from here.</p>
 
     <span class="toc-anchor" id="market-tab"></span>
