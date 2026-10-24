@@ -538,7 +538,7 @@ async function getChmsFundSuggestions(env) {
 // after the confirmation link. Under /api/ deliberately — that prefix is the
 // part of admin.timothystl.org the public is meant to reach. Self-contained, no
 // admin chrome: the person reading it is a visitor, not staff.
-function subscribeNoticePage(title, body) {
+function subscribeNoticePage(title, body, status = 200) {
   const e = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${e(title)} · Timothy Lutheran Church</title>
@@ -547,7 +547,7 @@ main{background:#fff;border-radius:14px;max-width:480px;width:100%;padding:36px 
 h1{font-weight:normal;font-size:26px;margin:0 0 14px}p{font-size:16px;line-height:1.6;margin:0 0 24px}
 a{display:inline-block;background:#1f2a44;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold}</style>
 </head><body><main><h1>${e(title)}</h1><p>${e(body)}</p><a href="https://timothystl.org">Back to timothystl.org</a></main></body></html>`,
-    { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+    { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
 function isSafeCardUrl(value) {
@@ -3776,37 +3776,18 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           turnstileToken: form.get('cf-turnstile-response'),
         });
         if (screen.held) return done();
-        // Add to Brevo contacts list. No fallback list: a missing setting must fail loudly
-        // rather than quietly filing subscribers on the test list.
-        const listId = parseInt(env.BREVO_LIST_ID || '0', 10);
-        if (!listId) {
-          console.error('Newsletter signup failed: BREVO_LIST_ID is not configured');
-          return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
-        }
-        // Double opt-in: Brevo emails a confirmation link and only adds them
-        // to the list on the click — see requestNewsletterOptin(). If that path
-        // is broken (template could not be made, Brevo refused) the signup is
-        // added directly as before rather than lost.
+        // Save the pending signup before contacting Brevo. Retrying this form
+        // is idempotent locally and can only request another confirmation.
+        await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)').bind(email, name || null).run();
+        const listId = Number(env.BREVO_LIST_ID);
         const optin = await requestNewsletterOptin(env, { email, name, listId });
         if (!optin.ok) {
-          console.error('Newsletter opt-in unavailable, adding directly:', optin.error);
-          const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
-            method: 'POST',
-            headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, attributes: { FIRSTNAME: name }, listIds: [listId], updateEnabled: true })
-          });
-          if (!brevoRes.ok && brevoRes.status !== 204) {
-            const err = await brevoRes.json().catch(() => ({}));
-            // Status 400 with code "duplicate_parameter" means already on list — treat as success
-            if (!(err.code === 'duplicate_parameter' || brevoRes.status === 400)) {
-              throw new Error(err.message || 'Email service error');
-            }
-          }
+          console.error('Newsletter confirmation request failed');
+          const message = 'Your signup is saved, but we could not send the confirmation email. Please submit the signup form again to retry. You will only join the list after confirming by email.';
+          return wantsPage
+            ? subscribeNoticePage('Confirmation still needed', message, 503)
+            : new Response(JSON.stringify({ error: message, pending: true, retry: true }), { status: 503, headers: corsH });
         }
-        // Log to D1 (ignore duplicate emails). Until they click, this row is
-        // what shows them on Subscribers as waiting to confirm.
-        await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)').bind(email, name || null).run();
-        if (!optin.ok && !wantsPage) return new Response(JSON.stringify({ success: true }), { headers: corsH });
         return done();
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });

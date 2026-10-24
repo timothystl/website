@@ -14,7 +14,7 @@ import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { renderListSection, renderDrawer, primaryCell } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
-import { sendTransactionalEmail } from './email.js';
+import { sendTransactionalEmail, requestNewsletterOptin } from './email.js';
 
 export const OFFICE_EMAIL = 'dinger@timothystl.org';
 
@@ -325,6 +325,8 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     } catch (_) {}
 
     const notice = msg === 'released' ? `<div class="alert alert-success">Sent through to ${escapeHtml(OFFICE_EMAIL)}.</div>`
+      : msg === 'confirmation-sent' ? `<div class="alert alert-success">Confirmation email requested. This address joins the newsletter only after clicking the email link.</div>`
+      : msg === 'confirmation-failed' ? `<div class="alert alert-error">Spam hold cleared; signup is still pending. Open the released signup and retry its confirmation email.</div>`
       : msg === 'turnstile-saved' ? `<div class="alert alert-success">Saved. The forms will start using it right away.</div>`
       : msg === 'deleted' ? `<div class="alert alert-success">Message deleted.</div>`
       : msg === 'release-failed' ? `<div class="alert alert-error">Could not send that message — check the Brevo key and try again.</div>`
@@ -371,13 +373,13 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
         { kind: 'static', label: 'Why it was held',
           value: `${reasonsOf(open).join(' · ') || 'no reason recorded'} (score ${open.score})` },
         ...(open.released_by ? [{ kind: 'static', label: 'Released by', value: open.released_by }] : []),
-        ...(open.status === 'held' ? [{ kind: 'html', html: `
+        ...(open.status === 'held' || open.kind === 'subscribe' ? [{ kind: 'html', html: `
           <input type="hidden" name="id" value="${open.id}">
           <div class="tlc-form-foot" style="margin-top:20px;">
             <button type="submit" class="tlc-drawer-delete" formaction="/filtered/delete" formnovalidate
               onclick="return confirm('Delete this message for good?')">Delete</button>
             <button type="submit" class="tlc-btn-primary"
-              onclick="return confirm('Send this through to the office inbox?')">Release to inbox</button>
+              onclick="return confirm('${open.kind === 'subscribe' ? 'Send a confirmation email? This does not subscribe the address.' : 'Send this through to the office inbox?'}')">${open.kind === 'subscribe' ? (open.status === 'held' ? 'Release and send confirmation' : 'Retry confirmation email') : 'Release to inbox'}</button>
           </div>` }] : []),
       ],
     }) : '';
@@ -436,33 +438,25 @@ ${sidebarShell('filtered', currentUser, '', badges)}
   if (path === '/filtered/release' && method === 'POST') {
     const form = await request.formData();
     const id = parseInt(form.get('id') || '0');
-    const row = await env.DB.prepare("SELECT * FROM form_submissions WHERE id = ? AND status='held'").bind(id).first();
+    const row = await env.DB.prepare("SELECT * FROM form_submissions WHERE id = ? AND (status='held' OR (status='released' AND kind='subscribe'))").bind(id).first();
     if (!row) return new Response('', { status: 302, headers: { Location: '/filtered' } });
 
     if (row.kind === 'subscribe') {
-      // Nothing to email — finish the signup the filter interrupted, on both
-      // the Brevo list (which is the one that actually receives newsletters)
-      // and the local record behind the Subscribers tab.
-      if (env.BREVO_API_KEY && !parseInt(env.BREVO_LIST_ID || '0', 10)) {
-        console.error('Brevo add on release skipped: BREVO_LIST_ID is not configured');
-      } else if (env.BREVO_API_KEY) {
-        try {
-          await fetch('https://api.brevo.com/v3/contacts', {
-            method: 'POST',
-            headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: (row.email || '').toLowerCase(),
-              attributes: { FIRSTNAME: row.name || '' },
-              listIds: [parseInt(env.BREVO_LIST_ID, 10)],
-              updateEnabled: true,
-            }),
-          });
-        } catch (e) { console.error('Brevo add on release failed:', e?.message); }
+      // Release only the spam hold. The local row is pending until Brevo's
+      // confirmation link is clicked; retries must use the same opt-in path.
+      await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)')
+        .bind((row.email || '').trim().toLowerCase(), row.name || null).run();
+      if (row.status === 'held') {
+        await env.DB.prepare("UPDATE form_submissions SET status='released', released_at=CURRENT_TIMESTAMP, released_by=? WHERE id=?")
+          .bind(currentUser?.username || null, id).run();
+        await logAudit(env.DB, currentUser, 'release', 'form_submission', String(id), 'Newsletter signup: confirmation required');
       }
-      try {
-        await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)')
-          .bind((row.email || '').toLowerCase(), row.name || null).run();
-      } catch (_) {}
+      const result = await requestNewsletterOptin(env, {
+        email: (row.email || '').trim().toLowerCase(), name: row.name || '', listId: Number(env.BREVO_LIST_ID),
+      });
+      return new Response('', { status: 302, headers: {
+        Location: `/filtered/${id}?msg=${result.ok ? 'confirmation-sent' : 'confirmation-failed'}`,
+      } });
     } else {
       const note = `<p style="font-size:13px;color:#777;">Released from the website spam filter by ${escapeHtml(currentUser?.username || 'an admin')}.</p>`;
       const result = await sendTransactionalEmail(env, {

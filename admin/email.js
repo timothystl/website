@@ -522,9 +522,12 @@ export async function ensureOptinTemplate(env) {
 }
 
 // Asks Brevo to send the confirmation email. Returns { ok: true } when Brevo
-// accepted it, or { error } so the caller can fall back to adding directly —
-// a signup must never be lost because the confirmation path is broken.
+// accepted it, or { error } so the caller keeps the signup pending for retry.
+// A failed confirmation must never become a direct subscription.
 export async function requestNewsletterOptin(env, { email, name, listId }) {
+  if (!env.BREVO_API_KEY || !Number.isSafeInteger(listId) || listId <= 0) {
+    return { error: 'newsletter confirmation is not configured' };
+  }
   const templateId = await ensureOptinTemplate(env);
   if (!templateId) return { error: 'no opt-in template' };
   try {
