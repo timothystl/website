@@ -824,7 +824,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     hp('pages_edit') ? navItem('/calendar-categories', 'Categories &amp; colors', activeTab === 'calcats') : '',
   ].filter(Boolean).join('');
   const moneyItems = [
-    (hp('market_manage') || hp('settings_manage') || hp('giving_manage') || hp('pages_edit') || hp('ministries_edit'))
+    (hp('market_manage') || hp('market_volunteers') || hp('settings_manage') || hp('giving_manage') || hp('pages_edit') || hp('ministries_edit'))
       ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
     hp('gym_manage') ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, true, `${b.gym} gym request(s) waiting for review`)) : '',
     hp('giving_manage') ? navItem('/giving', 'Giving', activeTab === 'giving') : '',

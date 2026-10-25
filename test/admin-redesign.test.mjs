@@ -5134,6 +5134,39 @@ group('the Volunteers tab can be switched off, and back on');
   eq(refused.status, 403, 'pages_edit alone cannot touch it');
 }
 
+// A volunteer lead runs the market's crew without the coordinator's vendor
+// list: the Volunteers tab, its CSV and the sign-ups switch, nothing else.
+group('a volunteer lead gets the Volunteers tab and not the vendors');
+{
+  const { db, env } = await boot();
+  const { cookie: lead } = signIn(db, ['market_volunteers'], 'vollead');
+  const realFetch = globalThis.fetch;
+  env.CHMS_INTAKE_API_KEY = 'test-intake-key';
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ open: true, shifts: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const res = await call(env, '/market', { cookie: lead });
+    eq(res.status, 200, 'market_volunteers alone opens the market screen');
+    const body = await res.text();
+    has(body, 'Manage shifts in Serve', 'and lands on the Volunteers tab');
+    has(body, 'Volunteer sign-ups', 'with the sign-ups switch on that tab');
+    lacks(body, 'Taking vendor applications', 'but not the Applications panel');
+    lacks(body, '>Vendors</a>', 'and no Vendors tab at all');
+    const vendorsByAddress = await (await call(env, '/market?tab=vendors', { cookie: lead })).text();
+    lacks(vendorsByAddress, 'Taking vendor applications', 'asking for Vendors by address does not hand it over');
+    eq((await call(env, '/market/export.csv', { cookie: lead })).status, 403, 'the vendor export stays market_manage');
+    eq((await call(env, '/market/applications', { cookie: lead, method: 'POST', form: { open: '1' } })).status, 403,
+      'and so does the applications switch');
+
+    const off = await call(env, '/market/volunteers-tab', { cookie: lead, method: 'POST', form: {} });
+    eq(off.status, 302, 'the lead can close sign-ups');
+    eq(db.prepare("SELECT has_volunteers FROM site_events WHERE id='christmasmarket'").get().has_volunteers, 0, 'and it is stored');
+    const closed = await (await call(env, '/market', { cookie: lead })).text();
+    has(closed, 'Volunteer sign-ups', 'with sign-ups closed the lead still has the tab, so they can reopen them');
+    eq((await call(env, '/market/volunteers-tab', { cookie: lead, method: 'POST', form: { volunteers_enabled: '1' } })).status, 302,
+      'and reopen them');
+  } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
+}
+
 group('the vendor list is gated on its own permission');
 {
   const { db, env } = await boot();

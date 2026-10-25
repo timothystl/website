@@ -20,8 +20,8 @@ const group = (n) => console.log('\n' + n);
 // ── the key set ──────────────────────────────────────────────────────────────
 group('permission keys');
 {
-  eq(ALL_PERMISSIONS.length, 19,
-    'nineteen keys: the spec’s fourteen, plus notices and own-pages, plus the market coordinator, the events index, and event intake');
+  eq(ALL_PERMISSIONS.length, 20,
+    'twenty keys: the spec’s fourteen, plus notices and own-pages, plus the market coordinator and volunteer lead, the events index, and event intake');
 
   // The fourteen names the design handoff calls "the real permission names".
   const spec = [
@@ -117,7 +117,7 @@ group('migrating stored permissions');
   // it cannot conjure a permission added long afterwards, and asserting that
   // it does would fail every future time somebody adds one, for a reason that
   // has nothing to do with the migration.
-  const AT_RENAME = ALL_PERMISSIONS.filter((k) => k !== 'market_manage' && k !== 'events_manage' && k !== 'intake_manage');
+  const AT_RENAME = ALL_PERMISSIONS.filter((k) => k !== 'market_manage' && k !== 'market_volunteers' && k !== 'events_manage' && k !== 'intake_manage');
   eq(AT_RENAME.length, 16, 'sixteen keys existed at the rename');
   eq(full.length, 16, 'an account holding every old key holds every renamed key');
   for (const k of AT_RENAME) ok(full.includes(k), `full access retains ${k}`);
@@ -126,7 +126,7 @@ group('migrating stored permissions');
 // ── presets ──────────────────────────────────────────────────────────────────
 group('presets');
 {
-  eq(Object.keys(PERMISSION_PRESETS).length, 5, 'five presets');
+  eq(Object.keys(PERMISSION_PRESETS).length, 6, 'six presets');
   same(PERMISSION_PRESETS['Full access'], ALL_PERMISSIONS, 'Full access is literally everything');
 
   // A preset that names a key which no longer exists would tick a box the
