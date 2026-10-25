@@ -31,6 +31,11 @@ export const PERMISSIONS = {
   // list holds seventy people's home addresses and phone numbers. She should
   // be able to have exactly that and nothing else.
   market_manage:      'Christmas Market vendors',
+  // The market's Volunteers tab and nothing else on that screen: the roster
+  // read from Serve, its print sheets and CSV, and the sign-ups open/closed
+  // switch. Split from market_manage so a volunteer lead can run the crew
+  // without being handed seventy vendors' home addresses.
+  market_volunteers:  'Christmas Market volunteers',
   // The /events index and /events/new — creating an event, and everything
   // about it that is not one specific event's own registrations. A single
   // event's coordinator is gated separately, on that event's own dynamic
@@ -109,6 +114,7 @@ export const PERMISSION_PRESETS = {
   // from whoever writes the newsletter, and each of them being able to do the
   // other's job is not the point of a preset.
   'Market coordinator': ['market_manage'],
+  'Market volunteer lead': ['market_volunteers'],
   'Full access': ALL_PERMISSIONS,
 };
 

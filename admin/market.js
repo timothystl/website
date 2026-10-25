@@ -1440,7 +1440,14 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   const canGiving = hasPermission(currentUser, 'giving_manage');
   const canPages = hasPermission(currentUser, 'pages_edit');
   const canPhotos = canPages || hasPermission(currentUser, 'ministries_edit');
-  if (!canMarket && !canSettings && !canGiving && !canPages && !canPhotos) {
+  // The volunteer lead (market_volunteers) gets the Volunteers tab and its
+  // sign-ups switch — never the vendor list. The coordinator keeps both.
+  const canVolunteers = canMarket || hasPermission(currentUser, 'market_volunteers');
+  // ⚠ Somebody who holds ONLY the volunteers key keeps the tab when sign-ups
+  // are closed — it is the one place they can open them again. The
+  // coordinator still reopens from the Applications panel, as before.
+  const volunteerLeadOnly = canVolunteers && !canMarket;
+  if (!canMarket && !canVolunteers && !canSettings && !canGiving && !canPages && !canPhotos) {
     return new Response('Access denied.', { status: 403 });
   }
 
@@ -1504,7 +1511,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // names of everybody coming, and that belongs behind the coordinator's own
   // permission rather than behind whoever can edit the market's page.
   if (path === '/market/volunteers.csv' && method === 'GET') {
-    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    if (!canVolunteers) return new Response('Access denied.', { status: 403 });
     const { vol, volError } = await fetchRoster(env);
     // ⚠ An unreachable Serve is a 503, not an empty file. A CSV with a header
     // row and nothing under it reads as "nobody has signed up", which is a
@@ -1814,7 +1821,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // every other tab on this screen follows. `active` then falls back to the
   // first tab this reader can still open, so nobody lands on a dead link.
   if (path === '/market/volunteers-tab' && method === 'POST') {
-    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    if (!canVolunteers) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     const enabled = form.getAll('volunteers_enabled').includes('1') ? 1 : 0;
     await env.DB.prepare("UPDATE site_events SET has_volunteers = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(enabled).run();
@@ -1827,7 +1834,8 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // as "nothing happened." What it must NOT do is claim the two are in sync
     // when they are not — the toast says exactly which half succeeded.
     const remote = await setSignupsOpen(env, enabled === 1);
-    const localMsg = enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden';
+    const localMsg = volunteerLeadOnly ? 'Saved'
+      : enabled === 1 ? 'The Volunteers tab is showing again' : 'The Volunteers tab is hidden';
     const toast = remote.ok
       ? `${localMsg}, and sign-ups are ${enabled === 1 ? 'open' : 'closed'} in Serve too`
       : `${localMsg} — but Serve was not updated: ${remote.error}`;
@@ -1981,7 +1989,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       { key: 'vendors', label: 'Vendors', on: canMarket },
       { key: 'pages', label: 'Page & copy', on: canPages },
       { key: 'money', label: 'Money & dates', on: canSettings || canGiving },
-      { key: 'volunteers', label: 'Volunteers', on: canMarket && settings.volunteersEnabled },
+      { key: 'volunteers', label: 'Volunteers', on: canVolunteers && (settings.volunteersEnabled || volunteerLeadOnly) },
       { key: 'photos', label: 'Photos', on: canPhotos },
     ].filter((t) => t.on);
     // ⚠ The default is the first tab this reader can actually open, not a
@@ -2319,7 +2327,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // login. Nothing here writes back, and nothing should: two places editing
     // one roster is two rosters.
     let volunteersSection = '';
-    if (active === 'volunteers' && canMarket && settings.volunteersEnabled) {
+    if (active === 'volunteers' && canVolunteers && (settings.volunteersEnabled || volunteerLeadOnly)) {
       const { vol, volError } = await fetchRoster(env);
 
       const roster = normalizeRoster(vol || {});
@@ -2412,6 +2420,18 @@ ${sidebarShell('market', currentUser, '', badges)}
           </div>
           <div class="tlc-section-actions"><a class="tlc-action" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a></div>
         </header>`
+        // The coordinator has this switch in the Applications panel; the
+        // volunteer lead never sees that panel, so theirs lives here.
+        + (volunteerLeadOnly ? `<form method="POST" action="/market/volunteers-tab" data-noprint="1" style="margin:0 0 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <input type="hidden" name="volunteers_enabled" value="0">
+            <label class="tlc-toggle">
+              <input type="checkbox" name="volunteers_enabled" value="1"${settings.volunteersEnabled ? ' checked' : ''}>
+              <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+              <span class="tlc-toggle-label">Volunteer sign-ups</span>
+              <span class="tlc-toggle-state" data-on="Open" data-off="Closed">${settings.volunteersEnabled ? 'Open' : 'Closed'}</span>
+            </label>
+            <button type="submit" class="tlc-btn-primary">Save</button>
+          </form>` : '')
         + (vol
           ? `<div class="tlc-tiles" data-noprint="1">
               ${tile('Signed up', people.length, `People who have taken a shift${day.label ? ' ' + day.label.split(',')[0] : ''}`)}
