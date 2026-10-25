@@ -56,7 +56,7 @@ ok(optinTemplateHtml().includes('{{ doubleoptin }}'), 'the template carries Brev
 {
   const env = freshEnv(); calls = []; templateStatus = 400;
   const r = await requestNewsletterOptin(env, { email: 'b@example.com', name: '', listId: 7 });
-  ok(r.error, 'no template means an error the caller can fall back on, not a lost signup');
+  ok(r.error, 'no template means an error so the caller keeps the signup pending');
   templateStatus = 201; optinStatus = 400;
   const r2 = await requestNewsletterOptin(env, { email: 'b@example.com', name: '', listId: 7 });
   ok(r2.error, 'and so does Brevo refusing the opt-in request');
