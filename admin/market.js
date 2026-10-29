@@ -909,7 +909,10 @@ const personOf = (p) => {
   if (typeof p === 'string') return { name: p, email: '' };
   if (!p || typeof p !== 'object') return null;
   const name = String(p.name || p.email || '').trim();
-  return name ? { name, email: String(p.email || '').trim() } : null;
+  // `id` is Serve's sign-up id — what a Remove button names. Absent from an
+  // older Serve, and then there is simply no button.
+  const id = Number(p.id) > 0 ? Number(p.id) : null;
+  return name ? { id, name, email: String(p.email || '').trim() } : null;
 };
 
 // Serve's payload in, the model every view below reads out.
@@ -945,6 +948,7 @@ export function normalizeRoster(vol) {
         ? String(sh.date || role.date).trim() : '';
       if (!s) untimed += 1;
       shifts.push({
+        id: Number(sh.id) > 0 ? Number(sh.id) : null,
         job, lead, label, date,
         start: s ? s.start : null, end: s ? s.end : null, timed: !!s,
         needed, filled, people,
@@ -1110,7 +1114,30 @@ const segLink = (base, items, current, param) => `<div class="tlc-seg" role="gro
     i.key === current ? ' aria-current="true"' : ''}>${escapeHtml(i.label)}</a>`).join('')}</div>`;
 
 // ── By job — the job lead's own view ──
-function volByJob(shifts, base) {
+// ⚠ THE ADD AND REMOVE CONTROLS ARE ONLY DRAWN WHEN `edit` IS SET AND SERVE
+// SENT THE IDS. `edit` is the reader's own permission (the routes check it
+// again); the ids are what the write in Serve names, so a shift or a person
+// without one gets no control rather than a button that cannot work.
+const removeBtn = (s, p, back) => (s.id && p.id ? `<form method="POST" action="/market/volunteers/remove" class="tlc-vol-x" data-noprint="1"
+    onsubmit="return confirm(${escapeHtml(JSON.stringify(`Take ${p.name} off this shift? They are not emailed — let them know yourself.`))});">
+    <input type="hidden" name="role_id" value="${s.id}"><input type="hidden" name="signup_id" value="${p.id}">
+    <input type="hidden" name="back" value="${escapeHtml(back)}">
+    <button type="submit" title="${escapeHtml(`Remove ${p.name} from this shift`)}" aria-label="${escapeHtml(`Remove ${p.name} from this shift`)}">×</button>
+  </form>` : '');
+const whoEditable = (s, back) => s.people.map((p) => `<span class="tlc-vol-person">${p.email
+  ? `<a href="mailto:${escapeHtml(p.email)}">${escapeHtml(p.name)}</a>` : escapeHtml(p.name)}${removeBtn(s, p, back)}</span>`).join('');
+const addForm = (s, back) => (s.id ? `<details class="tlc-vol-add" data-noprint="1">
+    <summary>+ Add someone</summary>
+    <form method="POST" action="/market/volunteers/add">
+      <input type="hidden" name="role_id" value="${s.id}"><input type="hidden" name="back" value="${escapeHtml(back)}">
+      <input type="text" name="name" required maxlength="200" placeholder="Name" aria-label="Name" autocomplete="off">
+      <input type="email" name="email" maxlength="200" placeholder="Email (optional)" aria-label="Email" autocomplete="off">
+      <input type="tel" name="phone" maxlength="50" placeholder="Phone (optional)" aria-label="Phone" autocomplete="off">
+      <button type="submit" class="tlc-btn-primary">Add</button>
+    </form>
+  </details>` : '');
+
+function volByJob(shifts, base, edit = false) {
   const jobs = jobsFor(shifts);
   if (!jobs.length) return `<p class="tlc-hint">No jobs are set up for this day yet.</p>`;
   return `<div class="tlc-vol-jobs">${jobs.map((j) => `
@@ -1130,11 +1157,12 @@ function volByJob(shifts, base) {
         <div class="tlc-vol-shift">
           <span class="tlc-vol-t">${escapeHtml(s.timed ? fmtRange(s.start, s.end) : (s.label || 'No time given'))}</span>
           <span class="tlc-vol-n tlc-vol-${fillTone(s.filled, s.needed)}">${s.filled}/${s.needed}</span>
-          <span class="tlc-vol-who">${s.people.length ? whoOf(s)
-            : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>'}</span>
+          <span class="tlc-vol-who">${s.people.length ? (edit ? whoEditable(s, base) : whoOf(s))
+            : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>'}${edit ? addForm(s, base) : ''}</span>
         </div>`).join('')}</div>
     </div>`).join('')}</div>
-  <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Most short-handed first, because that is the order the work is in. <strong>Sheet</strong> prints that one lead their own page — their shifts, their people, and nobody else's.</span></p>`;
+  <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Most short-handed first, because that is the order the work is in. <strong>Sheet</strong> prints that one lead their own page — their shifts, their people, and nobody else's.${edit
+    ? ' <strong>+ Add someone</strong> puts a person straight onto a shift, even when it is full or sign-ups are closed; <strong>×</strong> takes them off. Nobody is emailed either way.' : ''}</span></p>`;
 }
 
 // ── By time — the floor manager's view ──
@@ -1410,6 +1438,37 @@ export async function setSignupsOpen(env, open) {
       : await fetch(req, { signal: AbortSignal.timeout(4000) });
     if (res.ok) return { ok: true };
     if (res.status === 404) return { ok: false, error: 'No Christmas Market event exists yet in Serve to open or close.' };
+    return { ok: false, error: `Serve answered ${res.status}.` };
+  } catch (e) {
+    return { ok: false, error: `Serve could not be reached: ${e.message || e}` };
+  }
+}
+
+// ── ADDING OR REMOVING ONE PERSON ON ONE SHIFT IN SERVE ─────────────────────
+// The third call into chms's market routes — same binding, same shared secret,
+// same `{ ok, error }` shape as setSignupsOpen(). Calls
+// `POST /api/signups/christmasmarket/roster`, which checks the shift belongs to
+// the market before it writes anything.
+export async function setRosterEntry(env, body) {
+  const intakeKey = env.CHMS_INTAKE_API_KEY || '';
+  if (!intakeKey) return { ok: false, error: 'CHMS_INTAKE_API_KEY is not set on this Worker.' };
+  try {
+    const req = new Request('https://serve.timothystl.org/api/signups/christmasmarket/roster', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Intake-Key': intakeKey },
+      body: JSON.stringify(body),
+    });
+    const res = env.CONNECT_WORKER
+      ? await env.CONNECT_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+      : await fetch(req, { signal: AbortSignal.timeout(4000) });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (res.ok && data && data.ok) return { ok: true, data };
+    // Serve's own messages on a 400/404 are written for this screen ("That
+    // shift is no longer on the market roster."); anything else is a status.
+    if ((res.status === 400 || res.status === 404) && data && typeof data.error === 'string') {
+      return { ok: false, error: data.error.slice(0, 200) };
+    }
     return { ok: false, error: `Serve answered ${res.status}.` };
   } catch (e) {
     return { ok: false, error: `Serve could not be reached: ${e.message || e}` };
@@ -1820,6 +1879,45 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // ⚠ SWITCHED OFF, THE TAB IS ABSENT FROM `TABS`, NOT DISABLED — same rule
   // every other tab on this screen follows. `active` then falls back to the
   // first tab this reader can still open, so nobody lands on a dead link.
+  // ── PUTTING SOMEBODY ON A SHIFT, OR TAKING THEM OFF ──────────────────
+  // The coordinator (and the volunteer lead, who already owns this tab) can
+  // change who is on a shift directly — the person who phoned the office, the
+  // one who cannot come after all. Writes Serve's own rows through
+  // setRosterEntry(); nothing is copied here. Nobody is emailed.
+  if ((path === '/market/volunteers/add' || path === '/market/volunteers/remove') && method === 'POST') {
+    if (!canVolunteers) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const adding = path.endsWith('/add');
+    const roleId = Number(form.get('role_id') || 0);
+    // Back to the same day and view, never anywhere off this screen.
+    const backRaw = String(form.get('back') || '');
+    const back = /^\/market\?tab=volunteers(&[A-Za-z0-9_.~%+=-]*)*$/.test(backRaw) ? backRaw : '/market?tab=volunteers';
+    const go = (msg) => new Response('', {
+      status: 302,
+      headers: { Location: back + '&toast=' + encodeURIComponent(msg) },
+    });
+    const body = adding
+      ? { action: 'add', role_id: roleId,
+          name: String(form.get('name') || '').trim().slice(0, 200),
+          email: String(form.get('email') || '').trim().slice(0, 200),
+          phone: String(form.get('phone') || '').trim().slice(0, 50) }
+      : { action: 'remove', role_id: roleId, signup_id: Number(form.get('signup_id') || 0) };
+    if (adding && !body.name) return go('Nobody was added — a name is needed.');
+    const r = await setRosterEntry(env, body);
+    if (!r.ok) return go(`${adding ? 'Nobody was added' : 'Nobody was removed'} — ${r.error}`);
+    await logAudit(env.DB, currentUser, adding ? 'create' : 'delete', 'market_volunteer_shift',
+      `${roleId}:${r.data.signup_id || body.signup_id}`, body.name || `sign-up ${body.signup_id}`,
+      adding ? null : { role_id: roleId, signup_id: body.signup_id },
+      adding ? { role_id: roleId, name: body.name } : null);
+    if (adding) {
+      if (r.data.already) return go(`${body.name} was already on that shift`);
+      return go(`${body.name} is on the shift${r.data.over ? ' — it now has more people than it asked for' : ''}. They were not emailed.`);
+    }
+    return go(r.data.signup_deleted
+      ? 'Removed — that was their only shift, so they are off the market roster entirely'
+      : 'Removed from that shift; their other shifts stay');
+  }
+
   if (path === '/market/volunteers-tab' && method === 'POST') {
     if (!canVolunteers) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
@@ -2324,8 +2422,9 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // live in Serve (serve.timothystl.org), a different application with its
     // own accounts; this is a server-to-server GET of a summary it publishes,
     // so the coordinator can see who is covering the market without a second
-    // login. Nothing here writes back, and nothing should: two places editing
-    // one roster is two rosters.
+    // login. The one write back is putting a person on a shift or taking them
+    // off (/market/volunteers/add|remove below) — and that writes Serve's own
+    // rows, not a copy here: two places holding one roster is two rosters.
     let volunteersSection = '';
     if (active === 'volunteers' && canVolunteers && (settings.volunteersEnabled || volunteerLeadOnly)) {
       const { vol, volError } = await fetchRoster(env);
@@ -2396,7 +2495,7 @@ ${sidebarShell('market', currentUser, '', badges)}
       const viewBody = view === 'time' ? volByTime(shifts, untimedHere)
         : view === 'grid' ? volGrid(shifts, axis)
         : view === 'people' ? volPeople(shifts)
-        : volByJob(shifts, base);
+        : volByJob(shifts, base, true);
 
       const axisBar = view === 'grid' && shifts.some((s) => s.timed) ? `
         <div data-noprint="1" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-4px 0 14px;">
@@ -2416,7 +2515,7 @@ ${sidebarShell('market', currentUser, '', badges)}
         <header class="tlc-section-head" data-noprint="1">
           <div class="tlc-section-headings">
             <h1 class="tlc-title">Volunteers</h1>
-            <p class="tlc-purpose">Who is covering the market, read from Serve. Shifts are set up and changed there — this is a window on them, and the place you print from.</p>
+            <p class="tlc-purpose">Who is covering the market, read from Serve. Shifts are set up in Serve; you can add or remove people on them here, under <strong>By job</strong>, and print from here.</p>
           </div>
           <div class="tlc-section-actions"><a class="tlc-action" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a></div>
         </header>`
