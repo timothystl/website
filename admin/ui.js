@@ -1686,6 +1686,18 @@ export const MARKET_CSS = `
 .tlc-vol-add form{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .tlc-vol-add input{flex:1 1 140px;min-width:0;font:13px var(--tlc-sans);padding:7px 9px;border:1px solid var(--tlc-edge);border-radius:8px;background:#fff;}
 .tlc-vol-add .tlc-btn-primary{padding:7px 14px;}
+/* The match list sits IN the flow, not floated over it — the job card clips
+   its overflow, and a floated list was cut off at the card's bottom edge. */
+.tlc-vol-find{flex:1 1 100%;display:flex;flex-direction:column;}
+.tlc-vol-find input{flex:1 1 auto;}
+.tlc-vol-list[hidden]{display:none;}
+.tlc-vol-list{display:block;margin-top:3px;background:#fff;border:1px solid var(--tlc-edge);
+  border-radius:8px;box-shadow:0 6px 18px rgba(18,36,61,.14);max-height:260px;overflow:auto;}
+.tlc-vol-opt{display:block;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--tlc-divider);}
+.tlc-vol-opt:last-child{border-bottom:0;}
+.tlc-vol-opt b{display:block;font:600 13px var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-vol-opt small{display:block;font-size:11.5px;color:var(--tlc-muted);overflow-wrap:anywhere;}
+.tlc-vol-opt:hover,.tlc-vol-opt[aria-selected="true"]{background:var(--tlc-sand);}
 .tlc-vol-ok{color:${TONES.good.fg};}
 .tlc-vol-short{color:${TONES.warn.fg};}
 .tlc-vol-none{color:${TONES.bad.fg};}
