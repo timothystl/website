@@ -1676,6 +1676,16 @@ export const MARKET_CSS = `
 .tlc-vol-t{font:600 12.5px/1.4 var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-vol-n{font:600 12.5px/1.4 var(--tlc-sans);white-space:nowrap;}
 .tlc-vol-who{font-size:12.5px;line-height:1.5;color:var(--tlc-body);text-wrap:pretty;overflow-wrap:anywhere;}
+.tlc-vol-person{display:inline-flex;align-items:center;gap:2px;margin-right:10px;}
+.tlc-vol-x{display:inline;margin:0;}
+.tlc-vol-x button{border:0;background:none;color:var(--tlc-muted);font:600 15px/1 var(--tlc-sans);cursor:pointer;
+  padding:2px 5px;border-radius:8px;min-width:24px;min-height:24px;}
+.tlc-vol-x button:hover,.tlc-vol-x button:focus-visible{color:${TONES.bad.fg};background:${TONES.bad.bg};}
+.tlc-vol-add{margin-top:6px;}
+.tlc-vol-add summary{cursor:pointer;font:600 12px var(--tlc-sans);color:var(--tlc-navy);width:max-content;}
+.tlc-vol-add form{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.tlc-vol-add input{flex:1 1 140px;min-width:0;font:13px var(--tlc-sans);padding:7px 9px;border:1px solid var(--tlc-edge);border-radius:8px;background:#fff;}
+.tlc-vol-add .tlc-btn-primary{padding:7px 14px;}
 .tlc-vol-ok{color:${TONES.good.fg};}
 .tlc-vol-short{color:${TONES.warn.fg};}
 .tlc-vol-none{color:${TONES.bad.fg};}

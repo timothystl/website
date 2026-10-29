@@ -5167,6 +5167,74 @@ group('a volunteer lead gets the Volunteers tab and not the vendors');
   } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
 }
 
+// The coordinator puts somebody straight onto a shift, or takes them off,
+// without opening Serve. Stubbed for the same reason as the tests above.
+group('the coordinator can add and remove people on a market shift');
+{
+  const { db, env } = await boot();
+  const { cookie: marla } = signIn(db, ['market_manage'], 'marla');
+  const realFetch = globalThis.fetch;
+  env.CHMS_INTAKE_API_KEY = 'test-intake-key';
+  try {
+    const roster = {
+      open: true, signedUp: 1, openShifts: 1,
+      roles: [{ name: 'Parking', shifts: [{ id: 7, label: 'Saturday 8–11am', needed: 2, filled: 1,
+        people: [{ id: 41, name: 'Ann Poe', email: 'ann@example.com' }] }] }],
+    };
+    let calls = [];
+    let reply = { ok: true, added: true, already: false, signup_id: 42, over: false };
+    globalThis.fetch = async (u) => {
+      const body = u.method === 'POST' ? JSON.parse(await u.clone().text()) : null;
+      calls.push({ url: u.url, key: u.headers.get('X-Intake-Key'), body });
+      if (u.url.includes('/roster')) return new Response(JSON.stringify(reply), { status: reply.ok ? 200 : 404, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(roster), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+
+    const page = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    has(page, 'action="/market/volunteers/add"', 'each shift has an Add someone form');
+    has(page, 'name="role_id" value="7"', 'naming that shift by Serve’s own id');
+    has(page, 'action="/market/volunteers/remove"', 'each person on a shift has a remove button');
+    has(page, 'name="signup_id" value="41"', 'naming that person’s sign-up');
+
+    const added = await call(env, '/market/volunteers/add', { cookie: marla, method: 'POST',
+      form: { role_id: '7', name: 'Bo Rice', email: 'bo@example.com', phone: '', back: '/market?tab=volunteers&view=job' } });
+    eq(added.status, 302, 'adding redirects back');
+    ok(added.headers.get('Location').startsWith('/market?tab=volunteers&view=job&toast='), 'to the same view it came from');
+    ok(decodeURIComponent(added.headers.get('Location')).includes('Bo Rice is on the shift'), 'and says who was added');
+    const addCall = calls[calls.length - 1];
+    ok(addCall.url.includes('/api/signups/christmasmarket/roster'), 'Serve’s roster route is called');
+    eq(addCall.key, 'test-intake-key', 'with the shared secret');
+    eq(JSON.stringify(addCall.body), JSON.stringify({ action: 'add', role_id: 7, name: 'Bo Rice', email: 'bo@example.com', phone: '' }),
+      'and the person and shift');
+
+    reply = { ok: true, removed: true, signup_deleted: false };
+    const removed = await call(env, '/market/volunteers/remove', { cookie: marla, method: 'POST',
+      form: { role_id: '7', signup_id: '41', back: 'https://evil.example/' } });
+    ok(removed.headers.get('Location').startsWith('/market?tab=volunteers&toast='), 'a back address off this screen is ignored');
+    eq(JSON.stringify(calls[calls.length - 1].body), JSON.stringify({ action: 'remove', role_id: 7, signup_id: 41 }), 'removal names the sign-up and shift');
+    ok(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type='market_volunteer_shift'").get().n >= 2, 'both changes are in the audit log');
+
+    reply = { ok: false, error: 'That shift is no longer on the market roster.' };
+    const failed = await call(env, '/market/volunteers/add', { cookie: marla, method: 'POST', form: { role_id: '99', name: 'Cy Dean' } });
+    ok(decodeURIComponent(failed.headers.get('Location')).includes('Nobody was added — That shift is no longer on the market roster.'),
+      'Serve’s refusal is passed on in words');
+
+    const before = calls.length;
+    const blank = await call(env, '/market/volunteers/add', { cookie: marla, method: 'POST', form: { role_id: '7', name: '  ' } });
+    ok(decodeURIComponent(blank.headers.get('Location')).includes('a name is needed'), 'a blank name is refused here');
+    eq(calls.length, before, 'without calling Serve');
+
+    const { cookie: lead } = signIn(db, ['market_volunteers'], 'vollead2');
+    eq((await call(env, '/market/volunteers/add', { cookie: lead, method: 'POST', form: { role_id: '7', name: 'Di Ely' } })).status, 302,
+      'the volunteer lead can add too');
+    const { cookie: pagesOnly } = signIn(db, ['pages_edit'], 'writer3');
+    eq((await call(env, '/market/volunteers/add', { cookie: pagesOnly, method: 'POST', form: { role_id: '7', name: 'X' } })).status, 403,
+      'pages_edit alone cannot');
+    eq((await call(env, '/market/volunteers/remove', { cookie: pagesOnly, method: 'POST', form: { role_id: '7', signup_id: '41' } })).status, 403,
+      'nor remove anyone');
+  } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
+}
+
 group('the vendor list is gated on its own permission');
 {
   const { db, env } = await boot();
