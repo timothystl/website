@@ -1130,12 +1130,80 @@ const addForm = (s, back) => (s.id ? `<details class="tlc-vol-add" data-noprint=
     <summary>+ Add someone</summary>
     <form method="POST" action="/market/volunteers/add">
       <input type="hidden" name="role_id" value="${s.id}"><input type="hidden" name="back" value="${escapeHtml(back)}">
-      <input type="text" name="name" required maxlength="200" placeholder="Name" aria-label="Name" autocomplete="off">
+      <input type="hidden" name="person_id" value="">
+      <span class="tlc-vol-find">
+        <input type="text" name="name" required maxlength="200" placeholder="Name — start typing to search the directory" aria-label="Name"
+          autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" data-volfind="1">
+        <span class="tlc-vol-list" role="listbox" hidden></span>
+      </span>
       <input type="email" name="email" maxlength="200" placeholder="Email (optional)" aria-label="Email" autocomplete="off">
       <input type="tel" name="phone" maxlength="50" placeholder="Phone (optional)" aria-label="Phone" autocomplete="off">
       <button type="submit" class="tlc-btn-primary">Add</button>
     </form>
   </details>` : '');
+
+// ⚠ THE DIRECTORY LOOKUP IS A PROGRESSIVE EXTRA. Without this script (or with
+// Connect unreachable) the box is a plain name field and the form still posts.
+// Picking somebody fills name, email and phone and records their directory id
+// in `person_id`, so Connect links the sign-up to that person; typing over the
+// name afterwards clears the id, because it may no longer be them.
+const VOL_FIND_JS = `<script>
+(function () {
+  document.querySelectorAll('input[data-volfind]').forEach(function (box, n) {
+    var form = box.form, list = box.parentNode.querySelector('.tlc-vol-list');
+    var pid = form.querySelector('input[name=person_id]');
+    var timer = null, seq = 0, items = [], at = -1;
+    list.id = 'tlc-vol-list-' + n; box.setAttribute('aria-controls', list.id);
+    function close() { list.hidden = true; list.innerHTML = ''; items = []; at = -1; box.setAttribute('aria-expanded', 'false'); box.removeAttribute('aria-activedescendant'); }
+    function mark(i) {
+      at = i;
+      Array.prototype.forEach.call(list.children, function (el, j) { el.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+      if (i >= 0 && list.children[i]) box.setAttribute('aria-activedescendant', list.children[i].id);
+    }
+    function pick(p) {
+      box.value = p.name; pid.value = String(p.id);
+      if (p.email) form.querySelector('input[name=email]').value = p.email;
+      if (p.phone) form.querySelector('input[name=phone]').value = p.phone;
+      close();
+    }
+    function show(people) {
+      list.innerHTML = ''; items = people; at = -1;
+      if (!people.length) { close(); return; }
+      people.forEach(function (p, i) {
+        var o = document.createElement('span');
+        o.className = 'tlc-vol-opt'; o.setAttribute('role', 'option'); o.id = list.id + '-' + i;
+        var b = document.createElement('b'); b.textContent = p.name; o.appendChild(b);
+        var extra = [p.email, p.phone].filter(Boolean).join(' · ');
+        if (extra) { var m = document.createElement('small'); m.textContent = extra; o.appendChild(m); }
+        o.addEventListener('mousedown', function (e) { e.preventDefault(); pick(p); });
+        list.appendChild(o);
+      });
+      list.hidden = false; box.setAttribute('aria-expanded', 'true');
+    }
+    box.addEventListener('input', function () {
+      pid.value = '';
+      clearTimeout(timer);
+      var q = box.value.trim();
+      if (q.length < 2) { close(); return; }
+      timer = setTimeout(function () {
+        var mine = ++seq;
+        fetch('/market/volunteers/people?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.json() : { people: [] }; })
+          .then(function (d) { if (mine === seq) show(Array.isArray(d.people) ? d.people : []); })
+          .catch(function () { if (mine === seq) close(); });
+      }, 220);
+    });
+    box.addEventListener('keydown', function (e) {
+      if (list.hidden || !items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); mark((at + 1) % items.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); mark((at - 1 + items.length) % items.length); }
+      else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); pick(items[at]); }
+      else if (e.key === 'Escape') { close(); }
+    });
+    box.addEventListener('blur', function () { setTimeout(close, 120); });
+  });
+})();
+</script>`;
 
 function volByJob(shifts, base, edit = false) {
   const jobs = jobsFor(shifts);
@@ -1162,7 +1230,7 @@ function volByJob(shifts, base, edit = false) {
         </div>`).join('')}</div>
     </div>`).join('')}</div>
   <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Most short-handed first, because that is the order the work is in. <strong>Sheet</strong> prints that one lead their own page — their shifts, their people, and nobody else's.${edit
-    ? ' <strong>+ Add someone</strong> puts a person straight onto a shift, even when it is full or sign-ups are closed; <strong>×</strong> takes them off. Nobody is emailed either way.' : ''}</span></p>`;
+    ? ' <strong>+ Add someone</strong> puts a person straight onto a shift, even when it is full or sign-ups are closed — type a few letters of a name to pick them from the church directory, or just type a name that is not in it; <strong>×</strong> takes them off. Nobody is emailed either way.' : ''}</span></p>${edit ? VOL_FIND_JS : ''}`;
 }
 
 // ── By time — the floor manager's view ──
@@ -1473,6 +1541,26 @@ export async function setRosterEntry(env, body) {
   } catch (e) {
     return { ok: false, error: `Serve could not be reached: ${e.message || e}` };
   }
+}
+
+// ── LOOKING SOMEBODY UP IN CONNECT'S DIRECTORY ──────────────────────────────
+// Read twin of setRosterEntry(): same binding and secret. Any failure is an
+// empty list — the box then behaves as the plain name field it always was.
+export async function findDirectoryPeople(env, q) {
+  const intakeKey = env.CHMS_INTAKE_API_KEY || '';
+  if (!intakeKey || String(q).trim().length < 2) return [];
+  try {
+    const req = new Request('https://serve.timothystl.org/api/signups/christmasmarket/people?q=' + encodeURIComponent(q),
+      { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
+    const res = env.CONNECT_WORKER
+      ? await env.CONNECT_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+      : await fetch(req, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (Array.isArray(d && d.people) ? d.people : []).slice(0, 10).map((p) => ({
+      id: Number(p.id) || 0, name: String(p.name || ''), email: String(p.email || ''), phone: String(p.phone || ''),
+    })).filter((p) => p.id && p.name);
+  } catch { return []; }
 }
 
 export async function handleMarketRoutes(request, env, path, method, currentUser, url, badges = {}) {
@@ -1884,6 +1972,17 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // change who is on a shift directly — the person who phoned the office, the
   // one who cannot come after all. Writes Serve's own rows through
   // setRosterEntry(); nothing is copied here. Nobody is emailed.
+  // The directory lookup behind the Add someone box — a JSON pass-through to
+  // Connect's /api/signups/christmasmarket/people, which decides who is
+  // findable and which contact details are shown. Same permission as adding.
+  if (path === '/market/volunteers/people' && method === 'GET') {
+    if (!canVolunteers) return new Response('Access denied.', { status: 403 });
+    const people = await findDirectoryPeople(env, String(url.searchParams.get('q') || '').slice(0, 80));
+    return new Response(JSON.stringify({ people }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  }
+
   if ((path === '/market/volunteers/add' || path === '/market/volunteers/remove') && method === 'POST') {
     if (!canVolunteers) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
@@ -1900,7 +1999,9 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       ? { action: 'add', role_id: roleId,
           name: String(form.get('name') || '').trim().slice(0, 200),
           email: String(form.get('email') || '').trim().slice(0, 200),
-          phone: String(form.get('phone') || '').trim().slice(0, 50) }
+          phone: String(form.get('phone') || '').trim().slice(0, 50),
+          // Set only when the name was picked from the directory lookup.
+          person_id: Number(form.get('person_id') || 0) || null }
       : { action: 'remove', role_id: roleId, signup_id: Number(form.get('signup_id') || 0) };
     if (adding && !body.name) return go('Nobody was added — a name is needed.');
     const r = await setRosterEntry(env, body);

@@ -5204,8 +5204,33 @@ group('the coordinator can add and remove people on a market shift');
     const addCall = calls[calls.length - 1];
     ok(addCall.url.includes('/api/signups/christmasmarket/roster'), 'Serve’s roster route is called');
     eq(addCall.key, 'test-intake-key', 'with the shared secret');
-    eq(JSON.stringify(addCall.body), JSON.stringify({ action: 'add', role_id: 7, name: 'Bo Rice', email: 'bo@example.com', phone: '' }),
+    eq(JSON.stringify(addCall.body), JSON.stringify({ action: 'add', role_id: 7, name: 'Bo Rice', email: 'bo@example.com', phone: '', person_id: null }),
       'and the person and shift');
+
+    // Picked from the directory: the person's id goes along so Connect can link them.
+    await call(env, '/market/volunteers/add', { cookie: marla, method: 'POST',
+      form: { role_id: '7', name: 'Frank Schmidt', email: '', phone: '', person_id: '55' } });
+    eq(calls[calls.length - 1].body.person_id, 55, 'a directory pick carries its person id');
+
+    // The lookup itself — a pass-through to Connect, behind the same permission.
+    reply = { ok: true, people: [{ id: 55, name: 'Frank Schmidt', email: 'fs@example.com', phone: '' }, { id: 0, name: 'no id' }] };
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (u) => {
+      calls.push({ url: u.url, key: u.headers.get('X-Intake-Key') });
+      return new Response(JSON.stringify(reply), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const found = await call(env, '/market/volunteers/people?q=frank', { cookie: marla });
+    eq(found.status, 200, 'the directory lookup answers');
+    eq(JSON.stringify(await found.json()), JSON.stringify({ people: [{ id: 55, name: 'Frank Schmidt', email: 'fs@example.com', phone: '' }] }),
+      'with Connect’s matches, dropping anything without an id');
+    ok(calls[calls.length - 1].url.includes('/api/signups/christmasmarket/people?q=frank'), 'asking Connect’s directory route');
+    eq(calls[calls.length - 1].key, 'test-intake-key', 'with the shared secret');
+    globalThis.fetch = async () => { throw new Error('down'); };
+    eq(JSON.stringify(await (await call(env, '/market/volunteers/people?q=frank', { cookie: marla })).json()), JSON.stringify({ people: [] }),
+      'Connect being down is an empty list, not an error');
+    globalThis.fetch = origFetch;
+    has(page, 'data-volfind="1"', 'the name box is a directory search');
+    has(page, 'name="person_id"', 'with a place to carry the picked person');
 
     reply = { ok: true, removed: true, signup_deleted: false };
     const removed = await call(env, '/market/volunteers/remove', { cookie: marla, method: 'POST',
@@ -5232,6 +5257,7 @@ group('the coordinator can add and remove people on a market shift');
       'pages_edit alone cannot');
     eq((await call(env, '/market/volunteers/remove', { cookie: pagesOnly, method: 'POST', form: { role_id: '7', signup_id: '41' } })).status, 403,
       'nor remove anyone');
+    eq((await call(env, '/market/volunteers/people?q=frank', { cookie: pagesOnly })).status, 403, 'nor search the directory');
   } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
 }
 
