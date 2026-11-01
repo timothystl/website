@@ -27,6 +27,7 @@ import { priceBreakdown, money as marketMoney, MARKET_DEFAULTS as MARKET_PRICE_D
 import { obfEmailCodes } from '../admin/blocks.js';
 import crypto from 'node:crypto';
 import { SCHOOL_EVENTS } from '../admin/school-calendar-seed.js';
+import { CONFIRMATION_EVENTS } from '../admin/confirmation-calendar-seed.js';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -6423,6 +6424,30 @@ group('the newsletter picks its events from the posts, instead of retyping them'
   ok(preview.includes('Council meeting (moved)'), 'the preview shows the post as it reads right now');
 }
 
+group('the Confirmation class year is on the calendar, filed under Learn');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    const seeded = db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar' AND calendar_category = 'learn'").get().c;
+    eq(seeded, CONFIRMATION_EVENTS.length, 'every date on the Confirmation sheet is in');
+    ok(CONFIRMATION_EVENTS.every((e) => new Date(e.date + 'T12:00:00Z').getUTCDay() === 0), 'every class date is a Sunday');
+    const news = await (await call(env, '/api/news?limit=100')).json();
+    ok(!news.some((n) => n.title.includes('Confirmation')), 'class dates stay out of the news feed');
+    const may = await (await call(env, '/api/calendar?month=2027-05', { fresh: true })).json();
+    const day = may.events.find((e) => e.title === 'Confirmation Sunday');
+    ok(day, 'Confirmation Sunday is on the month');
+    eq(day.start, '2027-05-16');
+    eq(day.category, 'learn');
+    eq(day.allDay, true, 'the sheet gives no time, so none is invented');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 group('the Word of Life school year is on the calendar, and off the news feed');
 {
   const { db, env } = await boot();
@@ -6433,7 +6458,7 @@ group('the Word of Life school year is on the calendar, and off the news feed');
     env.GCAL_API_KEY = 'test-key';
     db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
 
-    const seeded = db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar'").get().c;
+    const seeded = db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar' AND calendar_category = 'wol'").get().c;
     eq(seeded, SCHOOL_EVENTS.length, 'every picked date from the school PDF is in');
 
     // ⚠ THE WHOLE REASON FOR THE CALENDAR-ONLY CHANNEL. Twenty-nine school

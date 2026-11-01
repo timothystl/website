@@ -47,6 +47,7 @@ import { sendTransactionalEmail, buildWebHtml, getBrevoListCount, requestNewslet
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildReportPdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
+import { CONFIRMATION_YEAR, confirmationEventRows } from './admin/confirmation-calendar-seed.js';
 import { handleGymRoutes, getGCalAccessToken } from './admin/gym.js';
 import { handleSermonsRoutes } from './admin/sermons.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
@@ -2457,6 +2458,28 @@ export default {
       } catch (_) { /* retried on the next request */ }
     }
 
+    // ── ONE-TIME: THE CONFIRMATION CLASS YEAR (2026-11-01) ──
+    // Same pattern and same guards as the school year above: once, behind a
+    // marker keyed on the year, deduped on title AND date. Next year's list is
+    // a new marker, not an edit to this one.
+    const CONFIRMATION_CAL_MARKER = `confirmation_cal_${CONFIRMATION_YEAR}`;
+    const confirmationCalSeeded = markersOk || markers.get(CONFIRMATION_CAL_MARKER) === 'done';
+    if (!confirmationCalSeeded) {
+      try {
+        for (const r of confirmationEventRows(churchDate())) {
+          const dup = await env.DB.prepare(
+            'SELECT id FROM news_items WHERE title = ? AND event_date = ?'
+          ).bind(r.title, r.event_date).first();
+          if (dup) continue;
+          await env.DB.prepare(
+            'INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_CAL_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
     // ── ONE-TIME: PUT /give ON THE BLOCK EDITOR (2026-08-05) ──
     // Every page on the site has had a block draft waiting since the site
     // editor shipped; none of them was ever published, so the whole editor
@@ -2829,7 +2852,7 @@ export default {
     // _schema_version altogether. Deliberately NOT set when any work ran: the
     // marker writes above are each inside a try that swallows, so the next
     // request must re-read to see whether they actually landed.
-    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded) {
+    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded && confirmationCalSeeded) {
       MARKERS_SEEN.set(env.DB, SCHEMA_VERSION);
     }
 
