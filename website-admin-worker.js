@@ -2466,17 +2466,43 @@ export default {
     const confirmationCalSeeded = markersOk || markers.get(CONFIRMATION_CAL_MARKER) === 'done';
     if (!confirmationCalSeeded) {
       try {
+        // ⚠ ONE STATEMENT, NOT SELECT-THEN-INSERT. Two requests arriving
+        // together after the deploy both ran a check-then-insert loop and put
+        // twelve dates in twice. D1 runs each statement alone, so the
+        // NOT EXISTS guard and the insert can no longer be split by a second
+        // request.
         for (const r of confirmationEventRows(churchDate())) {
-          const dup = await env.DB.prepare(
-            'SELECT id FROM news_items WHERE title = ? AND event_date = ?'
-          ).bind(r.title, r.event_date).first();
-          if (dup) continue;
           await env.DB.prepare(
-            'INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category).run();
+            `INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+             WHERE NOT EXISTS (SELECT 1 FROM news_items WHERE title = ? AND event_date = ?)`
+          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category, r.title, r.event_date).run();
         }
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_CAL_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: REMOVE THE DOUBLED CONFIRMATION DATES (2026-11-01) ──
+    // The first run of the seed above raced itself and inserted twelve of its
+    // dates twice. Keep the earliest row of each seeded title-and-date pair and
+    // delete the later copies — only rows that are exactly the seed's own
+    // (calendar-only, Learn), never anything else on that day.
+    const CONFIRMATION_DEDUPE_MARKER = `confirmation_cal_${CONFIRMATION_YEAR}_dedupe`;
+    const confirmationDeduped = markersOk || markers.get(CONFIRMATION_DEDUPE_MARKER) === 'done';
+    if (!confirmationDeduped) {
+      try {
+        for (const r of confirmationEventRows(churchDate())) {
+          const extra = await env.DB.prepare(
+            `SELECT id FROM news_items WHERE title = ? AND event_date = ? AND channels = 'calendar' AND calendar_category = 'learn'
+               AND id > (SELECT MIN(id) FROM news_items WHERE title = ? AND event_date = ? AND channels = 'calendar' AND calendar_category = 'learn')`
+          ).bind(r.title, r.event_date, r.title, r.event_date).all();
+          for (const row of (extra.results || [])) {
+            await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(row.id).run();
+            await env.DB.prepare('DELETE FROM calendar_event_links WHERE source_key = ?').bind(`n:${row.id}`).run().catch(() => {});
+          }
+        }
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_DEDUPE_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -2852,7 +2878,7 @@ export default {
     // _schema_version altogether. Deliberately NOT set when any work ran: the
     // marker writes above are each inside a try that swallows, so the next
     // request must re-read to see whether they actually landed.
-    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded && confirmationCalSeeded) {
+    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded && confirmationCalSeeded && confirmationDeduped) {
       MARKERS_SEEN.set(env.DB, SCHEMA_VERSION);
     }
 

@@ -6443,6 +6443,21 @@ group('the Confirmation class year is on the calendar, filed under Learn');
     eq(day.start, '2027-05-16');
     eq(day.category, 'learn');
     eq(day.allDay, true, 'the sheet gives no time, so none is invented');
+
+    // ⚠ The first production run raced itself and doubled twelve dates. The
+    // one-time cleanup keeps the earliest of each and nothing else that day.
+    const ins = db.prepare("INSERT INTO news_items (title, summary, publish_date, event_date, channels, calendar_category) VALUES (?, '', '2026-11-01', ?, ?, ?)");
+    ins.run('Confirmation Sunday', '2027-05-16', 'calendar', 'learn');
+    ins.run('No Confirmation class', '2027-05-09', 'calendar', 'learn');
+    ins.run('Confirmation Sunday', '2027-05-16', 'web', 'special');
+    db.prepare("DELETE FROM _schema_version WHERE key = 'confirmation_cal_2026-2027_dedupe'").run();
+    const env2 = { ...env, DB: d1(db) };
+    await call(env2, '/login');
+    const count = (t, d) => db.prepare('SELECT COUNT(*) c FROM news_items WHERE title = ? AND event_date = ?').get(t, d).c;
+    eq(count('No Confirmation class', '2027-05-09'), 1, 'a doubled seed date is back to one');
+    eq(count('Confirmation Sunday', '2027-05-16'), 2, 'a row the office wrote themselves on that day is left alone');
+    eq(db.prepare("SELECT COUNT(*) c FROM news_items WHERE channels = 'calendar' AND calendar_category = 'learn'").get().c,
+      CONFIRMATION_EVENTS.length, 'and the year is whole again');
   } finally {
     globalThis.fetch = realFetch;
   }
