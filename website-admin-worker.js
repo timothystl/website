@@ -47,7 +47,7 @@ import { sendTransactionalEmail, buildWebHtml, getBrevoListCount, requestNewslet
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildReportPdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
-import { CONFIRMATION_YEAR, confirmationEventRows } from './admin/confirmation-calendar-seed.js';
+import { CONFIRMATION_YEAR, confirmationEventRows, CLASS_START, CLASS_END } from './admin/confirmation-calendar-seed.js';
 import { handleGymRoutes, getGCalAccessToken } from './admin/gym.js';
 import { handleSermonsRoutes } from './admin/sermons.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
@@ -2473,10 +2473,10 @@ export default {
         // request.
         for (const r of confirmationEventRows(churchDate())) {
           await env.DB.prepare(
-            `INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, expire_date, channels, calendar_category)
-             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+            `INSERT INTO news_items (title, summary, publish_date, event_date, event_end_date, event_time, event_end_time, expire_date, channels, calendar_category)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
              WHERE NOT EXISTS (SELECT 1 FROM news_items WHERE title = ? AND event_date = ?)`
-          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.expire_date, r.channels, r.calendar_category, r.title, r.event_date).run();
+          ).bind(r.title, r.summary, r.publish_date, r.event_date, r.event_end_date, r.event_time, r.event_end_time, r.expire_date, r.channels, r.calendar_category, r.title, r.event_date).run();
         }
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_CAL_MARKER).run();
@@ -2503,6 +2503,26 @@ export default {
           }
         }
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_DEDUPE_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: CONFIRMATION CLASSES MEET 12:30–1:30 PM (2026-11-01) ──
+    // The year went in all-day because the sheet had no time; Andrew gave it
+    // afterward. Only rows still without a time are touched, so a session the
+    // office has already retimed by hand keeps what they typed.
+    const CONFIRMATION_TIME_MARKER = `confirmation_cal_${CONFIRMATION_YEAR}_time`;
+    const confirmationTimed = markersOk || markers.get(CONFIRMATION_TIME_MARKER) === 'done';
+    if (!confirmationTimed) {
+      try {
+        for (const r of confirmationEventRows(churchDate())) {
+          if (!r.event_time) continue;
+          await env.DB.prepare(
+            `UPDATE news_items SET event_time = ?, event_end_time = ?
+              WHERE title = ? AND event_date = ? AND channels = 'calendar' AND calendar_category = 'learn'
+                AND (event_time IS NULL OR event_time = '')`
+          ).bind(CLASS_START, CLASS_END, r.title, r.event_date).run();
+        }
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CONFIRMATION_TIME_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -2878,7 +2898,7 @@ export default {
     // _schema_version altogether. Deliberately NOT set when any work ran: the
     // marker writes above are each inside a try that swallows, so the next
     // request must re-read to see whether they actually landed.
-    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded && confirmationCalSeeded && confirmationDeduped) {
+    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded && confirmationCalSeeded && confirmationDeduped && confirmationTimed) {
       MARKERS_SEEN.set(env.DB, SCHEMA_VERSION);
     }
 

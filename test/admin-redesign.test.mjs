@@ -6442,7 +6442,22 @@ group('the Confirmation class year is on the calendar, filed under Learn');
     ok(day, 'Confirmation Sunday is on the month');
     eq(day.start, '2027-05-16');
     eq(day.category, 'learn');
-    eq(day.allDay, true, 'the sheet gives no time, so none is invented');
+    eq(day.allDay, true, 'Confirmation Sunday is in worship, not the class hour');
+    const cls = may.events.find((e) => e.title === 'Confirmation class (as needed)');
+    eq(cls.start, '2027-05-02T12:30:00', 'a class session starts at 12:30');
+    eq(cls.end, '2027-05-02T13:30:00', 'and ends at 1:30');
+    eq(may.events.find((e) => e.title === 'No Confirmation class').allDay, true, 'a no-class Sunday carries no time');
+
+    // The year was first seeded all-day; the one-time retime fills the hour
+    // in without touching a session the office already retimed by hand.
+    db.prepare("UPDATE news_items SET event_time = NULL, event_end_time = NULL WHERE title = 'Confirmation: New Testament I'").run();
+    db.prepare("UPDATE news_items SET event_time = '09:00', event_end_time = NULL WHERE title = 'Confirmation: New Testament II'").run();
+    db.prepare("DELETE FROM _schema_version WHERE key = 'confirmation_cal_2026-2027_time'").run();
+    await call({ ...env, DB: d1(db) }, '/login');
+    const t = (title) => db.prepare('SELECT event_time, event_end_time FROM news_items WHERE title = ?').get(title);
+    eq(t('Confirmation: New Testament I').event_time, '12:30', 'an untimed class gets the hour');
+    eq(t('Confirmation: New Testament I').event_end_time, '13:30');
+    eq(t('Confirmation: New Testament II').event_time, '09:00', 'a hand-set time is left alone');
 
     // ⚠ The first production run raced itself and doubled twelve dates. The
     // one-time cleanup keeps the earliest of each and nothing else that day.
