@@ -7,8 +7,9 @@
 //
 // ⚠ `channels: 'calendar'` — a class session is a date on the month, not news.
 // ⚠ CATEGORY `learn`, beside the other classes and Bible studies.
-// ⚠ ALL-DAY. The sheet gives dates only, no meeting time; a guessed time on a
-//   phone calendar is worse than none. Add the time from the News screen.
+// ⚠ CLASSES MEET 12:30–1:30 PM (Andrew, 1 November 2026). The no-class
+//   Sundays and Confirmation Sunday itself stay all-day: neither is a class
+//   hour, and Confirmation Sunday happens in worship.
 //
 // Kept exactly as the sheet has it, so nobody "fixes" these back:
 //   · 11 and 18 October are BOTH "Apostles' Creed III" on the sheet.
@@ -64,6 +65,10 @@ export const CONFIRMATION_EVENTS = [
   { date: '2027-05-16', title: 'Confirmation Sunday' },
 ];
 
+export const CLASS_START = '12:30';
+export const CLASS_END = '13:30';
+export const isClassSession = (title) => title !== NO && title !== 'Confirmation Sunday';
+
 export function confirmationEventRows(publishDate) {
   return CONFIRMATION_EVENTS.map((e) => ({
     title: e.title,
@@ -71,7 +76,8 @@ export function confirmationEventRows(publishDate) {
     publish_date: publishDate,
     event_date: e.date,
     event_end_date: null,
-    event_time: null,
+    event_time: isClassSession(e.title) ? CLASS_START : null,
+    event_end_time: isClassSession(e.title) ? CLASS_END : null,
     expire_date: null, // the expiry sweep deletes rows outright; see the school seed
     channels: 'calendar',
     calendar_category: 'learn',
