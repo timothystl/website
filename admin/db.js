@@ -285,6 +285,7 @@ export const DB_INIT_STAFF_MEMBERS = `CREATE TABLE IF NOT EXISTS staff_members (
   name TEXT NOT NULL,
   title TEXT,
   email TEXT,
+  phone_ext TEXT DEFAULT '',
   photo_url TEXT,
   bio TEXT,
   display_order INTEGER DEFAULT 0

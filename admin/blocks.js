@@ -3342,6 +3342,9 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFFFF 0%,#F7F9FB 100%);borde
 .tlcb-person-p img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 .tlcb-person-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#0B3C5C;}
 .tlcb-person-r{font-size:12px;color:#8A8898;}
+.tlcb-person-cs{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tlcb-person-c{font-size:12px;color:#246582;text-decoration:none;overflow-wrap:anywhere;}
+a.tlcb-person-c:hover{text-decoration:underline;}
 .tlcb-map{min-height:230px;overflow:hidden;}
 .tlcb-map-f{width:100%;height:100%;min-height:230px;border:0;display:block;}
 .tlcb-map-ph{color:#8A8898;font-size:13px;}
@@ -5540,8 +5543,26 @@ function renderInner(b, opts) {
       return `<div class="tlcb-person">
         <span class="tlcb-person-p">${photo}</span>
         <span class="tlcb-person-n">${esc(m.name || '')}</span>
-        <span class="tlcb-person-r">${esc(m.title || '')}</span>
+        <span class="tlcb-person-r">${esc(m.title || '')}</span>${contact(m)}
       </div>`;
+    };
+    // Email and phone extension, under the role. The extension dials through
+    // the church's main number when one is set in Settings; with no main
+    // number it is still shown, just not as a link.
+    const mainPhone = String((data.settings && data.settings.phone) || '').replace(/[^\d+]/g, '');
+    const contact = (m) => {
+      const email = String(m.email || '').trim();
+      const ext = String(m.phone_ext || '').replace(/\D/g, '');
+      const bits = [];
+      if (email && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email)) {
+        bits.push(`<a class="tlcb-person-c" href="mailto:${esc(email)}">${esc(email)}</a>`);
+      }
+      if (ext) {
+        bits.push(mainPhone
+          ? `<a class="tlcb-person-c" href="tel:${esc(mainPhone)},${esc(ext)}">Ext. ${esc(ext)}</a>`
+          : `<span class="tlcb-person-c">Ext. ${esc(ext)}</span>`);
+      }
+      return bits.length ? `\n        <span class="tlcb-person-cs">${bits.join('')}</span>` : '';
     };
     const people = (data.staff || []).map(person).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}
