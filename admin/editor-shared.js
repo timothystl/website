@@ -422,7 +422,7 @@ export async function pageData(env, reqKey) {
       // eye on the Staff screen. They were not selected here, so the Staff grid
       // block had no crop to honor even once it wanted to — a face framed in the
       // admin came out framed differently on the published page.
-      q('SELECT name, title, email, photo_url, photo_position, photo_zoom ' +
+      q('SELECT name, title, email, phone_ext, photo_url, photo_position, photo_zoom ' +
         'FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 60'),
       // Same public filter /api/newsletters itself uses — see
       // NEWSLETTER_PUBLIC_WHERE_SQL: published, and not superseded by a

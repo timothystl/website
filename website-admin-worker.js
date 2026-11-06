@@ -1881,6 +1881,7 @@ export default {
     try { await env.DB.prepare("ALTER TABLE gym_groups ADD COLUMN rate_type TEXT DEFAULT 'hourly'").run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN photo_position TEXT DEFAULT '50% 50%'").run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN photo_zoom REAL DEFAULT 1").run(); } catch (_) {}
+    try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN phone_ext TEXT DEFAULT ''").run(); } catch (_) {}
     // Migrate: grant users_manage + audit_view to existing full-admin accounts that predate those permissions
     try {
       await env.DB.prepare(
@@ -3458,7 +3459,7 @@ export default {
 
     // ── PUBLIC: staff API ──
     if (path === '/api/staff' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, photo_position, photo_zoom, bio, display_order FROM staff_members ORDER BY display_order, id').all();
+      const rows = await env.DB.prepare('SELECT id, name, title, email, phone_ext, photo_url, photo_position, photo_zoom, bio, display_order FROM staff_members ORDER BY display_order, id').all();
       return new Response(JSON.stringify(rows.results), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
@@ -6576,6 +6577,8 @@ ${sidebarShell('pushLog', currentUser, '', await pageBadges())}
       return new Response('Access denied.', { status: 403 });
     }
     if (path.startsWith('/staff')) {
+      // An extension is digits only — "x112", "ext 112" and "112 " all store as "112".
+      const cleanPhoneExt = (v) => String(v || '').replace(/\D/g, '').slice(0, 8);
       const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
       // Staff list
@@ -6597,7 +6600,9 @@ ${sidebarShell('pushLog', currentUser, '', await pageBadges())}
             search: `${m.name} ${m.title || ''} ${m.email || ''}`.toLowerCase(),
             cells: [
               primaryCell(m.name, m.title || 'No role given', { icon: avatar, iconClass: 'person' }),
-              m.email ? escapeHtml(m.email) : '<span style="color:var(--tlc-muted);">—</span>',
+              m.email || m.phone_ext
+                ? [m.email ? escapeHtml(m.email) : '', m.phone_ext ? 'Ext. ' + escapeHtml(m.phone_ext) : ''].filter(Boolean).join('<br>')
+                : '<span style="color:var(--tlc-muted);">—</span>',
               `${m.display_order ?? 0}`,
               m.photo_url ? statusPill('good', 'Set') : statusPill('warn', 'No photo yet'),
             ],
@@ -6658,6 +6663,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`, await
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" required></div>
         <div class="form-group"><label>Title / Role <span style="color:#B85C3A;">*</span></label><input type="text" name="title" required placeholder="e.g. Lead Pastor"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" placeholder="name@timothystl.org"></div>
+        <div class="form-group"><label>Phone extension <span style="font-size:11px;color:var(--gray);">(optional)</span></label><input type="text" name="phone_ext" inputmode="numeric" maxlength="8" placeholder="e.g. 112"></div>
         ${staffPhotoFieldHtml('')}
       </div>
       <div class="form-group"><label>Bio <span style="font-size:11px;color:var(--gray);">(optional)</span></label><textarea name="bio" rows="6" placeholder="Short biography..." style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;"></textarea></div>
@@ -6684,8 +6690,8 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
         const photoZoom = safeZoomFactor(form.get('photo_zoom'));
         await env.DB.prepare(
-          'INSERT INTO staff_members (name, title, email, photo_url, photo_position, photo_zoom, bio, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', nextOrder).run();
+          'INSERT INTO staff_members (name, title, email, phone_ext, photo_url, photo_position, photo_zoom, bio, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(name, form.get('title')||'', form.get('email')||'', cleanPhoneExt(form.get('phone_ext')), form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', nextOrder).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -6705,6 +6711,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`, await
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" value="${esc(m.name)}" required></div>
         <div class="form-group"><label>Title / Role</label><input type="text" name="title" value="${esc(m.title||'')}"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(m.email||'')}"></div>
+        <div class="form-group"><label>Phone extension <span style="font-size:11px;color:var(--gray);">(optional)</span></label><input type="text" name="phone_ext" inputmode="numeric" maxlength="8" value="${esc(m.phone_ext||'')}" placeholder="e.g. 112"></div>
         ${staffPhotoFieldHtml(m.photo_url||'', m.photo_position||'50% 50%', m.photo_zoom||1)}
       </div>
       <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
@@ -6725,8 +6732,8 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
         const photoZoom = safeZoomFactor(form.get('photo_zoom'));
         await env.DB.prepare(
-          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, photo_position=?, photo_zoom=?, bio=? WHERE id=?'
-        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', id).run();
+          'UPDATE staff_members SET name=?, title=?, email=?, phone_ext=?, photo_url=?, photo_position=?, photo_zoom=?, bio=? WHERE id=?'
+        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', cleanPhoneExt(form.get('phone_ext')), form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', id).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
