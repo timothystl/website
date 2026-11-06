@@ -1471,7 +1471,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-09-29-retire-office-followup'; // Gym booking paperwork columns replace the retired Event Intake checklist.
+    const SCHEMA_VERSION = '2026-11-06-staff-phone-ext'; // staff_members.phone_ext for the Staff grid's contact line.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
