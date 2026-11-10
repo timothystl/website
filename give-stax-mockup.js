@@ -517,8 +517,11 @@ const body = `
     document.head.appendChild(s);
   }).catch(function(){ showMsg('Could not load funds. Please try again.', false); });
 
+  var paymentBusy = false;
+  var paymentIntentKey = 'timothy-stax-pending-intent-v1';
   document.getElementById('stxForm').addEventListener('submit', function(e){
     e.preventDefault();
+    if (paymentBusy) return;
     var validGifts = gifts.filter(function(g){ return g.fundId && Number(g.amount) > 0; });
 
     if (step === 1) {
@@ -531,6 +534,7 @@ const body = `
 
     var payBtn = document.getElementById('stxPayBtn');
     var payBtnLabel = payBtn.textContent;
+    paymentBusy = true;
     payBtn.disabled = true; payBtn.textContent = 'Processing\\u2026';
     var payload = {
       gifts: validGifts.map(function(g){ return { fund_id: g.fundId, amount: g.amount }; }),
@@ -545,7 +549,15 @@ const body = `
       payer_zip: document.getElementById('stxZip').value,
     };
 
-    function reset(){ payBtn.disabled = false; payBtn.textContent = payBtnLabel; }
+    function reset(){ paymentBusy = false; payBtn.disabled = false; payBtn.textContent = payBtnLabel; }
+    // Only an opaque random intent is persisted, never donor or card information.
+    // Keep it through timeouts, retries and reloads until the server confirms a final result.
+    try {
+      var intentId = sessionStorage.getItem(paymentIntentKey) || crypto.randomUUID();
+      sessionStorage.setItem(paymentIntentKey, intentId);
+      payload.intent_id = intentId;
+    } catch (_) { reset(); showMsg('This browser cannot safely continue the payment. Please contact the church office.', false); return; }
+
 
     function submit(pmId){
       var endpoint = CHMS_API + (freq ? '/recurring' : '/checkout');
@@ -555,7 +567,11 @@ const body = `
         .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
         .then(function(res){
           reset();
-          if (!res.ok) { showMsg(res.d.error || 'Something went wrong.', false); return; }
+          if (!res.ok) {
+            if (res.d.retry_safe) sessionStorage.removeItem(paymentIntentKey);
+            showMsg(res.d.error || 'Something went wrong.', false); return;
+          }
+          sessionStorage.removeItem(paymentIntentKey);
           document.getElementById('stxForm').reset();
           gifts = [{ fundId: '', amount: '' }]; coverFees = false; freq = '';
           renderGifts(); renderFreqRow(); updateTotal(); goToStep(1);
@@ -564,7 +580,7 @@ const body = `
           // successful gift (real bug, reported live).
           if (configured) mountStaxCardFields();
           showMsg(res.d.demo ? 'Simulated gift recorded (demo mode).' : 'Thank you \\u2014 your gift was recorded.', true);
-        }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
+        }).catch(function(){ reset(); showMsg('The payment could not be confirmed. Keep this page open and contact the church office before starting another gift.', false); });
     }
 
     if (configured && staxInstance && typeof staxInstance.tokenize === 'function') {
@@ -628,7 +644,7 @@ const body = `
             reset();
             showMsg(cardErrorMsg(err), false);
           });
-        }).catch(function(){ reset(); showMsg('Network error. Please try again.', false); });
+        }).catch(function(){ reset(); showMsg('The payment could not be confirmed. Keep this page open and contact the church office before starting another gift.', false); });
     } else {
       submit(null);
     }

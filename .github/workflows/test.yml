@@ -151,7 +151,9 @@ jobs:
       # clearly labeled, and never allowed to touch or link to the real Tithe.ly
       # page it sits beside. Browserless: drives site-worker.js directly.
       - name: The Stax giving mockup stays a labeled sandbox
-        run: node test/give-stax-mockup.test.mjs
+        run: |
+          node test/give-stax-mockup.test.mjs
+          node --test test/giving-intent.test.mjs
 
   # The page-body ownership boundary is browser behavior: initial edge HTML,
   # client-side navigation, promise caching and DOM takeover. A Node-only CI
