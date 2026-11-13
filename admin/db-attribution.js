@@ -37,7 +37,8 @@ export function wrapDbForAttribution(db) {
           return target.prepare(...args);
         };
       }
-      return Reflect.get(target, prop, receiver);
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
     },
   });
   entry = { db: wrapped, counter };
