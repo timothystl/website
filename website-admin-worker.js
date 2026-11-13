@@ -4577,10 +4577,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       const form = await request.formData();
       const username = (form.get('username') || '').trim().slice(0, 100);
       const password = form.get('password') || '';
-      // RP-13: block after 10 failures from one address OR against one
-      // username, whichever address they come from.
       if (await loginThrottled(env.DB, ip, username)) {
-        return loginPage('Too many failed attempts. Please wait 15 minutes before trying again.');
+        return loginPage('Too many attempts or sign-in is temporarily unavailable. Please try again in 15 minutes.');
       }
       const user = username
         ? await env.DB.prepare('SELECT * FROM users WHERE username = ? AND active = 1').bind(username).first().catch(() => null)
