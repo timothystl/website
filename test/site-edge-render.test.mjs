@@ -12,7 +12,7 @@
 // blocks twice, an injection into the wrong page, or a page that stops working
 // because the admin was unreachable.
 import { readFileSync } from 'node:fs';
-import { pathForPageId, pageIdForPath, rewriteDocument, withAssetCaching, stripConditionalHeaders } from '../site-worker.js';
+import { pathForPageId, pageIdForPath, rewriteDocument, menuNavHtml, withAssetCaching, stripConditionalHeaders } from '../site-worker.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -32,6 +32,7 @@ function fakeElement() {
     setAttribute: (k, v) => attrs.set(k, v),
     prepend: (html) => added.push({ where: 'prepend', html }),
     append: (html) => added.push({ where: 'append', html }),
+    setInnerContent: (html, o) => added.push({ where: 'inner', html, asHtml: !!(o && o.html) }),
     attrs,
   };
 }
@@ -198,6 +199,41 @@ group('the chrome is in the first paint too');
   // gated on there being blocks.
   ok(r.selectors.includes('head'), 'with no published blocks at all');
   ok(!r.selectors.includes('#page-news'), 'and no page injection alongside it');
+}
+
+group('the saved header menu is in the first paint');
+{
+  // Reported from the live site: the Menu screen said About · Worship ·
+  // Ministries · News & Events · Contact, and the header painted the menu
+  // hardcoded into the markup (Learn, Sermons, Calendar…) until /api/pages
+  // landed in the browser — or never, when that request was slow or blocked.
+  const pageData = {
+    pages: [{ id: 'about', slug: '/about' }, { id: 'give', slug: '/give' }, { id: 'music', slug: '/music' }],
+    menu: {
+      header: [
+        { label: 'About', href: '/about', kind: 'page', style: 'link', children: [{ label: 'Music <b>', href: '/music', kind: 'page' }] },
+        { label: 'Give', href: '/give', kind: 'page', style: 'button', children: [] },
+        { label: 'School', href: 'https://example.org/"x', kind: 'external', children: [] },
+      ],
+      footer: [{ label: 'MDO', href: 'https://mdo.example.org', kind: 'external' }, { label: 'About', href: '/about', kind: 'page' }],
+    },
+  };
+  const nav = menuNavHtml(pageData);
+  eq(nav.desktop, '<li><button onclick="showPage(\'about\')">About</button></li>'
+    + '<li><button onclick="showPage(\'give\')" class="nav-cta">Give</button></li>'
+    + '<li><a href="https://example.org/&quot;x" target="_blank" rel="noopener">School</a></li>',
+    'the desktop bar is exactly the saved header, top level only');
+  ok(nav.mobile.includes('closeMobileNav(),showPage(\'music\')" style="padding-left:32px;">Music &lt;b></button>'),
+    'the phone menu nests the children, escaped');
+  ok(nav.mobile.includes('href="https://mdo.example.org"') && !/About<\/button>[^]*About<\/button>/.test(nav.mobile),
+    'and repeats only the footer\'s outside links');
+  eq(menuNavHtml({ pages: [], menu: { header: [] } }), null, 'an unsaved menu leaves the markup alone');
+
+  const r = runRewrite({ socialImage: '', pageId: '', blocksHtml: '', appearance: null, nav });
+  const ul = r.fire('ul.nav-links');
+  eq(ul.added[0].html, nav.desktop, 'the header list is replaced at the edge');
+  ok(ul.added[0].asHtml, 'as markup');
+  eq(r.fire('#navMobile').added[0].html, nav.mobile, 'and so is the phone menu');
 }
 
 group('an appearance that says nothing changes nothing');
