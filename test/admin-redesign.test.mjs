@@ -7097,6 +7097,43 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   }
 }
 
+// ── a publish reaches EVERY data center, not just the one that handled it ──
+// Reported 2026-11-13: the saved six-item menu showed from one city while the
+// pastor's own (private) browser kept the old nine. The Cache API is per data
+// center, so a delete() only clears one location. The bundle is keyed on the
+// content stamp instead: a "location" whose delete never ran must still miss.
+{
+  group('a publish reaches every data center, not just the one that handled it');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const store = new Map();
+  globalThis.caches = { default: {
+    match: async (req) => { const r = store.get(req.url); return r ? r.clone() : undefined; },
+    put: async (req, res) => { store.set(req.url, res.clone()); },
+    // Another location's delete: it never reaches this cache.
+    delete: async () => true,
+  } };
+  try {
+    await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+    const first = await (await call(env, '/api/pages?fresh=1', { fresh: true })).json();
+    ok(first.menu, 'sanity: the bundle has a menu');
+    const keysBefore = store.size;
+    // Mark the cached copy so a stale answer is unmistakable.
+    for (const [k, r] of store) {
+      const body = await r.clone().json();
+      body.menu = { header: [{ label: 'STALE', href: '/stale', kind: 'page' }] };
+      store.set(k, Response.json(body));
+    }
+    await new Promise((r) => setTimeout(r, 5));
+    await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+    const after = await (await call(env, '/api/pages?fresh=1', { fresh: true })).json();
+    ok(!JSON.stringify(after.menu).includes('STALE'), 'the copy from before the publish is not served');
+    ok(store.size > keysBefore, 'the new bundle is cached under a new key');
+  } finally {
+    delete globalThis.caches;
+  }
+}
+
 group('the retired ministry body editors cannot publish invisible content');
 {
   const { db, env } = await boot();

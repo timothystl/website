@@ -448,7 +448,14 @@ export async function getPublishedPages(ctx) {
     // mid-fetch has to err toward one wasted re-fetch a minute later — record a
     // stamp NEWER than the bundle it labels and this copy never notices that
     // publish at all, and serves it for a day.
-    const [res, stamp] = await Promise.all([fetchAdmin('/api/pages'), contentStamp()]);
+    //
+    // ⚠ `?fresh=1`: Website Admin's cached bundle lives in each data center
+    // separately, keyed on the content stamp. A browser's request may use a
+    // stamp memoized for a few seconds; this one must not, or it could be
+    // answered with this location's copy from BEFORE the publish and then be
+    // filed here under the new stamp for a day. Reported 2026-11-13: the saved
+    // menu showed from one city and the old one from the pastor's.
+    const [res, stamp] = await Promise.all([fetchAdmin('/api/pages?fresh=1'), contentStamp()]);
     if (res.ok) {
       const data = await res.json();
       if (isPublishedPagesPayload(data)) {
