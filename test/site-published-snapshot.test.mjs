@@ -38,7 +38,7 @@ try {
     } };
     const fresh = validBundle('fresh');
     globalThis.fetch = async (url) => {
-      if (String(url).endsWith('/api/pages')) return Response.json(fresh);
+      if (/\/api\/pages(\?|$)/.test(String(url))) return Response.json(fresh);
       if (String(url).endsWith('/api/content-stamp')) return Response.json({ stamp: 'publish-2' });
       throw new Error('unexpected URL ' + url);
     };

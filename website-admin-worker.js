@@ -283,9 +283,49 @@ function bumpContentStamp(env, ctx) {
 
 function bustPagesCache(env, ctx) {
   bumpContentStamp(env, ctx);
+  // Bumped again once the request's own write has finished — see fetch(). The
+  // bump above can land BEFORE the write, and a rebuild in that gap would be
+  // cached under the new stamp with the old content.
+  try { if (ctx) ctx.tlcPagesBusted = true; } catch (_) {}
+  pagesStampMemo = null;
   const c = edgeCache();
   if (!c) return;
   try { ctx.waitUntil(c.delete(new Request(PAGES_CACHE_URL))); } catch (_) {}
+}
+
+// ── THE CACHED BUNDLE IS KEYED ON THE CONTENT STAMP ─────────────────────────
+// Reported 2026-11-13: the Menu screen showed the saved six-item header and the
+// public site, in the pastor's own browser (private window too), went on
+// showing the old nine. From another city the site was right.
+//
+// The Cache API is per data center. bustPagesCache's delete() above only ever
+// reached the ONE location that handled the admin's POST; every other location
+// kept serving its old bundle until max-age ran out. Worse, site-worker.js saw
+// the (global, D1-backed) stamp move, re-fetched, got that same stale local
+// copy, and filed it under the NEW stamp — keeping it for up to a day.
+//
+// So the stamp is part of the cache key. A publish anywhere moves the stamp,
+// and every location's next request misses and rebuilds.
+//
+// Two callers, two freshness needs. site-worker.js asks with `?fresh=1` right
+// after it saw the stamp move, and it files the answer under that stamp for a
+// day — so that request always reads the stamp from D1, never from a memo.
+// Visitors' browsers (`?chrome=1`, on every page load) get a per-isolate memo
+// of a few seconds, which keeps a warm cache free of D1 reads.
+let pagesStampMemo = null;
+let pagesStampMemoTime = 0;
+const PAGES_STAMP_MEMO_MS = 10_000;
+
+async function pagesCacheKey(env, { fresh = false } = {}) {
+  const now = Date.now();
+  if (fresh || pagesStampMemo === null || now - pagesStampMemoTime > PAGES_STAMP_MEMO_MS) {
+    const row = env && env.DB
+      ? await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(CONTENT_STAMP_KEY).first().catch(() => null)
+      : null;
+    pagesStampMemo = (row && row.value) || '';
+    pagesStampMemoTime = now;
+  }
+  return new Request(PAGES_CACHE_URL + (pagesStampMemo ? '?stamp=' + encodeURIComponent(pagesStampMemo) : ''));
 }
 
 // Per-DATABASE memo: the schema version and all four one-time seed markers
@@ -892,7 +932,13 @@ export default {
     const { env: attributedEnv, counter } = wrapEnvForDbAttribution(env);
     const dbQueriesAtStart = counter.queries;
     try {
-      return await this._fetch(request, attributedEnv, ctx);
+      try { if (ctx) ctx.tlcPagesBusted = false; } catch (_) {}
+      const res = await this._fetch(request, attributedEnv, ctx);
+      if (ctx && ctx.tlcPagesBusted) {
+        ctx.tlcPagesBusted = false;
+        try { bumpContentStamp(env, ctx); } catch (_) {}
+      }
+      return res;
     } catch (e) {
       const detail = e && (e.stack || e.message) ? (e.stack || e.message) : String(e);
       // AW-1: this used to return the full stack to EVERY caller. The comment
@@ -2974,10 +3020,13 @@ export default {
       // Served from the edge once built — the whole payload is the same for
       // every visitor, and rebuilding it means five queries plus rendering
       // every published page. Posts under /pages and /menu bust it.
+      // Read once, BEFORE the build: a stamp that moves mid-build must not
+      // label this (possibly older) build as current.
+      const pagesKey = edgeCache() ? await pagesCacheKey(env, { fresh: url.searchParams.get('fresh') === '1' }) : null;
       {
         const c = edgeCache();
         if (c) {
-          const hit = await c.match(new Request(PAGES_CACHE_URL)).catch(() => null);
+          const hit = await c.match(pagesKey).catch(() => null);
           if (hit) {
             if (!chromeOnly && !onlyId) return hit;
             const full = await hit.clone().json().catch(() => null);
@@ -3091,7 +3140,7 @@ export default {
       });
       {
         const c = edgeCache();
-        if (c) { try { ctx.waitUntil(c.put(new Request(PAGES_CACHE_URL), pagesRes.clone())); } catch (_) {} }
+        if (c) { try { ctx.waitUntil(c.put(pagesKey, pagesRes.clone())); } catch (_) {} }
       }
       if (chromeOnly || onlyId) return new Response(JSON.stringify(sliceForLeanView(payload)), { headers: leanHeaders });
       return pagesRes;
