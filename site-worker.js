@@ -556,8 +556,50 @@ export function appearanceStyle(a) {
   return rows.length ? '<style id="tlc-appearance">:root{' + rows.join(';') + '}</style>' : '';
 }
 
-export function rewriteDocument(res, { socialImage, pageId, blocksHtml, blockCss, appearance }) {
+// ── THE HEADER MENU, ALSO IN THE FIRST PAINT ────────────────────────────────
+// The saved menu (Website Admin → Menu) used to reach the header only through
+// buildNav() in public/index.html, after a cross-origin fetch to /api/pages.
+// Until that landed — or forever, when it was slow or blocked in a visitor's
+// browser — the header showed the menu hardcoded into the markup, not the one
+// the office saved. So the edge writes the saved menu straight into the HTML.
+// ⚠ A MIRROR OF buildNav()'s menu branch, and it has to stay one: the client
+// still runs it afterward, and different output would just move the flash.
+const navEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+export function menuNavHtml(pageData) {
+  const menu = pageData && pageData.menu;
+  const header = menu && Array.isArray(menu.header) && menu.header.length ? menu.header : null;
+  if (!header) return null;
+  const slugToId = {};
+  for (const p of (pageData.pages || [])) if (p && p.slug) slugToId[p.slug] = p.id;
+  const entry = (item, extraStyle, cls, mobile) => {
+    const id = item && item.kind === 'page' ? slugToId[item.href] : null;
+    const style = extraStyle ? ' style="' + extraStyle + '"' : '';
+    const klass = cls ? ' class="' + cls + '"' : '';
+    if (id && /^[a-z0-9_-]+$/i.test(id)) {
+      return '<button onclick="' + (mobile ? 'closeMobileNav(),' : '') + "showPage('" + id + "')\"" + klass + style + '>' + navEsc(item.label) + '</button>';
+    }
+    const href = String((item && item.href) || '#');
+    const target = /^https?:/.test(href) ? ' target="_blank" rel="noopener"' : '';
+    return '<a href="' + navEsc(href) + '"' + target + klass + style + '>' + navEsc(item && item.label) + '</a>';
+  };
+  const desktop = header.map((i) => '<li>' + entry(i, '', i.style === 'button' ? 'nav-cta' : '', false) + '</li>').join('');
+  let mobile = '';
+  for (const i of header) {
+    mobile += entry(i, '', '', true);
+    for (const c of (i.children || [])) mobile += entry(c, 'padding-left:32px;', '', true);
+  }
+  for (const i of ((menu.footer || []).filter((f) => f && f.kind !== 'page'))) mobile += entry(i, '', '', false);
+  return { desktop, mobile };
+}
+
+export function rewriteDocument(res, { socialImage, pageId, blocksHtml, blockCss, appearance, nav }) {
   let rw = new HTMLRewriter();
+  if (nav && nav.desktop) {
+    rw = rw
+      .on('ul.nav-links', { element(el) { el.setInnerContent(nav.desktop, { html: true }); } })
+      .on('#navMobile', { element(el) { el.setInnerContent(nav.mobile, { html: true }); } });
+  }
   if (socialImage) {
     rw = rw
       .on('meta[property="og:image"]', { element(el) { el.setAttribute('content', socialImage); } })
@@ -932,6 +974,7 @@ export default {
       let blocksHtml = '';
       let blockCss = '';
       let appearance = null;
+      let nav = null;
       try {
         const pageData = await pagesPromise;
         if (pageData) {
@@ -944,12 +987,13 @@ export default {
           // read for EVERY page, not just a published one: the chrome is on all
           // 28 of them and flashes on all 28.
           appearance = (pageData.details && pageData.details.appearance) || null;
+          nav = menuNavHtml(pageData);
         }
       } catch (_) { /* fall through to the client-side takeover */ }
 
-      if (socialImage || blocksHtml || appearance) {
+      if (socialImage || blocksHtml || appearance || nav) {
         return withAssetCaching(
-          rewriteDocument(assetRes, { socialImage, pageId, blocksHtml, blockCss, appearance }),
+          rewriteDocument(assetRes, { socialImage, pageId, blocksHtml, blockCss, appearance, nav }),
           url.pathname,
         );
       }
