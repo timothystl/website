@@ -167,36 +167,46 @@ export async function verifyPasswordOrDummy(password, stored) {
 }
 
 // ── LOGIN / RESET THROTTLING ──────────────────────────────────
-// RP-12/13: counted from audit_log rows, the way per-IP login throttling
-// always was, so no new table is needed. A username is throttled whatever
-// address the attempts come from, so rotating IPs does not help.
 export const LOGIN_FAIL_LIMIT = 10;
 export const RESET_REQUEST_IP_LIMIT = 5;
 export const RESET_REQUEST_ADDRESS_LIMIT = 3;
 
-async function countAudit(db, where, bind, cutoff) {
-  const r = await db.prepare(
-    `SELECT COUNT(*) as n FROM audit_log WHERE ${where} AND created_at > ?`
-  ).bind(...bind, cutoff).first().catch(() => ({ n: 0 }));
-  return r?.n || 0;
+async function reserveAuthAttempts(db, buckets, windowMs) {
+  try {
+    const now = Date.now();
+    await db.prepare(`CREATE TABLE IF NOT EXISTS auth_attempt_limits (
+      bucket TEXT PRIMARY KEY, used INTEGER NOT NULL, expires_at INTEGER NOT NULL
+    )`).run();
+    await db.prepare(`DELETE FROM auth_attempt_limits WHERE bucket IN
+      (SELECT bucket FROM auth_attempt_limits WHERE expires_at <= ? LIMIT 100)`).bind(now).run();
+    const statements = await Promise.all(buckets.map(async ({ key, limit }) => {
+      const bucket = await hashResetToken(key);
+      return db.prepare(`INSERT INTO auth_attempt_limits(bucket,used,expires_at) VALUES (?,1,?)
+        ON CONFLICT(bucket) DO UPDATE SET
+          used=CASE WHEN expires_at<=? THEN 1 ELSE used+1 END,
+          expires_at=CASE WHEN expires_at<=? THEN excluded.expires_at ELSE expires_at END
+        WHERE expires_at<=? OR used<? RETURNING used`)
+        .bind(bucket, now + windowMs, now, now, now, limit);
+    }));
+    const results = await db.batch(statements);
+    return results.length !== buckets.length || results.some(result => result.success === false || result.results?.length !== 1);
+  } catch {
+    return true;
+  }
 }
 
-// created_at is written as an ISO string (see logAudit), so the window is
-// computed here rather than with SQLite's datetime(), which formats differently.
-const since = (ms) => new Date(Date.now() - ms).toISOString();
-
 export async function loginThrottled(db, ip, username) {
-  const cutoff = since(15 * 60 * 1000);
-  if (ip && await countAudit(db, `action = 'login_failed' AND entity_label = ?`, [ip], cutoff) >= LOGIN_FAIL_LIMIT) return true;
-  if (username && await countAudit(db, `action = 'login_failed' AND username = ?`, [username], cutoff) >= LOGIN_FAIL_LIMIT) return true;
-  return false;
+  return reserveAuthAttempts(db, [
+    { key: 'login:ip:' + (ip || 'unknown'), limit: LOGIN_FAIL_LIMIT },
+    { key: 'login:username:' + (username || '(empty)'), limit: LOGIN_FAIL_LIMIT },
+  ], 15 * 60 * 1000);
 }
 
 export async function resetRequestThrottled(db, ip, email) {
-  const cutoff = since(60 * 60 * 1000);
-  if (ip && await countAudit(db, `action = 'reset_requested' AND entity_label = ?`, [ip], cutoff) >= RESET_REQUEST_IP_LIMIT) return true;
-  if (email && await countAudit(db, `action = 'reset_requested' AND entity_id = ?`, [email], cutoff) >= RESET_REQUEST_ADDRESS_LIMIT) return true;
-  return false;
+  return reserveAuthAttempts(db, [
+    { key: 'reset:ip:' + (ip || 'unknown'), limit: RESET_REQUEST_IP_LIMIT },
+    { key: 'reset:email:' + String(email || '').trim().toLowerCase(), limit: RESET_REQUEST_ADDRESS_LIMIT },
+  ], 60 * 60 * 1000);
 }
 
 // ── PASSWORD RESET TOKENS (RP-12) ─────────────────────────────

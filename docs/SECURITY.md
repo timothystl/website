@@ -21,6 +21,15 @@ immediate authorization backstop.
 TinyMCE is self-hosted under `admin/vendor/tinymce/`. Do not add a cloud key, paid cloud load, or
 CDN dependency. Credentials belong in GitHub/Cloudflare managed secrets, never source or docs.
 
+Password login and reset requests reserve atomic counters in `auth_attempt_limits` before
+password verification or reset delivery. Counters use hashed bucket identities and fixed windows:
+10 login submissions per IP or username in 15 minutes, and five reset requests per IP or three per
+normalized email in one hour. Successful login submissions also count. Audit logging is independent;
+an audit outage cannot disable throttling. Counter failures refuse the request, and expired buckets
+are removed in bounded batches. The table is created on first use without changing existing records.
+If this protection fails operationally, repair its storage or use the authorized shared staff login;
+do not restore audit-dependent permissive fallback.
+
 Protect subscriber, contact/prayer, renter, vendor, gift, payroll, authentication, and audit data.
 Do not include those values in issues or logs. The `CONNECT_WORKER` binding is an intentional
 narrow backend dependency; durable replay and bounded retries prevent silent loss without making

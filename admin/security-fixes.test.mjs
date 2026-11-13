@@ -16,12 +16,20 @@ const group = (n) => console.log('\n' + n);
 
 function d1(db) {
   const stmt = (sql, args = []) => ({
+    sql, args,
     bind: (...a) => stmt(sql, a),
     first: async () => db.prepare(sql).get(...args) ?? null,
     all: async () => ({ results: db.prepare(sql).all(...args) }),
     run: async () => { const r = db.prepare(sql).run(...args); return { meta: { changes: Number(r.changes) } }; },
   });
-  return { prepare: (sql) => stmt(sql) };
+  return { prepare: (sql) => stmt(sql), async batch(statements) {
+    db.exec('BEGIN');
+    try {
+      const results = statements.map(statement => ({ success: true, results: db.prepare(statement.sql).all(...statement.args) }));
+      db.exec('COMMIT');
+      return results;
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  } };
 }
 const fresh = () => {
   const raw = new DatabaseSync(':memory:');
@@ -75,11 +83,13 @@ group('RP-13 login throttling and timing');
 {
   const { db } = fresh();
   for (let i = 0; i < LOGIN_FAIL_LIMIT; i++) {
+    await loginThrottled(db, '2.2.2.' + i, 'pastor');
     await logAudit(db, { id: null, username: 'pastor' }, 'login_failed', 'auth', '', '2.2.2.' + i, null, null);
   }
   ok(await loginThrottled(db, '8.8.8.8', 'pastor'), 'a username is locked out across rotating IPs');
   ok(!(await loginThrottled(db, '8.8.8.8', 'someone-else')), 'other usernames are not');
   for (let i = 0; i < LOGIN_FAIL_LIMIT; i++) {
+    await loginThrottled(db, '3.3.3.3', 'u' + i);
     await logAudit(db, { id: null, username: 'u' + i }, 'login_failed', 'auth', '', '3.3.3.3', null, null);
   }
   ok(await loginThrottled(db, '3.3.3.3', 'fresh'), 'the per-address limit still applies');
