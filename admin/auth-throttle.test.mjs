@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { loginThrottled, resetRequestThrottled, logAudit } from './auth.js';
+import { wrapDbForAttribution } from './db-attribution.js';
 
 function database() {
   const raw = new DatabaseSync(':memory:');
@@ -19,6 +20,17 @@ function database() {
     } catch (error) { raw.exec('ROLLBACK'); throw error; }
   } };
 }
+
+test('wrapped D1 methods retain their real receiver for atomic login counters', async () => {
+  class BoundDatabase {
+    #database = database();
+    prepare(sql) { return this.#database.prepare(sql); }
+    batch(statements) { return this.#database.batch(statements); }
+  }
+  const { db } = wrapDbForAttribution(new BoundDatabase());
+  assert.equal(await loginThrottled(db, 'synthetic-ip', 'synthetic-user'), false);
+  assert.equal(await loginThrottled(db, 'synthetic-ip', 'synthetic-user'), false);
+});
 
 test('concurrent attempts remain limited with no audit table or audit writes', async () => {
   const db = database();
