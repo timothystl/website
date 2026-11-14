@@ -77,6 +77,9 @@ jobs:
       - name: Newsletter confirmation cannot be bypassed
         run: node --experimental-loader ./test/html-loader.mjs test/newsletter-confirmation.test.mjs
 
+      - name: Payroll relay identity and upstream boundary
+        run: node --experimental-loader ./test/html-loader.mjs test/payroll-relay-origin.test.mjs
+
       - name: Shared staff login exchange
         run: node test/shared-staff-login.test.mjs
 

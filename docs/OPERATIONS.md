@@ -37,6 +37,13 @@ the Cloudflare token audit and rotation map is
   reaches through its `PAYROLL_SERVICE` binding to `timothy-website-admin`. The relay does not move
   payroll ownership; shared staff login and the payroll migration are unfinished
   ([DATA-OWNERSHIP.md](DATA-OWNERSHIP.md)). Renaming this Worker requires redeploying Finance.
+  For authenticated Finance relay calls, Website supplies the public anon-role upstream headers
+  and its server-only payroll secret. Finance needs only the contract key and forwarded staff JWT;
+  Website still requires an active account with payroll_manage. The 17-RPC allowlist and approved
+  period lock remain enforced. Existing browser payroll calls keep their current header path.
+  Release this provider before Finance removes its legacy upstream headers. To roll back the
+  provider to an older release, first restore the older Finance client that sends those headers.
+  No payroll tables, credentials or permissions are migrated by this transport cleanup.
 - The Stax public giving mockup (`give-stax-mockup.js`) is Website-owned; Connect keeps the giving
   backend. It is not a live-provider cutover.
 
