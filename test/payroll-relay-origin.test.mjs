@@ -63,6 +63,7 @@ const env = {
   FINANCE_PAYROLL_CONTRACT_KEY: CONTRACT_KEY,
   FINANCE_ACCESS_TEAM_DOMAIN: TEAM,
   FINANCE_ACCESS_AUD: AUD,
+  PAYROLL_PROXY_SECRET: 'synthetic-payroll-secret',
 };
 await worker.fetch(new Request('https://admin.timothystl.org/login'), env, ctx);
 
@@ -78,10 +79,16 @@ const keyPair = await makeKeyPair();
 const jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
 jwk.kid = 'test-kid';
 const originalFetch = globalThis.fetch;
-globalThis.fetch = async (input) => {
+const upstreamRequests = [];
+let lockedPeriod = false;
+globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input.url;
   if (url === CERTS_URL) return new Response(JSON.stringify({ keys: [jwk] }), { status: 200 });
   if (url.startsWith('https://dahdstopsumxnqvdclmy.supabase.co/')) {
+    upstreamRequests.push(new Request(input, init));
+    if (url.endsWith('/payroll_get_period_approval')) {
+      return Response.json(lockedPeriod ? [{ period_start: '2026-11-02' }] : []);
+    }
     return new Response(JSON.stringify([{ id: 'abc', full_name: 'Real Person' }]), { status: 200 });
   }
   throw new Error(`Unexpected fetch in test: ${url}`);
@@ -106,6 +113,80 @@ try {
     eq(res.status, 200, 'a contract-relay call with no Origin/Referer header succeeds');
     const body = await res.json();
     ok(Array.isArray(body) && body.length === 1, 'and the real RPC response is returned');
+  }
+
+  group('Website supplies the upstream identity for Finance without forwarding its credentials');
+  {
+    const forwarded = upstreamRequests.at(-1);
+    const anonKey = forwarded.headers.get('apikey');
+    ok(Boolean(anonKey), 'a Finance request without Supabase headers receives the upstream anon key');
+    const claims = JSON.parse(Buffer.from(anonKey.split('.')[1], 'base64url').toString());
+    eq(claims.role, 'anon', 'the upstream credential is only the public anon role');
+    eq(forwarded.headers.get('authorization'), `Bearer ${anonKey}`, 'upstream uses the same anon identity');
+    eq(forwarded.headers.get('X-Contract-Key'), null, 'Finance contract key is not sent upstream');
+    eq(forwarded.headers.get('Cf-Access-Jwt-Assertion'), null, 'staff Access token is not sent upstream');
+    eq((await forwarded.json()).p_secret, env.PAYROLL_PROXY_SECRET, 'Website injects its server-side payroll secret');
+
+    const token = await signToken(keyPair.privateKey, 'test-kid', accessJwtPayload());
+    const response = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+      method: 'POST',
+      headers: { 'X-Contract-Key': CONTRACT_KEY, 'Cf-Access-Jwt-Assertion': token,
+        apikey: 'caller-supplied-key', Authorization: 'Bearer caller-supplied-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_secret: 'caller-supplied-secret' }),
+    }), env, ctx);
+    eq(response.status, 200, 'older Finance clients may still send upstream headers');
+    const next = upstreamRequests.at(-1);
+    eq(next.headers.get('apikey'), anonKey, 'caller apikey cannot select the upstream identity');
+    eq(next.headers.get('authorization'), `Bearer ${anonKey}`, 'caller bearer token is replaced');
+    eq((await next.json()).p_secret, env.PAYROLL_PROXY_SECRET, 'caller body cannot select the payroll secret');
+  }
+
+  group('period-lock reads and writes use the same server-selected credentials');
+  {
+    const token = await signToken(keyPair.privateKey, 'test-kid', accessJwtPayload());
+    const makeSave = () => new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_save_hours', {
+      method: 'POST', headers: { 'X-Contract-Key': CONTRACT_KEY, 'Cf-Access-Jwt-Assertion': token,
+        'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_staff_id: 'synthetic-staff', p_period_start: '2026-11-02', p_hours_worked: 20 }),
+    });
+    let before = upstreamRequests.length;
+    let response = await worker.fetch(makeSave(), env, ctx);
+    eq(response.status, 200, 'an unlocked period can still be saved');
+    eq(upstreamRequests.length - before, 2, 'approval is checked before the write');
+    const [check, save] = upstreamRequests.slice(-2);
+    eq(check.headers.get('apikey'), save.headers.get('apikey'), 'check and write have identical upstream keys');
+    ok(check.url.endsWith('/payroll_get_period_approval'), 'first request is the approval check');
+    ok(save.url.endsWith('/payroll_save_hours'), 'second request is the save');
+    lockedPeriod = true;
+    before = upstreamRequests.length;
+    response = await worker.fetch(makeSave(), env, ctx);
+    eq(response.status, 409, 'an approved period remains locked');
+    eq(upstreamRequests.length - before, 1, 'a locked period never reaches the write');
+    lockedPeriod = false;
+  }
+
+  group('an active staff identity still needs Website payroll permission');
+  {
+    const token = await signToken(keyPair.privateKey, 'test-kid', accessJwtPayload());
+    db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run('[]', uid);
+    const before = upstreamRequests.length;
+    const response = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+      method: 'POST', headers: { 'X-Contract-Key': CONTRACT_KEY, 'Cf-Access-Jwt-Assertion': token,
+        'Content-Type': 'application/json' }, body: '{}',
+    }), env, ctx);
+    eq(response.status, 401, 'valid staff identity without payroll_manage is refused');
+    eq(upstreamRequests.length, before, 'no payroll data is requested');
+    db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(JSON.stringify(['payroll_manage']), uid);
+  }
+
+  group('missing contract authentication cannot acquire a payroll connection');
+  {
+    const before = upstreamRequests.length;
+    const response = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }), env, ctx);
+    eq(response.status, 401, 'missing staff and contract identity is denied');
+    eq(upstreamRequests.length, before, 'no upstream request is made for an unauthenticated caller');
   }
 
   group('a browser session with no Origin/Referer is still blocked (the check still does its job)');
