@@ -981,6 +981,11 @@ export default {
     // authenticating here costs nothing extra. Fails closed (no session/error
     // => 401) rather than trusting the Supabase anon key alone as the boundary.
     const MDO_SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+    // Public anon-role key already shipped in admin/payroll.html. Website owns the
+    // upstream connection: Finance supplies only contract authentication + staff JWT.
+    // This is not payroll authorization; active-user/payroll_manage checks and the
+    // server-only PAYROLL_PROXY_SECRET below remain mandatory.
+    const PAYROLL_UPSTREAM_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
     if (path.startsWith('/sb/')) {
       if (method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: {
@@ -1057,6 +1062,14 @@ export default {
       for (const h of ['apikey', 'authorization', 'content-type', 'prefer', 'x-client-info']) {
         const v = request.headers.get(h);
         if (v) outHeaders.set(h, v);
+      }
+
+      if (viaContractRelay) {
+        // Ignore caller-supplied database credentials on authenticated service calls.
+        // Old Finance releases may still send them; new releases need none. Browser
+        // payroll requests retain their existing upstream header path.
+        outHeaders.set('apikey', PAYROLL_UPSTREAM_ANON_KEY);
+        outHeaders.set('authorization', `Bearer ${PAYROLL_UPSTREAM_ANON_KEY}`);
       }
 
       // ── the payroll_* RPC functions, and the shared secret that gates them ──
