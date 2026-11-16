@@ -465,7 +465,10 @@ export async function pageData(env, reqKey) {
       // Each ministry page's core value, as set on the Ministries screen, keyed
       // by its public address — so a card grid grouped by value can place a
       // card from the link it already has. See the `byValue` switch.
-      q('SELECT p.slug, y.value FROM youth_pages y JOIN pages p ON p.id = y.slug WHERE y.value IS NOT NULL'),
+      // ⚠ Keyed by BOTH the page's address and its short id: a card often
+      // links the short form (/bees) of a page that lives at a longer one
+      // (/ministries/timothy-urban-beekeepers).
+      q('SELECT p.id, p.slug, y.value FROM youth_pages y JOIN pages p ON p.id = y.slug WHERE y.value IS NOT NULL'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -516,8 +519,11 @@ export async function pageData(env, reqKey) {
         };
       }),
       pageValues: Object.fromEntries((ministryValueRows || [])
-        .filter((r) => r.slug && r.value)
-        .map((r) => [String(r.slug).replace(/\/+$/, '').toLowerCase(), r.value])),
+        .filter((r) => r.value)
+        .flatMap((r) => [
+          r.id ? ['/' + String(r.id).toLowerCase(), r.value] : null,
+          r.slug ? [String(r.slug).replace(/\/+$/, '').toLowerCase(), r.value] : null,
+        ].filter(Boolean))),
       partners: partners.map((p) => ({
         id: p.id, name: p.name, shortName: p.short_name || '',
         url: p.site_url || '', logo: p.logo_url || '',
