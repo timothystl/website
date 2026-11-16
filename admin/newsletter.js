@@ -17,7 +17,7 @@ import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { valueByKey, normalizeValue } from './values.js';
 import { churchDate, churchDatePlus } from './when.js';
 import { scheduleNewsletter, cancelNewsletterSchedule, withScheduleOperation } from './newsletter-schedule.js';
-import { sendBrevoNewsletter, buildEmailHtml, getBrevoListCount } from './email.js';
+import { sendBrevoNewsletter, buildEmailHtml, getBrevoListCount, SECTION_ORDER_DEFAULT, SECTION_LABELS, normalizeSectionOrder } from './email.js';
 import { pushToAllSubscribers } from './webpush.js';
 import { sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './gym.js';
 import { mergedCategories, activeCategories, normalizeClock, fetchGoogleEvents, parseCalendarIds, findCalendarMatches, findGroupSuggestions, parseTitleList } from './calendar.js';
@@ -122,6 +122,56 @@ function quickFooterSwitches(settings, disabled = false, fmt = 'quick') {
       ${fmt === 'quick' ? '' : sw('show_calendar_link', 'View full calendar', settings.calendar, 'link beside the pastor’s note')}
       ${sw('show_website_button', 'Read on our website', settings.web, 'button at the bottom')}
       ${sw('show_give_button', 'Give online', settings.give, 'button at the bottom')}
+    </div>`;
+}
+
+// ── SECTION ORDER (DRAG AND DROP) ────────────────────────────
+// The sections below the pastor's note can be dragged into any order; the
+// order posts as one comma list in `section_order`. Up/down buttons do the
+// same job for anyone not using a mouse. The email follows the order (see
+// normalizeSectionOrder() in admin/email.js); NULL keeps the legacy layout.
+export function sectionOrderCard(stored, disabled = false) {
+  const order = normalizeSectionOrder(stored) || SECTION_ORDER_DEFAULT;
+  const item = (k) => `<li class="nl-ord-item" draggable="${disabled ? 'false' : 'true'}" data-key="${k}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin:0 0 6px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:${disabled ? 'default' : 'grab'};">
+      <span aria-hidden="true" style="color:var(--gray);font-size:16px;line-height:1;">⠿</span>
+      <span style="flex:1;font-size:14px;">${escapeHtml(SECTION_LABELS[k])}</span>
+      ${disabled ? '' : `<button type="button" class="nl-ord-up" aria-label="Move ${escapeHtml(SECTION_LABELS[k])} up" style="border:0;background:none;cursor:pointer;font-size:13px;color:var(--gray);">▲</button><button type="button" class="nl-ord-down" aria-label="Move ${escapeHtml(SECTION_LABELS[k])} down" style="border:0;background:none;cursor:pointer;font-size:13px;color:var(--gray);">▼</button>`}
+    </li>`;
+  return `<div class="card">
+      <div class="card-title">Order of sections</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Drag to rearrange, or use the arrows. The pastor's note and upcoming events always come first; everything else prints in this order. A section with nothing in it is skipped.</div>
+      <ul id="nl-ord" style="list-style:none;margin:0;padding:0;">${order.map(item).join('')}</ul>
+      <input type="hidden" name="section_order" id="nl-ord-val" value="${order.join(',')}">
+      ${disabled ? '' : `<script>
+(function(){
+  var list = document.getElementById('nl-ord'), val = document.getElementById('nl-ord-val');
+  if (!list || !val) return;
+  function sync(){
+    val.value = Array.prototype.map.call(list.querySelectorAll('.nl-ord-item'), function(li){ return li.getAttribute('data-key'); }).join(',');
+    // The live preview redraws on a change event from the form.
+    val.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  var dragging = null;
+  list.addEventListener('dragstart', function(e){
+    dragging = e.target.closest('.nl-ord-item'); if (!dragging) return;
+    dragging.style.opacity = '.5';
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragging.getAttribute('data-key')); } catch(_){}
+  });
+  list.addEventListener('dragend', function(){ if (dragging) dragging.style.opacity = ''; dragging = null; sync(); });
+  list.addEventListener('dragover', function(e){
+    if (!dragging) return; e.preventDefault();
+    var over = e.target.closest('.nl-ord-item'); if (!over || over === dragging) return;
+    var r = over.getBoundingClientRect();
+    list.insertBefore(dragging, (e.clientY - r.top) > r.height / 2 ? over.nextSibling : over);
+  });
+  list.addEventListener('drop', function(e){ e.preventDefault(); });
+  list.addEventListener('click', function(e){
+    var li = e.target.closest('.nl-ord-item'); if (!li) return;
+    if (e.target.closest('.nl-ord-up') && li.previousElementSibling) { list.insertBefore(li, li.previousElementSibling); sync(); }
+    if (e.target.closest('.nl-ord-down') && li.nextElementSibling) { list.insertBefore(li.nextElementSibling, li); sync(); }
+  });
+})();
+</script>`}
     </div>`;
 }
 
@@ -603,7 +653,7 @@ export function defaultUpcomingEventIds(posts, cutoffDate) {
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
   const row = await env.DB.prepare(
-    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes, show_website_button, show_give_button, show_calendar_link FROM newsletters WHERE id = ?'
+    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes, show_website_button, show_give_button, show_calendar_link, section_order FROM newsletters WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
 
@@ -633,7 +683,7 @@ async function buildNewsletterEmailPayload(env, id) {
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
   }
 
-  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading), quickFooterSettings(row));
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading), quickFooterSettings(row), (row.format || 'weekly') === 'weekly' ? normalizeSectionOrder(row.section_order) : null);
   return { row, emailHtml };
 }
 
@@ -991,6 +1041,7 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
 
   <!-- WEEKLY FIELDS -->
   <div id="weekly-fields">
+    ${sectionOrderCard(null)}
     <div class="card">
       <div class="card-title">Pastor's note</div>
       <div class="form-group">
@@ -1265,6 +1316,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     const showGiveButton = footerStored.show_give_button;
     const showCalendarLink = footerStored.show_calendar_link;
     const footerButtons = quickFooterSettings({ format: fmt, ...footerStored });
+    const sectionOrderList = fmt === 'weekly' ? normalizeSectionOrder(form.get('section_order')) : null;
+    const sectionOrder = sectionOrderList ? sectionOrderList.join(',') : null;
 
     // Combine for storage: quick announcements store message in pastor_note
     const savedNote = fmt === 'quick' ? quickBody : pastorNote;
@@ -1317,8 +1370,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (editId && !conflict) {
       // Update existing newsletter
       await env.DB.prepare(
-        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, show_website_button=?, show_give_button=?, show_calendar_link=?, updated_at=?, updated_by=? WHERE id=?'
-      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, nowIso, currentUser?.username || '', editId).run();
+        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, show_website_button=?, show_give_button=?, show_calendar_link=?, section_order=?, updated_at=?, updated_by=? WHERE id=?'
+      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, sectionOrder, nowIso, currentUser?.username || '', editId).run();
       newsletterId = parseInt(editId, 10);
       // Replace events
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
@@ -1332,8 +1385,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       const insertStatus = conflict ? 'draft' : status;
       const insertSubject = conflict ? `Recovered — ${subject}` : subject;
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, show_website_button, show_give_button, show_calendar_link, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, nowIso, currentUser?.username || '').run();
+        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, show_website_button, show_give_button, show_calendar_link, section_order, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, sectionOrder, nowIso, currentUser?.username || '').run();
       newsletterId = result.meta.last_row_id;
     }
 
@@ -1383,7 +1436,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       if (!listId) {
         emailSuffix = `&emailerr=${encodeURIComponent(emailSend === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
-        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading, footerButtons);
+        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading, footerButtons, sectionOrderList);
         const result = await withScheduleOperation(env, newsletterId, async current => {
           if (current.brevo_campaign_id || current.scheduled_send_at || current.sent_at) {
             return { error: 'This issue already has a campaign or has been sent. Use Reschedule for the existing campaign, or cancel its schedule first.' };
@@ -1977,6 +2030,7 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
 </div>
 
   <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
+    ${sectionOrderCard(row.section_order, nlLocked)}
     <div class="card">
       <div class="card-title">Pastor's note</div>
       <div class="form-group">
@@ -2390,7 +2444,8 @@ ${classesJs}
       classes,
       extrasFromForm(f),
       fmt === 'weekly' ? normalizePastorNoteHeading(f.get('pastor_note_heading')) : '',
-      quickFooterSettings({ format: fmt, ...footerSwitchesFromForm(f, fmt) })
+      quickFooterSettings({ format: fmt, ...footerSwitchesFromForm(f, fmt) }),
+      fmt === 'weekly' ? normalizeSectionOrder(f.get('section_order')) : null
     );
     return new Response(emailHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
@@ -2431,14 +2486,14 @@ ${classesJs}
     // original drops out of the public archive; until then it is untouched.
     const supersedesId = isSent(row) ? row.id : null;
     const result = await env.DB.prepare(
-      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id, show_website_button, show_give_button, show_calendar_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id, show_website_button, show_give_button, show_calendar_link, section_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       `Copy of ${row.subject}`, row.pastor_note, normalizePastorNoteHeading(row.pastor_note_heading), row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
       row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
       row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
       // A copy carries the extra notes too — the whole point of duplicating a
       // sent issue is to start from what actually went out.
-      row.extra_notes || '[]', supersedesId, row.show_website_button ?? null, row.show_give_button ?? null, row.show_calendar_link ?? null
+      row.extra_notes || '[]', supersedesId, row.show_website_button ?? null, row.show_give_button ?? null, row.show_calendar_link ?? null, row.section_order ?? null
     ).run();
     const newId = result.meta.last_row_id;
     for (const e of eventsRows.results) {

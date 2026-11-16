@@ -126,9 +126,29 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
   return { success: true };
 }
 
+// ── REORDERABLE BODY SECTIONS ────────────────────────────────
+// Below the pastor's note and events, these can be dragged into any order.
+export const SECTION_ORDER_DEFAULT = ['secondary', 'news', 'ministry', 'tertiary', 'extras', 'classes'];
+export const SECTION_LABELS = {
+  secondary: 'Second note', news: 'News posts', ministry: 'Word of Life & LASM',
+  tertiary: 'Third note & button', extras: 'More notes', classes: 'Bible classes',
+};
+// Accepts an array or a comma string. Unknown keys are dropped and any
+// missing ones appended in default order, so a section can never vanish
+// because of a stale saved order. Nothing stored → null (legacy layout).
+export function normalizeSectionOrder(raw) {
+  if (raw == null || raw === '') return null;
+  const list = Array.isArray(raw) ? raw : String(raw).split(',');
+  const seen = [];
+  for (const k of list.map((x) => String(x).trim())) if (SECTION_ORDER_DEFAULT.includes(k) && !seen.includes(k)) seen.push(k);
+  if (!seen.length) return null;
+  for (const k of SECTION_ORDER_DEFAULT) if (!seen.includes(k)) seen.push(k);
+  return seen;
+}
+
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note", footerButtons = { web: true, give: true }) {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note", footerButtons = { web: true, give: true }, sectionOrder = null) {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -333,6 +353,33 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
 
+  // ── WORD OF LIFE / LASM: HEADLINES WHEN IT RUNS LONG ──
+  // These come in as several items, each a <p> opening with a bold headline.
+  // Six of them in full made the email a wall of text, so past a length the
+  // column shows just the headlines and links to the full issue on the
+  // website, where every item is printed in full.
+  const MINISTRY_FULL_LIMIT = 600;
+  const fullIssueUrl = `https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}`;
+  function ministryDigest(html) {
+    const text = String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    if (text.length <= MINISTRY_FULL_LIMIT) return html;
+    const heads = [];
+    const re = /<p[^>]*>\s*<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      const h = m[2].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      if (h) heads.push(h);
+    }
+    const more = `<div style="margin-top:8px;"><a href="${esc(fullIssueUrl)}" style="font-size:12px;font-weight:700;color:#6B8F71;text-decoration:none;">Read all on our website</a></div>`;
+    if (heads.length < 2) return truncate(html, MINISTRY_FULL_LIMIT) + more;
+    // Headline text was stripped of tags above, so it is re-escaped here
+    // (entities like &amp; are decoded first so they are not doubled).
+    const decode = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&rsquo;/g, '’').replace(/&mdash;/g, '—');
+    return `<ul style="margin:0;padding-left:18px;">${heads.map((h) => `<li style="margin:0 0 5px;">${esc(decode(h))}</li>`).join('')}</ul>${more}`;
+  }
+  wolContent = ministryDigest(wolContent);
+  lasmContent = ministryDigest(lasmContent);
+
   // WOL + LASM side by side — full width when only one is present
   const ministryCol = (label, content, width) => `<td class="min-col" width="${width}" valign="top" style="background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;">
       <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">${label}</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#1A1A2A;line-height:1.7;">${content}</div>
@@ -384,6 +431,49 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </table>
 </td></tr>` : '';
 
+  // ── SECTION ORDER ──
+  // The sections below the pastor's note can be dragged into any order in the
+  // editor. An issue saved before that existed (no order stored) keeps the
+  // exact legacy layout, below.
+  const classesHtml = bibleClasses && bibleClasses.length ? `
+<tr><td style="padding-top:22px;border-top:1px solid #E7DFD1;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1E2D4A;margin-bottom:12px;">Bible Classes</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    ${bibleClasses.map(c => `<tr><td style="padding:9px 0;border-bottom:1px solid #F0E8DC;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${c.date ? `<td width="42" valign="top"><div style="background:#1E2D4A;color:white;border-radius:5px;padding:5px 6px;text-align:center;width:34px;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">${new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{month:'short'})}</div><div style="font-family:'Lora',Georgia,serif;font-size:16px;line-height:1.1;color:white;">${new Date(c.date+'T12:00:00').getDate()}</div></div></td>` : ''}
+        <td style="padding-left:${c.date?'9':'0'}px;vertical-align:top;">
+          <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${esc(c.topic)}</div>
+          <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${esc([c.leader,c.location].filter(Boolean).join(' · '))}</div>
+        </td>
+      </tr></table>
+    </td></tr>`).join('')}
+  </table>
+  ${showCalendar ? `<div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a></div>` : ''}
+</td></tr>` : '';
+  const secondaryNoteHtml = secondaryNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:0;"><tr><td style="padding:18px 0 0;border-top:1px solid #E7DFD1;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#1A1A2A;line-height:1.8;">${secondaryNote}</div></td></tr></table>` : '';
+  const wrapRows = (rowsHtml) => rowsHtml ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">${rowsHtml}</table>` : '';
+  const order = normalizeSectionOrder(sectionOrder);
+  const bodySectionsHtml = order
+    ? order.map((k) => ({
+        secondary: secondaryNoteHtml,
+        news: wrapRows(mainNewsHtml + secondaryNewsHtml + additionalNewsHtml),
+        ministry: wrapRows(ministryRowHtml),
+        tertiary: wrapRows(tertiaryNoteHtml),
+        extras: wrapRows(extraNotesHtml),
+        classes: wrapRows(classesHtml),
+      }[k] || '')).join('\n')
+    : `${secondaryNoteHtml}
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
+          ${mainNewsHtml}
+          ${secondaryNewsHtml}
+          ${ministryRowHtml}
+          ${tertiaryNoteHtml}
+          ${extraNotesHtml}
+          ${additionalNewsHtml}
+          ${classesHtml}
+        </table>`;
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -429,33 +519,8 @@ img{max-width:100% !important;height:auto !important;}
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>` : ''}
           </tr>
         </table>
-        <!-- secondary note (typed) -->
-        ${secondaryNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:0;"><tr><td style="padding:18px 0 0;border-top:1px solid #E7DFD1;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#1A1A2A;line-height:1.8;">${secondaryNote}</div></td></tr></table>` : ''}
-        <!-- news + ministry sections -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
-          ${mainNewsHtml}
-          ${secondaryNewsHtml}
-          ${ministryRowHtml}
-          ${tertiaryNoteHtml}
-          ${extraNotesHtml}
-          ${additionalNewsHtml}
-          ${bibleClasses && bibleClasses.length ? `
-<tr><td style="padding-top:22px;border-top:1px solid #E7DFD1;">
-  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1E2D4A;margin-bottom:12px;">Bible Classes</div>
-  <table width="100%" cellpadding="0" cellspacing="0">
-    ${bibleClasses.map(c => `<tr><td style="padding:9px 0;border-bottom:1px solid #F0E8DC;">
-      <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${c.date ? `<td width="42" valign="top"><div style="background:#1E2D4A;color:white;border-radius:5px;padding:5px 6px;text-align:center;width:34px;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">${new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{month:'short'})}</div><div style="font-family:'Lora',Georgia,serif;font-size:16px;line-height:1.1;color:white;">${new Date(c.date+'T12:00:00').getDate()}</div></div></td>` : ''}
-        <td style="padding-left:${c.date?'9':'0'}px;vertical-align:top;">
-          <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#1E2D4A;">${esc(c.topic)}</div>
-          <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;">${esc([c.leader,c.location].filter(Boolean).join(' · '))}</div>
-        </td>
-      </tr></table>
-    </td></tr>`).join('')}
-  </table>
-  ${showCalendar ? `<div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a></div>` : ''}
-</td></tr>` : ''}
-        </table>
+        <!-- body sections, in the issue's chosen order -->
+${bodySectionsHtml}
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
           ${weeklyFooterButtons ? `<tr><td style="border-top:1px solid #E7DFD1;padding:20px 0;text-align:center;">

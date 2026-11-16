@@ -185,6 +185,10 @@ export function renderListSection(cfg) {
     key, title, purpose = '', action = null, altActions = [], search = '', filters = [], valueChips = false,
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
     empty = 'Nothing here yet.', headerExtra = '', pageSize = 0,
+    // Width of the trailing actions track. 118px fits a lone "Edit"; a list
+    // whose rows carry several actions passes a wider one, or they run
+    // leftward over the status pill (the actions cell does not wrap).
+    actionsWidth = '118px',
     // The second line of the empty state. It defaulted to "Use the button
     // above to add the first one" and was not overridable, which is wrong
     // wherever the reader cannot use that button — a section they can only
@@ -199,7 +203,7 @@ export function renderListSection(cfg) {
   // as two broken words rather than one status — so those get a floor of 126px
   // however the fractions divide up. Everything else is free to shrink. The
   // trailing track is the row's actions.
-  const grid = columns.map((c) => (/status|media|photo/i.test(c.label || '') ? `minmax(126px,${c.width || '1fr'})` : (c.width || '1fr'))).join(' ') + ' 118px';
+  const grid = columns.map((c) => (/status|media|photo/i.test(c.label || '') ? `minmax(126px,${c.width || '1fr'})` : (c.width || '1fr'))).join(' ') + ' ' + actionsWidth;
 
   const head = columns.map((c) => `<span class="tlc-th${c.align === 'right' ? ' tlc-right' : ''}">${esc(c.label)}</span>`).join('')
     + `<span class="tlc-th tlc-right"></span>`;

@@ -16,7 +16,7 @@ import {
   DEFAULT_PASTOR_NOTE_HEADING, PASTOR_NOTE_HEADING_LIMIT, normalizePastorNoteHeading,
   quickFooterSettings, footerSwitchesFromForm,
 } from './newsletter.js';
-import { buildEmailHtml } from './email.js';
+import { buildEmailHtml, normalizeSectionOrder, SECTION_ORDER_DEFAULT } from './email.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -436,6 +436,30 @@ group('special edition footer buttons');
   const long = buildEmailHtml('Weekly', '<p>' + 'word '.repeat(150) + '</p>', [], '', '', '2026-11-16');
   ok(long.includes('Read the full letter'), 'weekly: a note that is cut short still links to the full letter');
   ok(!wkOff.includes('class="events-col"'), 'weekly: with nothing in the sidebar, the note runs full width');
+}
+
+// ── section order and Word of Life / LASM headlines ─────────────────────────
+group('section order and ministry headlines');
+{
+  eq(normalizeSectionOrder(null), null, 'nothing stored keeps the legacy layout');
+  eq(normalizeSectionOrder('classes,news').join(','), 'classes,news,secondary,ministry,tertiary,extras', 'a partial order keeps every section, missing ones appended');
+  eq(normalizeSectionOrder('bogus,news,news').join(','), ['news', ...SECTION_ORDER_DEFAULT.filter((k) => k !== 'news')].join(','), 'unknown and repeated keys are dropped');
+
+  const args = (order, wol = '') => ['Weekly', '<p>Note</p>', [], wol, '', '2026-11-16', [], 'SECOND-NOTE', 7, 'weekly', '', '', 'THIRD-NOTE', '', '', [{ topic: 'CLASS-ROW' }], [], "Pastor's Note", undefined, order];
+  const html = buildEmailHtml(...args(['classes', 'tertiary', 'secondary']));
+  ok(html.indexOf('CLASS-ROW') < html.indexOf('THIRD-NOTE') && html.indexOf('THIRD-NOTE') < html.indexOf('SECOND-NOTE'), 'the email follows the dragged order');
+  const legacy = buildEmailHtml(...args(null));
+  ok(legacy.indexOf('SECOND-NOTE') < legacy.indexOf('THIRD-NOTE') && legacy.indexOf('THIRD-NOTE') < legacy.indexOf('CLASS-ROW'), 'no stored order keeps the old sequence');
+
+  const item = (h) => `<p><strong>${h}</strong><br>${'Details about this item. '.repeat(12)}</p>`;
+  const longWol = item('Fall Portraits') + item('Kindergarten Night') + item('Restaurant Fundraiser &amp; More');
+  const digest = buildEmailHtml(...args(null, longWol));
+  ok(digest.includes('<li style="margin:0 0 5px;">Fall Portraits</li>'), 'long Word of Life content shows headlines');
+  ok(!digest.includes('Details about this item.'), 'and not the full text');
+  ok(digest.includes('Restaurant Fundraiser &amp; More</li>'), 'headline entities are not double-escaped');
+  ok(digest.includes('https://timothystl.org/news/7') && digest.includes('Read all on our website'), 'with a link to the full issue');
+  const short = buildEmailHtml(...args(null, item('Just One').slice(0, 120) + '</p>'));
+  ok(short.includes('Just One</strong>'), 'short content prints in full');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
