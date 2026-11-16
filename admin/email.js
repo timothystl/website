@@ -128,7 +128,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note") {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note", footerButtons = { web: true, give: true }) {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -213,6 +213,15 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
     const ctaButtonHtml = (ctaLabel && ctaUrl)
       ? `<div style="text-align:center;margin:22px 0 0;"><a href="${esc(safeUrl(ctaUrl))}" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:700;padding:12px 28px;border-radius:6px;text-decoration:none;">${esc(ctaLabel)}</a></div>`
       : '';
+    // A special edition carries funeral notices and one-off notes, where a
+    // "Give online" button reads as tone-deaf. Each footer button is the
+    // sender's choice — see quickFooterSettings() in admin/newsletter.js.
+    const showWeb = !!(footerButtons && footerButtons.web);
+    const showGive = !!(footerButtons && footerButtons.give);
+    const quickFooterButtons = [
+      showWeb ? `<a href="https://timothystl.org/news" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;${showGive ? 'margin-right:10px;' : ''}">Read on our website</a>` : '',
+      showGive ? `<a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>` : '',
+    ].filter(Boolean).join('\n            ');
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -241,10 +250,9 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
         ${ctaButtonHtml}
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
-          <tr><td style="border-top:1px solid #E7DFD1;padding:20px 0;text-align:center;">
-            <a href="https://timothystl.org/news" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Read on our website</a>
-            <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
-          </td></tr>
+          ${quickFooterButtons ? `<tr><td style="border-top:1px solid #E7DFD1;padding:20px 0;text-align:center;">
+            ${quickFooterButtons}
+          </td></tr>` : `<tr><td style="border-top:1px solid #E7DFD1;padding:10px 0 0;"></td></tr>`}
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
             Sunday worship · 8:00 &amp; 10:45 am<br>

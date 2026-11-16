@@ -14,7 +14,9 @@ import {
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
   NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict,
   DEFAULT_PASTOR_NOTE_HEADING, PASTOR_NOTE_HEADING_LIMIT, normalizePastorNoteHeading,
+  quickFooterSettings,
 } from './newsletter.js';
+import { buildEmailHtml } from './email.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -394,6 +396,31 @@ group('hasConflict — a real report: type a note, save, and it is gone');
   // its own subsequent reload compares cleanly against what it just wrote.
   eq(hasConflict({ updated_at: '2026-08-20T10:00:00.000Z' }, '2026-08-20T10:00:00.000Z'), false,
     'the same version — no conflict, this is the ordinary case on every save');
+}
+
+
+// ── special edition footer buttons ──────────────────────────────────────────
+group('special edition footer buttons');
+{
+  // Special editions carry funeral notices; a Give button there is out of place.
+  const legacy = quickFooterSettings({ format: 'quick' });
+  eq(legacy.give, false, 'a special edition with nothing stored has no Give button');
+  eq(legacy.web, false, 'nor a Read-on-website button');
+  const on = quickFooterSettings({ format: 'quick', show_give_button: 1, show_website_button: 1 });
+  eq(on.give && on.web, true, 'either can be switched on');
+  const weekly = quickFooterSettings({ format: 'weekly', show_give_button: 0, show_website_button: 0 });
+  eq(weekly.give && weekly.web, true, 'a weekly issue always keeps both');
+
+  const render = (fb) => buildEmailHtml('Funeral notice', '<p>Service details</p>', [], '', '', '2026-11-16', [], '', null, 'quick', '', '', '', '', '', [], [], '', fb);
+  const none = render({ web: false, give: false });
+  ok(!none.includes('Give online'), 'off: the email has no Give button');
+  ok(!none.includes('Read on our website'), 'off: the email has no Read-on-website button');
+  const giveOnly = render({ web: false, give: true });
+  ok(giveOnly.includes('Give online') && !giveOnly.includes('Read on our website'), 'each switch is independent');
+  const both = render({ web: true, give: true });
+  ok(both.includes('Give online') && both.includes('Read on our website'), 'on: both buttons appear');
+  const wk = buildEmailHtml('Weekly', '<p>Note</p>', [], '', '', '2026-11-16');
+  ok(wk.includes('Give online') && wk.includes('Read on our website'), 'the weekly email is unchanged');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
