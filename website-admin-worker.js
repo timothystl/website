@@ -1419,6 +1419,7 @@ export default {
       '/market',                                   // → Market facts, Market application
       '/events',                                   // → Registration block
       '/newsletter',                                // → the newsletterarchive block (/newsletter/hide, /unhide)
+      '/ministries/update',                         // → a ministry's core value places its card under Welcome/Receive/Grow/Go
     ];
     if (method === 'POST' && PAGE_DATA_PREFIXES.some((pre) => path.startsWith(pre))) {
       bustPagesCache(env, ctx);
