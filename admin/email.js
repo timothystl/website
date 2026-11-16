@@ -287,13 +287,27 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </tr></table>
 </td></tr>`).join('') : '';
 
+  // Per-issue switches — see quickFooterSettings() in admin/newsletter.js.
+  // A funeral notice sent as a weekly issue should not end with a giving
+  // button or point at the calendar.
+  const showCalendar = !(footerButtons && footerButtons.calendar === false);
+  // "Read the full letter" only when the note was actually cut short — the
+  // same 500-visible-character test truncate() uses. A short note (a funeral
+  // notice, say) is already all there, and the link just points at itself.
+  const pastorNoteCut = String(pastorNote || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length > 500;
+  const showWebW = !(footerButtons && footerButtons.web === false);
+  const showGiveW = !(footerButtons && footerButtons.give === false);
+  const weeklyFooterButtons = [
+    showWebW ? `<a href="https://timothystl.org/news" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;${showGiveW ? 'margin-right:10px;' : ''}">Read on our website</a>` : '',
+    showGiveW ? `<a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>` : '',
+  ].filter(Boolean).join('\n            ');
   const calendarLink = `<a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a>`;
   const eventsSidebar = eventsRowsHtml ? `
 <div style="background:#F7F3EC;border-radius:8px;padding:14px;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Upcoming</div>
   <table width="100%" cellpadding="0" cellspacing="0">${eventsRowsHtml}</table>
-  <div style="margin-top:12px;text-align:center;">${calendarLink}</div>
-</div>` : `<div style="background:#F7F3EC;border-radius:8px;padding:14px 14px 12px;text-align:center;">${calendarLink}</div>`;
+  ${showCalendar ? `<div style="margin-top:12px;text-align:center;">${calendarLink}</div>` : ''}
+</div>` : (showCalendar ? `<div style="background:#F7F3EC;border-radius:8px;padding:14px 14px 12px;text-align:center;">${calendarLink}</div>` : '');
 
   // Main news (first item — featured)
   const mainNews = newsItems[0] || null;
@@ -408,11 +422,11 @@ img{max-width:100% !important;height:auto !important;}
         <!-- 2/3 pastor note + 1/3 events -->
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E7DFD1;">
-              ${pastorNote ? `<div style="font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:700;color:#1E2D4A;margin-bottom:8px;">${esc(pastorNoteHeading)}</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#1A1A2A;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read the full letter</a></div>` : ''}
+            <td class="pastor-col" width="${eventsSidebar ? '390' : '100%'}" valign="top" style="${eventsSidebar ? 'padding-right:18px;border-right:1px solid #E7DFD1;' : ''}">
+              ${pastorNote ? `<div style="font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:700;color:#1E2D4A;margin-bottom:8px;">${esc(pastorNoteHeading)}</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#1A1A2A;line-height:1.85;">${truncate(pastorNote, 500)}</div>${pastorNoteCut ? `<div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read the full letter</a></div>` : ''}` : ''}
             </td>
-            <td class="spacer-col" width="16"></td>
-            <td class="events-col" width="165" valign="top">${eventsSidebar}</td>
+            ${eventsSidebar ? `<td class="spacer-col" width="16"></td>
+            <td class="events-col" width="165" valign="top">${eventsSidebar}</td>` : ''}
           </tr>
         </table>
         <!-- secondary note (typed) -->
@@ -439,15 +453,14 @@ img{max-width:100% !important;height:auto !important;}
       </tr></table>
     </td></tr>`).join('')}
   </table>
-  <div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a></div>
+  ${showCalendar ? `<div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a></div>` : ''}
 </td></tr>` : ''}
         </table>
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
-          <tr><td style="border-top:1px solid #E7DFD1;padding:20px 0;text-align:center;">
-            <a href="https://timothystl.org/news" style="display:inline-block;background:#1E2D4A;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Read on our website</a>
-            <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#C9973A;color:#1E2D4A;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
-          </td></tr>
+          ${weeklyFooterButtons ? `<tr><td style="border-top:1px solid #E7DFD1;padding:20px 0;text-align:center;">
+            ${weeklyFooterButtons}
+          </td></tr>` : `<tr><td style="border-top:1px solid #E7DFD1;padding:10px 0 0;"></td></tr>`}
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#6A6858;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
             Sunday worship · 8:00 &amp; 10:45 am<br>

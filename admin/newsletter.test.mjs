@@ -14,7 +14,7 @@ import {
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
   NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict,
   DEFAULT_PASTOR_NOTE_HEADING, PASTOR_NOTE_HEADING_LIMIT, normalizePastorNoteHeading,
-  quickFooterSettings,
+  quickFooterSettings, footerSwitchesFromForm,
 } from './newsletter.js';
 import { buildEmailHtml } from './email.js';
 
@@ -408,8 +408,16 @@ group('special edition footer buttons');
   eq(legacy.web, false, 'nor a Read-on-website button');
   const on = quickFooterSettings({ format: 'quick', show_give_button: 1, show_website_button: 1 });
   eq(on.give && on.web, true, 'either can be switched on');
-  const weekly = quickFooterSettings({ format: 'weekly', show_give_button: 0, show_website_button: 0 });
-  eq(weekly.give && weekly.web, true, 'a weekly issue always keeps both');
+  const weeklyLegacy = quickFooterSettings({ format: 'weekly' });
+  eq(weeklyLegacy.give && weeklyLegacy.web && weeklyLegacy.calendar, true, 'a weekly issue with nothing stored keeps everything on');
+  const weeklyOff = quickFooterSettings({ format: 'weekly', show_give_button: 0, show_website_button: 0, show_calendar_link: 0 });
+  eq(weeklyOff.give || weeklyOff.web || weeklyOff.calendar, false, 'a weekly issue can switch all three off');
+  const fd = new FormData(); fd.set('wk_show_website_button', '1'); fd.set('show_give_button', '1');
+  const wkStored = footerSwitchesFromForm(fd, 'weekly');
+  eq(wkStored.show_website_button, 1, 'weekly reads its own wk_ copy of a switch');
+  eq(wkStored.show_give_button, 0, 'and ignores the special edition copy');
+  eq(wkStored.show_calendar_link, 0, 'an unticked calendar switch is stored off');
+  eq(footerSwitchesFromForm(fd, 'quick').show_calendar_link, null, 'a special edition has no calendar link to store');
 
   const render = (fb) => buildEmailHtml('Funeral notice', '<p>Service details</p>', [], '', '', '2026-11-16', [], '', null, 'quick', '', '', '', '', '', [], [], '', fb);
   const none = render({ web: false, give: false });
@@ -420,7 +428,14 @@ group('special edition footer buttons');
   const both = render({ web: true, give: true });
   ok(both.includes('Give online') && both.includes('Read on our website'), 'on: both buttons appear');
   const wk = buildEmailHtml('Weekly', '<p>Note</p>', [], '', '', '2026-11-16');
-  ok(wk.includes('Give online') && wk.includes('Read on our website'), 'the weekly email is unchanged');
+  ok(wk.includes('Give online') && wk.includes('Read on our website') && wk.includes('View full calendar'), 'the weekly email is unchanged by default');
+  const wkOff = buildEmailHtml('Funeral', '<p>Note</p>', [], '', '', '2026-11-16', [], '', null, 'weekly', '', '', '', '', '', [{ topic: 'Class' }], [], "Pastor's Note", { web: false, give: false, calendar: false });
+  ok(!wkOff.includes('Give online') && !wkOff.includes('Read on our website'), 'weekly: footer buttons can be switched off');
+  ok(!wkOff.includes('View full calendar'), 'weekly: every calendar link can be switched off');
+  ok(!wkOff.includes('Read the full letter'), 'weekly: a short note has no "Read the full letter" link');
+  const long = buildEmailHtml('Weekly', '<p>' + 'word '.repeat(150) + '</p>', [], '', '', '2026-11-16');
+  ok(long.includes('Read the full letter'), 'weekly: a note that is cut short still links to the full letter');
+  ok(!wkOff.includes('class="events-col"'), 'weekly: with nothing in the sidebar, the note runs full width');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

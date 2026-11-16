@@ -2300,6 +2300,7 @@ export default {
     // admin/newsletter.js for what that means.
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_website_button INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_give_button INTEGER').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_calendar_link INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
