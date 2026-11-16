@@ -548,7 +548,8 @@ export const SITE_PAGES = [
             "title": "Parking",
             "body": "<p>Free parking in the lot on Ivanhoe, directly across from the church office. Street parking is available on Fyler and surrounding streets.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -556,7 +557,8 @@ export const SITE_PAGES = [
             "title": "Kids & Families",
             "body": "<p>Children are welcome in worship at any age. Sunday School meets during the 10:45 am service. Our volunteers are background-checked and trained. Nursery available for infants.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -564,7 +566,8 @@ export const SITE_PAGES = [
             "title": "What to Wear",
             "body": "<p>From suits to shorts — you're welcome here. Come as you are. We mean it. What matters is that you show up.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -572,12 +575,14 @@ export const SITE_PAGES = [
             "title": "Questions Before You Come?",
             "body": "<p>Our greeters are at the door before every service. Or reach us anytime: office@timothystl.org · (314) 839-0563</p>",
             "linkLabel": "office@timothystl.org",
-            "url": "mailto:office@timothystl.org"
+            "url": "mailto:office@timothystl.org",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",
@@ -1216,7 +1221,8 @@ export const SITE_PAGES = [
             "title": "Word of Life Lutheran School",
             "body": "<p>Providing a high-quality educational program in an environment where Christ prevails. A Christ-centered school for students in our neighborhood.</p>",
             "linkLabel": "Learn more",
-            "url": "/wol"
+            "url": "/wol",
+            "value": ""
           },
           {
             "img": "/images/ministries/mdo-thumb.webp",
@@ -1224,7 +1230,8 @@ export const SITE_PAGES = [
             "title": "Mother's Day Out",
             "body": "<p>Over twenty years of experienced, caring childcare for children from birth through preschool. Small classrooms, flexible scheduling, community.</p>",
             "linkLabel": "Visit MDO site",
-            "url": "https://mdo.timothystl.org"
+            "url": "https://mdo.timothystl.org",
+            "value": ""
           },
           {
             "img": "",
@@ -1232,7 +1239,8 @@ export const SITE_PAGES = [
             "title": "Music Ministry",
             "body": "<p>Traditional with eclectic music — organ, handbells, guitar, drums, African choir, hammer dulcimer, and steel drums. A unique but familiar worship experience.</p>",
             "linkLabel": "Learn more",
-            "url": "/music"
+            "url": "/music",
+            "value": ""
           },
           {
             "img": "/images/ministries/ss-logo.webp",
@@ -1240,7 +1248,8 @@ export const SITE_PAGES = [
             "title": "Stephen Ministry",
             "body": "<p>Through Stephen Ministry, Timothy listens to the real life pains of our members and community. Trained caregivers walk alongside people in difficult seasons.</p>",
             "linkLabel": "Learn more",
-            "url": "/stephen"
+            "url": "/stephen",
+            "value": ""
           },
           {
             "img": "/images/ministries/food-pantry-thumb.webp",
@@ -1248,7 +1257,8 @@ export const SITE_PAGES = [
             "title": "Food Pantry",
             "body": "<p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>",
             "linkLabel": "Get details",
-            "url": "/foodpantry"
+            "url": "/foodpantry",
+            "value": ""
           },
           {
             "img": "",
@@ -1256,7 +1266,8 @@ export const SITE_PAGES = [
             "title": "Youth & Family Ministry",
             "body": "<p>Families of all kinds are welcome here. Formation for children, confirmation for middle schoolers, and community for parents and families at every stage.</p>",
             "linkLabel": "Explore",
-            "url": "/youthfamily"
+            "url": "/youthfamily",
+            "value": ""
           },
           {
             "img": "/images/ministries/lwml.webp",
@@ -1264,7 +1275,8 @@ export const SITE_PAGES = [
             "title": "LWML",
             "body": "<p>Lutheran Women's Missionary League — a community of women in mission for Christ. Rooted in Scripture, sent in service.</p>",
             "linkLabel": "Visit LWML",
-            "url": "https://lwml.org"
+            "url": "https://lwml.org",
+            "value": ""
           },
           {
             "img": "/images/ministries/Bees-thumb.webp?v=20260328",
@@ -1272,7 +1284,8 @@ export const SITE_PAGES = [
             "title": "Urban Beekeepers",
             "body": "<p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>",
             "linkLabel": "Learn more",
-            "url": "/bees"
+            "url": "/bees",
+            "value": ""
           },
           {
             "img": "/images/ministries/christmas-mkt-thumb.webp",
@@ -1280,12 +1293,14 @@ export const SITE_PAGES = [
             "title": "Christmas Market",
             "body": "<p>An annual community event in Lindenwood Park. Shopping, fellowship, and celebration — a gift to the neighborhood every December.</p>",
             "linkLabel": "Learn more",
-            "url": "/christmasmarket"
+            "url": "/christmasmarket",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",
@@ -1332,7 +1347,8 @@ export const SITE_PAGES = [
             "title": "Lindenwood Area Senior Ministry",
             "body": "<p>Enhancing the quality of life of older adults in the Lindenwood Park neighborhood.</p>",
             "linkLabel": "Watch video",
-            "url": "https://youtu.be/BAkmTsL3uNQ"
+            "url": "https://youtu.be/BAkmTsL3uNQ",
+            "value": ""
           },
           {
             "img": "/images/ministries/cfna.webp",
@@ -1340,7 +1356,8 @@ export const SITE_PAGES = [
             "title": "Christian Friends of New Americans",
             "body": "<p>CFNA links you with opportunities to serve immigrants and refugees living in the St. Louis area.</p>",
             "linkLabel": "Watch video",
-            "url": "https://youtu.be/Ur2C1-PIh4A"
+            "url": "https://youtu.be/Ur2C1-PIh4A",
+            "value": ""
           },
           {
             "img": "",
@@ -1348,7 +1365,8 @@ export const SITE_PAGES = [
             "title": "Concordia Seminary",
             "body": "<p>Preparing pastors and church workers for service in the Lutheran Church — Missouri Synod and beyond.</p>",
             "linkLabel": "Visit site",
-            "url": "https://www.csl.edu"
+            "url": "https://www.csl.edu",
+            "value": ""
           },
           {
             "img": "",
@@ -1356,12 +1374,14 @@ export const SITE_PAGES = [
             "title": "Concordia Children's Services",
             "body": "<p>A Christian children's home in the Philippines providing care, education, and the love of Christ to vulnerable children.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",
@@ -1552,7 +1572,8 @@ export const SITE_PAGES = [
             "title": "Youth Ministry",
             "body": "<p>Faith formation, community, and service for students in grades 7–12. Events, retreats, and a place to belong.</p>",
             "linkLabel": "Learn more",
-            "url": "/youth"
+            "url": "/youth",
+            "value": ""
           },
           {
             "img": "",
@@ -1560,7 +1581,8 @@ export const SITE_PAGES = [
             "title": "Sunday School",
             "body": "<p>Bible stories, community, and faith formation for children every Sunday morning during the 10:45 am service.</p>",
             "linkLabel": "Learn more",
-            "url": "/sundayschool"
+            "url": "/sundayschool",
+            "value": ""
           },
           {
             "img": "",
@@ -1568,7 +1590,8 @@ export const SITE_PAGES = [
             "title": "Confirmation",
             "body": "<p>A two-year journey for middle schoolers to explore and own their faith — rooted in Scripture and Lutheran tradition.</p>",
             "linkLabel": "Learn more",
-            "url": "/confirmation"
+            "url": "/confirmation",
+            "value": ""
           },
           {
             "img": "",
@@ -1576,7 +1599,8 @@ export const SITE_PAGES = [
             "title": "Vacation Bible School",
             "body": "<p>An unforgettable week of faith, fun, and community for children each summer. All are welcome.</p>",
             "linkLabel": "Learn more",
-            "url": "/vbs"
+            "url": "/vbs",
+            "value": ""
           },
           {
             "img": "",
@@ -1584,7 +1608,8 @@ export const SITE_PAGES = [
             "title": "Easter Egg Hunt",
             "body": "<p>An annual Easter celebration for families in Lindenwood Park — a free gift to our neighborhood every spring.</p>",
             "linkLabel": "Learn more",
-            "url": "/egghunt"
+            "url": "/egghunt",
+            "value": ""
           },
           {
             "img": "",
@@ -1592,12 +1617,14 @@ export const SITE_PAGES = [
             "title": "Family Ministry",
             "body": "<p>Families of all kinds are welcome here. Formation, community, and support for parents and children at every stage.</p>",
             "linkLabel": "Learn more",
-            "url": "/family"
+            "url": "/family",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",
@@ -2296,7 +2323,8 @@ export const SITE_PAGES = [
             "title": "On Sunday morning",
             "body": "<p>Offering plates are passed at both services. Cash or check (payable to Timothy Lutheran Church ) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -2304,7 +2332,8 @@ export const SITE_PAGES = [
             "title": "Bank bill pay",
             "body": "<p>Set up automatic giving directly through your bank's online bill pay — no fees, no middleman. Payable to Timothy Lutheran Church , 6704 Fyler Ave, St. Louis, MO 63139.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -2312,7 +2341,8 @@ export const SITE_PAGES = [
             "title": "Thrivent Charitable",
             "body": "<p>Thrivent members can give through Thrivent Charitable Impact & Investing. Thrivent covers all processing fees, so 100% of your gift reaches the church.</p>",
             "linkLabel": "Give through Thrivent",
-            "url": "https://thriventcharitable.thrivent.com/giving/make-gift"
+            "url": "https://thriventcharitable.thrivent.com/giving/make-gift",
+            "value": ""
           },
           {
             "img": "",
@@ -2320,7 +2350,8 @@ export const SITE_PAGES = [
             "title": "IRA charitable distribution",
             "body": "<p>If you are 70½ or older, a Qualified Charitable Distribution (QCD) directly from your IRA to Timothy can count toward your required minimum distribution — and is not included in taxable income. Contact your IRA administrator to arrange.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -2328,7 +2359,8 @@ export const SITE_PAGES = [
             "title": "Donor Advised Fund",
             "body": "<p>Recommend a grant to Timothy Lutheran Church from your Donor Advised Fund at Fidelity Charitable, Schwab Charitable, or any other DAF sponsor. Our EIN is available from the church office.</p>",
             "linkLabel": "",
-            "url": ""
+            "url": "",
+            "value": ""
           },
           {
             "img": "",
@@ -2336,12 +2368,14 @@ export const SITE_PAGES = [
             "title": "Planned giving",
             "body": "<p>A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. Speak with a pastor</p>",
             "linkLabel": "Speak with a pastor",
-            "url": "/contact"
+            "url": "/contact",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",
@@ -2803,7 +2837,8 @@ export const SITE_PAGES = [
             "title": "Request a Caregiver",
             "body": "<p>If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>",
             "linkLabel": "Contact the office",
-            "url": "mailto:dinger@timothystl.org"
+            "url": "mailto:dinger@timothystl.org",
+            "value": ""
           },
           {
             "img": "",
@@ -2811,12 +2846,14 @@ export const SITE_PAGES = [
             "title": "Become a Stephen Minister",
             "body": "<p>Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>",
             "linkLabel": "Inquire about training",
-            "url": "mailto:dinger@timothystl.org"
+            "url": "mailto:dinger@timothystl.org",
+            "value": ""
           }
         ],
         "links": [],
         "logos": false,
         "feature": false,
+        "byValue": false,
         "card": "off",
         "cardShows": "services",
         "cardEyebrow": "",

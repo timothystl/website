@@ -42,6 +42,10 @@ import { priceBreakdown, money as marketMoney, MARKET_PRICING_JS, MARKET_DEFAULT
 // The countdown needs a real instant, not a date somebody reads — see the note
 // on churchInstant() itself.
 import { churchInstant } from './when.js';
+// A card's typed Value ("Grow", "Education", "grow") → the stored key. See the
+// card grid's `byValue` switch.
+import { normalizeValue } from './values.js';
+function cardValueKey(raw) { return normalizeValue(raw); }
 
 // ── PALETTES (guardrails: staff can only pick from these) ────────────────────
 
@@ -648,9 +652,18 @@ export const BLOCK_DEFS = {
         note: 'Logos sit at their own size against the card, left-aligned and never cropped. Photographs fill the card top edge to edge. A grid of one kind should not be laid out as the other.' },
       { key: 'feature', label: 'Lead with a featured card', def: false,
         note: 'The first card is drawn dark, so the eye starts somewhere. It is the first card rather than a chosen one, so reordering the grid moves it \u2014 there is no second setting to forget.' },
+      // \u26a0 THE FOUR VALUES AS THE SHAPE OF THE PAGE, not a tag on it. Dinger,
+      // Nov 2026: "we are trying to keep our four values in front as the
+      // shaping of ministry." On, the cards are laid out under Welcome,
+      // Receive, Grow and Go \u2014 always that order \u2014 each band in its value's
+      // own color. A card's value is the one typed on the card, else the core
+      // value its link's ministry already carries on the Ministries screen, so
+      // most cards need nothing typed at all.
+      { key: 'byValue', label: 'Group by our four values', def: false,
+        note: 'Cards are arranged under Welcome, Receive, Grow and Go. A card follows the core value of the ministry it links to; type Welcome, Receive, Grow or Go in a card\u2019s Value field to choose for it. Cards with no value close the page under \u201cAnd more\u201d.' },
     ],
     items: true,
-    itemFields: ['img', 'eyebrow', 'title', 'body', 'linkLabel', 'url'],
+    itemFields: ['img', 'eyebrow', 'title', 'body', 'linkLabel', 'url', 'value'],
     richItemFields: ['body'],
     itemUrlFields: ['img', 'url'],
     // ⚠ A picture, not a destination. `itemUrlFields` only says "put this
@@ -661,10 +674,14 @@ export const BLOCK_DEFS = {
     // block with a picture field gets the right control for free, and one with
     // a link field never gets it by accident.
     itemImageFields: ['img'],
+    // Typed in the side panel rather than on the card: it is a setting, not
+    // words a visitor reads. See the `byValue` switch.
+    itemInputFields: ['value'],
     itemLabel: 'Card',
     itemPlaceholders: {
       img: 'Logo or photo (optional)', eyebrow: 'SMALL LABEL', title: 'Card heading',
       body: 'One short paragraph.', linkLabel: 'Learn more', url: '/where-it-goes',
+      value: 'Welcome, Receive, Grow or Go (optional)',
     },
     defaultItems: [
       { title: 'First card', body: '<p>What this is.</p>', linkLabel: 'Learn more', url: '' },
@@ -2526,6 +2543,18 @@ export const BLOCK_CSS_RAW = `
    text each card carries. That is the whole reason for the flex column and
    the margin-top:auto on the foot. */
 .tlcb-cg-grid{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:24px;align-items:stretch;margin-top:8px;}
+/* GROUPED BY VALUE. Each band opens on a strip in the value's own field — the
+   one place outside the Core values card the four hues are allowed — and its
+   cards carry the value's accent as their top rule, so a card is still read as
+   belonging to its value after the strip has scrolled away. */
+.tlcb-cgv{display:flex;flex-direction:column;gap:14px;margin-top:28px;}
+.tlcb-cgv-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;padding:18px 24px;border-radius:18px;
+  background:var(--v-field,#EEF1F5);color:var(--v-ink,#0B2238);}
+.tlcb-cgv-word{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:34px;line-height:1;color:var(--v-ink,#0B2238);}
+.tlcb-cgv-tag{font-family:var(--tlcb-sans);font-style:italic;font-weight:300;font-size:17px;line-height:1.4;color:var(--v-ink,#0B2238);}
+.tlcb-cgv .tlcb-cg-card{border-top:4px solid var(--v-accent,#DCE1E7);}
+.tlcb-cgv--more .tlcb-cgv-head{background:transparent;padding:6px 0;}
+.tlcb-cgv--more .tlcb-cgv-word{font-size:26px;}
 .tlcb-cg-card{display:flex;flex-direction:column;background:#FFFFFF;border:1px solid #DCE1E7;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
   transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
@@ -3703,6 +3732,7 @@ export function blocksClientConfig(data) {
       auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
       itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [], itemFileFields: d.itemFileFields || [],
+      itemInputFields: d.itemInputFields || [],
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund, eventRef: !!d.eventRef,
@@ -5773,7 +5803,7 @@ function renderInner(b, opts) {
   }
 
   if (t === 'cardgrid') {
-    const cards = (b.items || []).map((it, i) => {
+    const one = (it, i) => {
       // Contained at its own aspect and never cropped: these are logos as often
       // as photos, and /ministries mixes a wordmark, a roundel and a
       // photograph — a square crop would ruin at least one of the three.
@@ -5822,10 +5852,47 @@ function renderInner(b, opts) {
         ? `<a class="${cls} tlcb-mailx" data-mail-c="${obfEmailCodes(mailAddr)}">`
         : linked ? `<a class="${cls}" href="${esc(href)}">` : `<div class="${cls}">`;
       return `${open}${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div>${linked ? '</a>' : '</div>'}`;
-    }).join('');
+    };
+    const cards = (b.items || []).map(one).join('');
     const intro = b.subtitle
       ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', esc(b.subtitle), ' data-ph="One short paragraph of introduction."')
       : (opts.editing ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', '', ' data-ph="One short paragraph of introduction."') : '');
+    // ── GROUPED UNDER THE FOUR VALUES ── see the `byValue` switch above.
+    // ⚠ The order is the values record's own (Welcome, Receive, Grow, Go) and
+    // is never sorted, the same rule as the Core values block. Each card keeps
+    // its ORIGINAL index, so the editor's per-card fields still address the
+    // right item after grouping moves it.
+    const valueList = (data && data.values) || [];
+    if (b.byValue && valueList.length) {
+      const pageValues = (data && data.pageValues) || {};
+      const built = (b.items || []).map((it, i) => ({ it, i }));
+      const valueOf = (it) => {
+        const own = cardValueKey(it.value);
+        if (own) return own;
+        const path = String(it.url || '').replace(/^https?:\/\/(www\.)?timothystl\.org/i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase();
+        return (path && pageValues[path]) || null;
+      };
+      const groups = valueList.map((v) => {
+        const mine = built.filter(({ it }) => valueOf(it) === v.key);
+        if (!mine.length && !opts.editing) return '';
+        const ink = v.darkInk ? '#0B2238' : '#FFFFFF';
+        return `<section class="tlcb-cgv" style="--v-field:${v.field};--v-ink:${ink};--v-accent:${v.tint || v.light}">
+          <header class="tlcb-cgv-head"><span class="tlcb-cgv-word">${esc(v.short || '')}</span>
+            <span class="tlcb-cgv-tag">${esc(v.tag || v.blurb || '')}</span></header>
+          ${mine.length ? `<div class="tlcb-cg-grid">${mine.map(({ it, i }) => one(it, i)).join('')}</div>`
+            : '<p class="tlcb-note">No card is under this value yet.</p>'}
+        </section>`;
+      }).join('');
+      const rest = built.filter(({ it }) => !valueOf(it));
+      const more = rest.length
+        ? `<section class="tlcb-cgv tlcb-cgv--more"><header class="tlcb-cgv-head"><span class="tlcb-cgv-word">And more</span></header>
+            <div class="tlcb-cg-grid">${rest.map(({ it, i }) => one(it, i)).join('')}</div></section>`
+        : '';
+      return maybeMailScript(`<div class="tlcb-stack tlcb-cg tlcb-cg--byvalue${b.align === 'left' ? '' : ' tlcb-cg--' + b.align}${b.topRule ? ' tlcb-cg--rule' : ''}">
+      ${renderHead(opts, b, 'Section heading')}${intro}
+      ${groups}${more}
+    </div>`);
+    }
     return maybeMailScript(`<div class="tlcb-stack tlcb-cg${b.align === 'left' ? '' : ' tlcb-cg--' + b.align}${b.topRule ? ' tlcb-cg--rule' : ''}">
       ${renderHead(opts, b, 'Section heading')}${intro}
       <div class="tlcb-cg-grid">${cards}</div>

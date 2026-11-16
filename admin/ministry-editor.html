@@ -2458,7 +2458,7 @@ function paintLinkWarning(input) {
 }
 
 function itemsSection(b, d) {
-  var inputFields = d.itemUrlFields.slice();
+  var inputFields = d.itemUrlFields.concat(d.itemInputFields || []);
   if (d.gallery) inputFields = ['url'];
   var list = b.items || [];
   var rows = list.map(function (it, i) {

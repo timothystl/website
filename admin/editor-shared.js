@@ -380,7 +380,8 @@ export async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows,
+           ministryValueRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -461,6 +462,10 @@ export async function pageData(env, reqKey) {
       // church runs that would make this worth capping.
       q('SELECT * FROM site_events ORDER BY sort_order, id'),
       q('SELECT * FROM site_event_fields ORDER BY event_id, sort_order, id'),
+      // Each ministry page's core value, as set on the Ministries screen, keyed
+      // by its public address — so a card grid grouped by value can place a
+      // card from the link it already has. See the `byValue` switch.
+      q('SELECT p.slug, y.value FROM youth_pages y JOIN pages p ON p.id = y.slug WHERE y.value IS NOT NULL'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -500,7 +505,7 @@ export async function pageData(env, reqKey) {
         return {
           key: v.key, short: v.short, name: v.name, blurb: v.blurb,
           tag: v.tag || v.blurb, why: v.why || '',
-          field: v.field || '', light: v.light || v.solid, darkInk: !!v.darkInk,
+          field: v.field || '', light: v.light || v.solid, darkInk: !!v.darkInk, tint: v.tint || '',
           ways: v.ways || [],
           // A photo replaces the flat gradient field with a photograph under a
           // fixed dark veil — see renderBlock's 'values' branch. Never the
@@ -510,6 +515,9 @@ export async function pageData(env, reqKey) {
           partner: p ? { name: p.name, body: p.blurb || '' } : null,
         };
       }),
+      pageValues: Object.fromEntries((ministryValueRows || [])
+        .filter((r) => r.slug && r.value)
+        .map((r) => [String(r.slug).replace(/\/+$/, '').toLowerCase(), r.value])),
       partners: partners.map((p) => ({
         id: p.id, name: p.name, shortName: p.short_name || '',
         url: p.site_url || '', logo: p.logo_url || '',
