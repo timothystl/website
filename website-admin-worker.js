@@ -2306,12 +2306,21 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN section_order TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
-    for (const m of MENU_SEED) {
-      try {
-        await env.DB.prepare(
-          'INSERT OR IGNORE INTO menu_items (id, menu, label, kind, page_id, target, style, depth, sort_order, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
-        ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
-      } catch (_) {}
+    // ⚠ ONLY INTO AN EMPTY TABLE. This block re-runs on every SCHEMA_VERSION
+    // bump, and removing an item on the Menu screen DELETES its row — so
+    // `INSERT OR IGNORE` by fixed id quietly put back every seed item the
+    // office had removed, on every deploy that bumped the schema. Reported
+    // 2026-11-16: Learn, Sermons and Calendar returned to the header after a
+    // newsletter release. The seed is for a brand-new install, nothing else.
+    const menuCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM menu_items').first().catch(() => null);
+    if (menuCount && Number(menuCount.n) === 0) {
+      for (const m of MENU_SEED) {
+        try {
+          await env.DB.prepare(
+            'INSERT OR IGNORE INTO menu_items (id, menu, label, kind, page_id, target, style, depth, sort_order, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
+          ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
+        } catch (_) {}
+      }
     }
     // ── [AC-7] INDEXES ON THE COLUMNS THAT ARE ACTUALLY FILTERED ──
     // Named in the July 2026 review and never added. Every one of these backs a
@@ -2361,11 +2370,16 @@ export default {
     // convention inside the flat list.
     try { await env.DB.prepare('ALTER TABLE menu_items ADD COLUMN column_id INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_FOOTER_COLUMNS).run(); } catch (_) {}
-    for (const c of FOOTER_COLUMN_SEED) {
-      try {
-        await env.DB.prepare('INSERT OR IGNORE INTO footer_columns (id, heading, source, sort_order, visible) VALUES (?, ?, ?, ?, 1)')
-          .bind(c.id, c.heading, c.source, c.sort_order).run();
-      } catch (_) {}
+    // Same rule as the menu seed above: a footer column the office deleted
+    // must not come back with the next schema bump.
+    const columnCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM footer_columns').first().catch(() => null);
+    if (columnCount && Number(columnCount.n) === 0) {
+      for (const c of FOOTER_COLUMN_SEED) {
+        try {
+          await env.DB.prepare('INSERT OR IGNORE INTO footer_columns (id, heading, source, sort_order, visible) VALUES (?, ?, ?, ?, 1)')
+            .bind(c.id, c.heading, c.source, c.sort_order).run();
+        } catch (_) {}
+      }
     }
     // ⚠ Only where nothing is set. An install that already has a footer needs
     // its links put into columns once; a link the office has since moved must
