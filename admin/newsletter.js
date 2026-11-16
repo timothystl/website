@@ -73,6 +73,31 @@ export function blockOn(raw, key) {
   return !!parseBlocks(raw)[key];
 }
 
+// ── SPECIAL EDITION FOOTER BUTTONS ───────────────────────────
+// A special edition is used for funeral notices and one-off notes, where a
+// "Give online" button (and often a "Read on our website" one) is out of
+// place. Each is a per-issue switch, stored as 1/0. NULL — an issue saved
+// before these switches existed — means off for a special edition and on
+// for a weekly issue, which never offers the switches and always shows both.
+export function quickFooterSettings(row) {
+  const fmt = (row && row.format) || 'weekly';
+  if (fmt !== 'quick') return { web: true, give: true };
+  return { web: Number(row.show_website_button) === 1, give: Number(row.show_give_button) === 1 };
+}
+function quickFooterSwitches(settings, disabled = false) {
+  const sw = (name, label, on, hint) => `<label class="tlc-toggle" style="padding:7px 0;">
+  <input type="checkbox" name="${name}" value="1"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>
+  <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+  <span class="tlc-toggle-label">${label} <span style="color:var(--gray);font-size:11.5px;">— ${hint}</span></span>
+</label>`;
+  return `<div class="card">
+      <div class="card-title">Footer buttons</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Both start off, since a special edition is often a funeral notice or a one-time note. Turn either on when it fits the message.</div>
+      ${sw('show_website_button', 'Read on our website', settings.web, 'links to the news page')}
+      ${sw('show_give_button', 'Give online', settings.give, 'links to online giving')}
+    </div>`;
+}
+
 // ── THE PASTOR'S NOTE HEADING ────────────────────────────────
 // "Pastor's Note" used to be baked into how everyone talked about this block,
 // but not every week's note is from the pastor — some weeks it's the staff.
@@ -501,7 +526,7 @@ export function defaultUpcomingEventIds(posts, cutoffDate) {
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
   const row = await env.DB.prepare(
-    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes FROM newsletters WHERE id = ?'
+    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes, show_website_button, show_give_button FROM newsletters WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
 
@@ -531,7 +556,7 @@ async function buildNewsletterEmailPayload(env, id) {
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
   }
 
-  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading));
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading), quickFooterSettings(row));
   return { row, emailHtml };
 }
 
@@ -989,6 +1014,7 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
         <input type="url" name="cta_url" placeholder="https://...">
       </div>
     </div>
+    ${quickFooterSwitches({ web: false, give: false })}
   </div>
 
   <div class="card" style="border-color:var(--amber);">
@@ -1154,6 +1180,11 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     const quickBody = cleanRich(form.get('quick_body') || '');
     const ctaUrl = form.get('cta_url') || '';
     const ctaLabel = form.get('cta_label') || '';
+    // Special-edition footer buttons — see quickFooterSettings(). A weekly
+    // issue stores NULL and always shows both.
+    const showWebsiteButton = fmt === 'quick' ? (form.get('show_website_button') === '1' ? 1 : 0) : null;
+    const showGiveButton = fmt === 'quick' ? (form.get('show_give_button') === '1' ? 1 : 0) : null;
+    const footerButtons = quickFooterSettings({ format: fmt, show_website_button: showWebsiteButton, show_give_button: showGiveButton });
 
     // Combine for storage: quick announcements store message in pastor_note
     const savedNote = fmt === 'quick' ? quickBody : pastorNote;
@@ -1206,8 +1237,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (editId && !conflict) {
       // Update existing newsletter
       await env.DB.prepare(
-        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, updated_at=?, updated_by=? WHERE id=?'
-      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '', editId).run();
+        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, show_website_button=?, show_give_button=?, updated_at=?, updated_by=? WHERE id=?'
+      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, nowIso, currentUser?.username || '', editId).run();
       newsletterId = parseInt(editId, 10);
       // Replace events
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
@@ -1221,8 +1252,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       const insertStatus = conflict ? 'draft' : status;
       const insertSubject = conflict ? `Recovered — ${subject}` : subject;
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, nowIso, currentUser?.username || '').run();
+        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, show_website_button, show_give_button, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, nowIso, currentUser?.username || '').run();
       newsletterId = result.meta.last_row_id;
     }
 
@@ -1272,7 +1303,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       if (!listId) {
         emailSuffix = `&emailerr=${encodeURIComponent(emailSend === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
-        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading);
+        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading, footerButtons);
         const result = await withScheduleOperation(env, newsletterId, async current => {
           if (current.brevo_campaign_id || current.scheduled_send_at || current.sent_at) {
             return { error: 'This issue already has a campaign or has been sent. Use Reschedule for the existing campaign, or cancel its schedule first.' };
@@ -1958,6 +1989,7 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
         <input type="url" name="cta_url" value="${(row.cta_url||'').replace(/"/g,'&quot;')}" placeholder="https://...">
       </div>
     </div>
+    ${quickFooterSwitches(quickFooterSettings({ ...row, format: 'quick' }), nlLocked)}
   </div>
 
   ${hasPermission(currentUser, 'newsletter_approve') ? `
@@ -2275,7 +2307,8 @@ ${classesJs}
       on('tertiary') ? (f.get('tertiary_cta_url') || '') : '',
       classes,
       extrasFromForm(f),
-      fmt === 'weekly' ? normalizePastorNoteHeading(f.get('pastor_note_heading')) : ''
+      fmt === 'weekly' ? normalizePastorNoteHeading(f.get('pastor_note_heading')) : '',
+      quickFooterSettings({ format: fmt, show_website_button: f.get('show_website_button') === '1' ? 1 : 0, show_give_button: f.get('show_give_button') === '1' ? 1 : 0 })
     );
     return new Response(emailHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
@@ -2316,14 +2349,14 @@ ${classesJs}
     // original drops out of the public archive; until then it is untouched.
     const supersedesId = isSent(row) ? row.id : null;
     const result = await env.DB.prepare(
-      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id, show_website_button, show_give_button) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       `Copy of ${row.subject}`, row.pastor_note, normalizePastorNoteHeading(row.pastor_note_heading), row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
       row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
       row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
       // A copy carries the extra notes too — the whole point of duplicating a
       // sent issue is to start from what actually went out.
-      row.extra_notes || '[]', supersedesId
+      row.extra_notes || '[]', supersedesId, row.show_website_button ?? null, row.show_give_button ?? null
     ).run();
     const newId = result.meta.last_row_id;
     for (const e of eventsRows.results) {
