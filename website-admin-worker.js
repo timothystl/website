@@ -1530,7 +1530,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-11-06-staff-phone-ext'; // staff_members.phone_ext for the Staff grid's contact line.
+    const SCHEMA_VERSION = '2026-11-16-newsletter-section-order'; // newsletters.show_* footer switches and section_order.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2300,6 +2300,10 @@ export default {
     // admin/newsletter.js for what that means.
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_website_button INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_give_button INTEGER').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN show_calendar_link INTEGER').run(); } catch (_) {}
+    // Drag-and-drop order of the weekly body sections, a comma list — see
+    // normalizeSectionOrder() in admin/email.js. NULL keeps the legacy layout.
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN section_order TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
@@ -8988,9 +8992,11 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
       return {
         href: `/edit/${r.id}`,
         filter: sent ? 'sent' : (r.approval_status === 'pending' ? 'awaiting-approval' : 'draft'),
-        search: `${r.subject || ''} ${label} ${sendSummary(r)}`.toLowerCase(),
+        search: `${r.subject || ''} ${label} ${sendSummary(r)} ${r.format === 'quick' ? 'special edition' : 'weekly'}`.toLowerCase(),
         cells: [
-          primaryCell(r.subject || 'Untitled issue'),
+          // Which kind of issue this is, under its subject — a funeral notice
+          // sent as a special edition should not read like a weekly issue.
+          primaryCell(r.subject || 'Untitled issue', r.format === 'quick' ? 'Special edition' : 'Weekly newsletter'),
           escapeHtml(sends),
           dateCell(r, sent),
           statusPill(st.tone, label),
@@ -9025,6 +9031,8 @@ ${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news"
     columns: columnsOf('newsletter'),
     rows: listRows,
     pageSize: 10,
+    // A sent row carries Duplicate · Remove from website · View.
+    actionsWidth: 'max-content',
     noun: 'issue', nounPlural: 'issues',
     empty: 'No newsletters yet.',
     // The design's one ◆ line. The read-only rule is not stated here because the

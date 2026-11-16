@@ -17,7 +17,7 @@ import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { valueByKey, normalizeValue } from './values.js';
 import { churchDate, churchDatePlus } from './when.js';
 import { scheduleNewsletter, cancelNewsletterSchedule, withScheduleOperation } from './newsletter-schedule.js';
-import { sendBrevoNewsletter, buildEmailHtml, getBrevoListCount } from './email.js';
+import { sendBrevoNewsletter, buildEmailHtml, getBrevoListCount, SECTION_ORDER_DEFAULT, SECTION_LABELS, normalizeSectionOrder } from './email.js';
 import { pushToAllSubscribers } from './webpush.js';
 import { sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './gym.js';
 import { mergedCategories, activeCategories, normalizeClock, fetchGoogleEvents, parseCalendarIds, findCalendarMatches, findGroupSuggestions, parseTitleList } from './calendar.js';
@@ -73,30 +73,157 @@ export function blockOn(raw, key) {
   return !!parseBlocks(raw)[key];
 }
 
-// ── SPECIAL EDITION FOOTER BUTTONS ───────────────────────────
-// A special edition is used for funeral notices and one-off notes, where a
-// "Give online" button (and often a "Read on our website" one) is out of
-// place. Each is a per-issue switch, stored as 1/0. NULL — an issue saved
-// before these switches existed — means off for a special edition and on
-// for a weekly issue, which never offers the switches and always shows both.
+// ── FOOTER BUTTONS AND CALENDAR LINK ─────────────────────────
+// Funeral notices and one-off notes go out in either format, and a
+// "Give online" button (or a "View full calendar" link) is out of place
+// there. Each is a per-issue switch, stored as 1/0.
+//
+// NULL — an issue saved before these switches existed — means OFF for a
+// special edition (the buttons start off there) and ON for a weekly issue,
+// so a weekly issue nobody has touched renders exactly as it always did.
+// The calendar link only exists in the weekly layout.
 export function quickFooterSettings(row) {
   const fmt = (row && row.format) || 'weekly';
-  if (fmt !== 'quick') return { web: true, give: true };
-  return { web: Number(row.show_website_button) === 1, give: Number(row.show_give_button) === 1 };
+  if (fmt === 'quick') {
+    return { web: Number(row.show_website_button) === 1, give: Number(row.show_give_button) === 1, calendar: false };
+  }
+  const onUnlessOff = (v) => !(v !== null && v !== undefined && v !== '' && Number(v) === 0);
+  return {
+    web: onUnlessOff(row && row.show_website_button),
+    give: onUnlessOff(row && row.show_give_button),
+    calendar: onUnlessOff(row && row.show_calendar_link),
+  };
 }
-function quickFooterSwitches(settings, disabled = false) {
+// The two formats render their own copy of the switches (each inside its
+// own hidden-or-shown fields), so they post under different names: the
+// weekly copy is prefixed `wk_`. Reads the copy that belongs to `fmt`.
+export function footerSwitchesFromForm(form, fmt) {
+  const p = fmt === 'quick' ? '' : 'wk_';
+  const v = (k) => (form.get(p + k) === '1' ? 1 : 0);
+  return {
+    show_website_button: v('show_website_button'),
+    show_give_button: v('show_give_button'),
+    show_calendar_link: fmt === 'quick' ? null : v('show_calendar_link'),
+  };
+}
+function quickFooterSwitches(settings, disabled = false, fmt = 'quick') {
+  const p = fmt === 'quick' ? '' : 'wk_';
   const sw = (name, label, on, hint) => `<label class="tlc-toggle" style="padding:7px 0;">
-  <input type="checkbox" name="${name}" value="1"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>
+  <input type="checkbox" name="${p}${name}" value="1"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>
   <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
   <span class="tlc-toggle-label">${label} <span style="color:var(--gray);font-size:11.5px;">— ${hint}</span></span>
 </label>`;
+  const intro = fmt === 'quick'
+    ? 'Both start off, since a special edition is often a funeral notice or a one-time note. Turn either on when it fits the message.'
+    : 'Turn these off for a funeral notice or any issue where a giving button or calendar link would feel out of place.';
   return `<div class="card">
-      <div class="card-title">Footer buttons</div>
-      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Both start off, since a special edition is often a funeral notice or a one-time note. Turn either on when it fits the message.</div>
-      ${sw('show_website_button', 'Read on our website', settings.web, 'links to the news page')}
-      ${sw('show_give_button', 'Give online', settings.give, 'links to online giving')}
+      <div class="card-title">Buttons and links</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">${intro}</div>
+      ${fmt === 'quick' ? '' : sw('show_calendar_link', 'View full calendar', settings.calendar, 'link beside the pastor’s note')}
+      ${sw('show_website_button', 'Read on our website', settings.web, 'button at the bottom')}
+      ${sw('show_give_button', 'Give online', settings.give, 'button at the bottom')}
     </div>`;
 }
+
+// ── SECTION ORDER (DRAG AND DROP) ────────────────────────────
+// The sections below the pastor's note can be dragged into any order; the
+// order posts as one comma list in `section_order`. Up/down buttons do the
+// same job for anyone not using a mouse. The email follows the order (see
+// normalizeSectionOrder() in admin/email.js); NULL keeps the legacy layout.
+export function sectionOrderCard(stored, disabled = false) {
+  const order = normalizeSectionOrder(stored) || SECTION_ORDER_DEFAULT;
+  const item = (k) => `<li class="nl-ord-item" draggable="${disabled ? 'false' : 'true'}" data-key="${k}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin:0 0 6px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:${disabled ? 'default' : 'grab'};">
+      <span aria-hidden="true" style="color:var(--gray);font-size:16px;line-height:1;">⠿</span>
+      <span style="flex:1;font-size:14px;">${escapeHtml(SECTION_LABELS[k])}</span>
+      ${disabled ? '' : `<button type="button" class="nl-ord-up" aria-label="Move ${escapeHtml(SECTION_LABELS[k])} up" style="border:0;background:none;cursor:pointer;font-size:13px;color:var(--gray);">▲</button><button type="button" class="nl-ord-down" aria-label="Move ${escapeHtml(SECTION_LABELS[k])} down" style="border:0;background:none;cursor:pointer;font-size:13px;color:var(--gray);">▼</button>`}
+    </li>`;
+  return `<div class="card">
+      <div class="card-title">Order of sections</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Drag to rearrange, or use the arrows. The pastor's note and upcoming events always come first; everything else prints in this order. A section with nothing in it is skipped.</div>
+      <ul id="nl-ord" style="list-style:none;margin:0;padding:0;">${order.map(item).join('')}</ul>
+      <input type="hidden" name="section_order" id="nl-ord-val" value="${order.join(',')}">
+      ${disabled ? '' : `<script>
+(function(){
+  var list = document.getElementById('nl-ord'), val = document.getElementById('nl-ord-val');
+  if (!list || !val) return;
+  function sync(){
+    val.value = Array.prototype.map.call(list.querySelectorAll('.nl-ord-item'), function(li){ return li.getAttribute('data-key'); }).join(',');
+    // The live preview redraws on a change event from the form.
+    val.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  var dragging = null;
+  list.addEventListener('dragstart', function(e){
+    dragging = e.target.closest('.nl-ord-item'); if (!dragging) return;
+    dragging.style.opacity = '.5';
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragging.getAttribute('data-key')); } catch(_){}
+  });
+  list.addEventListener('dragend', function(){ if (dragging) dragging.style.opacity = ''; dragging = null; sync(); });
+  list.addEventListener('dragover', function(e){
+    if (!dragging) return; e.preventDefault();
+    var over = e.target.closest('.nl-ord-item'); if (!over || over === dragging) return;
+    var r = over.getBoundingClientRect();
+    list.insertBefore(dragging, (e.clientY - r.top) > r.height / 2 ? over.nextSibling : over);
+  });
+  list.addEventListener('drop', function(e){ e.preventDefault(); });
+  list.addEventListener('click', function(e){
+    var li = e.target.closest('.nl-ord-item'); if (!li) return;
+    if (e.target.closest('.nl-ord-up') && li.previousElementSibling) { list.insertBefore(li, li.previousElementSibling); sync(); }
+    if (e.target.closest('.nl-ord-down') && li.nextElementSibling) { list.insertBefore(li.nextElementSibling, li); sync(); }
+  });
+})();
+</script>`}
+    </div>`;
+}
+
+// ── LONG PICKER LISTS COLLAPSE ───────────────────────────────
+// News, Upcoming events and Bible classes can each list dozens of rows,
+// which made the composer a long scroll. Collapsed (the default), a picker
+// shows only what is ticked plus a "Show all" button; nothing is removed
+// from the form, so unticked rows still post exactly as before (as nothing).
+const PICKER_COLLAPSE_JS = `<script>
+(function(){
+  function rowsOf(card){
+    var out = [];
+    card.querySelectorAll('label').forEach(function(l){
+      var cb = l.querySelector('input[type=checkbox]');
+      if (!cb) return;
+      out.push({ row: l.closest('[id^="tpl-row-"]') || l, cb: cb });
+    });
+    return out;
+  }
+  document.querySelectorAll('[data-nl-collapse]').forEach(function(card){
+    var rows = rowsOf(card);
+    if (rows.length <= 4) return;
+    var open = false;
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 2px;';
+    var note = document.createElement('span');
+    note.style.cssText = 'font-size:12.5px;color:var(--gray);';
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'add-event-btn'; btn.style.margin = '0';
+    bar.appendChild(note); bar.appendChild(btn);
+    var last = rows[rows.length - 1].row;
+    last.parentNode.insertBefore(bar, last.nextSibling);
+    function apply(){
+      rows.forEach(function(r){ r.row.style.display = (open || r.cb.checked) ? '' : 'none'; });
+      label();
+    }
+    // Unticking a row while collapsed leaves it on screen until the list is
+    // redrawn, so a slip of the mouse can be undone in place.
+    function label(){
+      var ticked = rows.filter(function(r){ return r.cb.checked; }).length;
+      note.textContent = open ? (ticked + ' of ' + rows.length + ' ticked')
+        : (ticked ? ticked + ' ticked · ' + (rows.length - ticked) + ' more hidden' : rows.length + ' to choose from');
+      btn.textContent = open ? 'Show only ticked' : 'Show all ' + rows.length;
+    }
+    btn.addEventListener('click', function(){ open = !open; apply(); });
+    card.addEventListener('change', label);
+    apply();
+    // Saved ticks are restored by script further down the page, after this runs.
+    window.addEventListener('load', apply);
+  });
+})();
+</script>`;
 
 // ── THE PASTOR'S NOTE HEADING ────────────────────────────────
 // "Pastor's Note" used to be baked into how everyone talked about this block,
@@ -526,7 +653,7 @@ export function defaultUpcomingEventIds(posts, cutoffDate) {
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
   const row = await env.DB.prepare(
-    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes, show_website_button, show_give_button FROM newsletters WHERE id = ?'
+    'SELECT subject, pastor_note, pastor_note_heading, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes, show_website_button, show_give_button, show_calendar_link, section_order FROM newsletters WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
 
@@ -556,7 +683,7 @@ async function buildNewsletterEmailPayload(env, id) {
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
   }
 
-  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading), quickFooterSettings(row));
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes), normalizePastorNoteHeading(row.pastor_note_heading), quickFooterSettings(row), (row.format || 'weekly') === 'weekly' ? normalizeSectionOrder(row.section_order) : null);
   return { row, emailHtml };
 }
 
@@ -914,6 +1041,7 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
 
   <!-- WEEKLY FIELDS -->
   <div id="weekly-fields">
+    ${sectionOrderCard(null)}
     <div class="card">
       <div class="card-title">Pastor's note</div>
       <div class="form-group">
@@ -932,19 +1060,19 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include. The <strong>first checked item</strong> appears as the featured story, the <strong>second</strong> as secondary news, and the rest as compact cards — all with a "Read more" link. Long text is automatically trimmed.</div>
       ${newsPickerHtml}
     </div>
 
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
       ${eventPicker}
     </div>
 
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Check classes meeting this week. Each checked class will appear at the bottom of the email with a link to the full calendar.</div>
       ${tplCheckboxesHtml}
@@ -991,6 +1119,8 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
       <button type="button" class="add-event-btn" id="add-extra-note">+ Add another note</button>
       ${extraNotesScript}
     </div>
+    ${quickFooterSwitches({ web: true, give: true, calendar: true }, false, 'weekly')}
+    ${PICKER_COLLAPSE_JS}
   </div>
 
   <!-- QUICK ANNOUNCEMENT FIELDS -->
@@ -1180,11 +1310,14 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     const quickBody = cleanRich(form.get('quick_body') || '');
     const ctaUrl = form.get('cta_url') || '';
     const ctaLabel = form.get('cta_label') || '';
-    // Special-edition footer buttons — see quickFooterSettings(). A weekly
-    // issue stores NULL and always shows both.
-    const showWebsiteButton = fmt === 'quick' ? (form.get('show_website_button') === '1' ? 1 : 0) : null;
-    const showGiveButton = fmt === 'quick' ? (form.get('show_give_button') === '1' ? 1 : 0) : null;
-    const footerButtons = quickFooterSettings({ format: fmt, show_website_button: showWebsiteButton, show_give_button: showGiveButton });
+    // Footer buttons and calendar link — see quickFooterSettings().
+    const footerStored = footerSwitchesFromForm(form, fmt);
+    const showWebsiteButton = footerStored.show_website_button;
+    const showGiveButton = footerStored.show_give_button;
+    const showCalendarLink = footerStored.show_calendar_link;
+    const footerButtons = quickFooterSettings({ format: fmt, ...footerStored });
+    const sectionOrderList = fmt === 'weekly' ? normalizeSectionOrder(form.get('section_order')) : null;
+    const sectionOrder = sectionOrderList ? sectionOrderList.join(',') : null;
 
     // Combine for storage: quick announcements store message in pastor_note
     const savedNote = fmt === 'quick' ? quickBody : pastorNote;
@@ -1237,8 +1370,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (editId && !conflict) {
       // Update existing newsletter
       await env.DB.prepare(
-        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, show_website_button=?, show_give_button=?, updated_at=?, updated_by=? WHERE id=?'
-      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, nowIso, currentUser?.username || '', editId).run();
+        'UPDATE newsletters SET subject=?, pastor_note=?, pastor_note_heading=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=?, show_website_button=?, show_give_button=?, show_calendar_link=?, section_order=?, updated_at=?, updated_by=? WHERE id=?'
+      ).bind(subject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, sectionOrder, nowIso, currentUser?.username || '', editId).run();
       newsletterId = parseInt(editId, 10);
       // Replace events
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
@@ -1252,8 +1385,8 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       const insertStatus = conflict ? 'draft' : status;
       const insertSubject = conflict ? `Recovered — ${subject}` : subject;
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, show_website_button, show_give_button, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, nowIso, currentUser?.username || '').run();
+        'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes, show_website_button, show_give_button, show_calendar_link, section_order, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(insertSubject, savedNote, pastorNoteHeading, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, insertStatus, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, showWebsiteButton, showGiveButton, showCalendarLink, sectionOrder, nowIso, currentUser?.username || '').run();
       newsletterId = result.meta.last_row_id;
     }
 
@@ -1303,7 +1436,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
       if (!listId) {
         emailSuffix = `&emailerr=${encodeURIComponent(emailSend === 'test' ? 'BREVO_TEST_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' : 'BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
       } else if (listId) {
-        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading, footerButtons);
+        const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses, [], pastorNoteHeading, footerButtons, sectionOrderList);
         const result = await withScheduleOperation(env, newsletterId, async current => {
           if (current.brevo_campaign_id || current.scheduled_send_at || current.sent_at) {
             return { error: 'This issue already has a campaign or has been sent. Use Reschedule for the existing campaign, or cancel its schedule first.' };
@@ -1897,6 +2030,7 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
 </div>
 
   <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
+    ${sectionOrderCard(row.section_order, nlLocked)}
     <div class="card">
       <div class="card-title">Pastor's note</div>
       <div class="form-group">
@@ -1913,17 +2047,17 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
         ${tinymceNoteSection('secondary-editor', 'secondary_note', row.secondary_note || '', 140)}
       </div>
     </div>
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include. The <strong>first checked item</strong> appears as the featured story, the <strong>second</strong> as secondary news, and the rest as compact cards — all with a "Read more" link. Long text is automatically trimmed.</div>
       ${editNewsPickerHtml}
     </div>
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">Upcoming events <span class="tag">Pick from your posts</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Every News &amp; Events post with a date from today onward. Ticking one prints it here <strong>and</strong> puts it on the church calendar and the printed month — it is the same record, entered once.</div>
       ${editEventPicker}
     </div>
-    <div class="card">
+    <div class="card" data-nl-collapse>
       <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
       <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Check classes meeting this week. Each checked class will appear at the bottom of the email with a link to the full calendar.</div>
       ${editTplCheckboxesHtml}
@@ -1969,6 +2103,8 @@ ${sidebarShell('newsletter', currentUser, '', badges)}
       <button type="button" class="add-event-btn" id="add-extra-note">+ Add another note</button>
       ${extraNotesScript}
     </div>
+    ${quickFooterSwitches(quickFooterSettings({ ...row, format: 'weekly' }), nlLocked, 'weekly')}
+    ${PICKER_COLLAPSE_JS}
   </div>
 
   <div id="quick-fields" style="display:${fmt==='quick'?'':'none'}">
@@ -2308,7 +2444,8 @@ ${classesJs}
       classes,
       extrasFromForm(f),
       fmt === 'weekly' ? normalizePastorNoteHeading(f.get('pastor_note_heading')) : '',
-      quickFooterSettings({ format: fmt, show_website_button: f.get('show_website_button') === '1' ? 1 : 0, show_give_button: f.get('show_give_button') === '1' ? 1 : 0 })
+      quickFooterSettings({ format: fmt, ...footerSwitchesFromForm(f, fmt) }),
+      fmt === 'weekly' ? normalizeSectionOrder(f.get('section_order')) : null
     );
     return new Response(emailHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
@@ -2349,14 +2486,14 @@ ${classesJs}
     // original drops out of the public archive; until then it is untouched.
     const supersedesId = isSent(row) ? row.id : null;
     const result = await env.DB.prepare(
-      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id, show_website_button, show_give_button) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO newsletters (subject, pastor_note, pastor_note_heading, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes, supersedes_id, show_website_button, show_give_button, show_calendar_link, section_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       `Copy of ${row.subject}`, row.pastor_note, normalizePastorNoteHeading(row.pastor_note_heading), row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
       row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
       row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
       // A copy carries the extra notes too — the whole point of duplicating a
       // sent issue is to start from what actually went out.
-      row.extra_notes || '[]', supersedesId, row.show_website_button ?? null, row.show_give_button ?? null
+      row.extra_notes || '[]', supersedesId, row.show_website_button ?? null, row.show_give_button ?? null, row.show_calendar_link ?? null, row.section_order ?? null
     ).run();
     const newId = result.meta.last_row_id;
     for (const e of eventsRows.results) {

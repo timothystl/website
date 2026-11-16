@@ -14,9 +14,9 @@ import {
   prettyClock, eventRowFromPost, orderEventRows, defaultUpcomingEventIds,
   NEWSLETTER_PUBLIC_WHERE_SQL, supersededIds, hasConflict,
   DEFAULT_PASTOR_NOTE_HEADING, PASTOR_NOTE_HEADING_LIMIT, normalizePastorNoteHeading,
-  quickFooterSettings,
+  quickFooterSettings, footerSwitchesFromForm,
 } from './newsletter.js';
-import { buildEmailHtml } from './email.js';
+import { buildEmailHtml, normalizeSectionOrder, SECTION_ORDER_DEFAULT } from './email.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -408,8 +408,16 @@ group('special edition footer buttons');
   eq(legacy.web, false, 'nor a Read-on-website button');
   const on = quickFooterSettings({ format: 'quick', show_give_button: 1, show_website_button: 1 });
   eq(on.give && on.web, true, 'either can be switched on');
-  const weekly = quickFooterSettings({ format: 'weekly', show_give_button: 0, show_website_button: 0 });
-  eq(weekly.give && weekly.web, true, 'a weekly issue always keeps both');
+  const weeklyLegacy = quickFooterSettings({ format: 'weekly' });
+  eq(weeklyLegacy.give && weeklyLegacy.web && weeklyLegacy.calendar, true, 'a weekly issue with nothing stored keeps everything on');
+  const weeklyOff = quickFooterSettings({ format: 'weekly', show_give_button: 0, show_website_button: 0, show_calendar_link: 0 });
+  eq(weeklyOff.give || weeklyOff.web || weeklyOff.calendar, false, 'a weekly issue can switch all three off');
+  const fd = new FormData(); fd.set('wk_show_website_button', '1'); fd.set('show_give_button', '1');
+  const wkStored = footerSwitchesFromForm(fd, 'weekly');
+  eq(wkStored.show_website_button, 1, 'weekly reads its own wk_ copy of a switch');
+  eq(wkStored.show_give_button, 0, 'and ignores the special edition copy');
+  eq(wkStored.show_calendar_link, 0, 'an unticked calendar switch is stored off');
+  eq(footerSwitchesFromForm(fd, 'quick').show_calendar_link, null, 'a special edition has no calendar link to store');
 
   const render = (fb) => buildEmailHtml('Funeral notice', '<p>Service details</p>', [], '', '', '2026-11-16', [], '', null, 'quick', '', '', '', '', '', [], [], '', fb);
   const none = render({ web: false, give: false });
@@ -420,7 +428,38 @@ group('special edition footer buttons');
   const both = render({ web: true, give: true });
   ok(both.includes('Give online') && both.includes('Read on our website'), 'on: both buttons appear');
   const wk = buildEmailHtml('Weekly', '<p>Note</p>', [], '', '', '2026-11-16');
-  ok(wk.includes('Give online') && wk.includes('Read on our website'), 'the weekly email is unchanged');
+  ok(wk.includes('Give online') && wk.includes('Read on our website') && wk.includes('View full calendar'), 'the weekly email is unchanged by default');
+  const wkOff = buildEmailHtml('Funeral', '<p>Note</p>', [], '', '', '2026-11-16', [], '', null, 'weekly', '', '', '', '', '', [{ topic: 'Class' }], [], "Pastor's Note", { web: false, give: false, calendar: false });
+  ok(!wkOff.includes('Give online') && !wkOff.includes('Read on our website'), 'weekly: footer buttons can be switched off');
+  ok(!wkOff.includes('View full calendar'), 'weekly: every calendar link can be switched off');
+  ok(!wkOff.includes('Read the full letter'), 'weekly: a short note has no "Read the full letter" link');
+  const long = buildEmailHtml('Weekly', '<p>' + 'word '.repeat(150) + '</p>', [], '', '', '2026-11-16');
+  ok(long.includes('Read the full letter'), 'weekly: a note that is cut short still links to the full letter');
+  ok(!wkOff.includes('class="events-col"'), 'weekly: with nothing in the sidebar, the note runs full width');
+}
+
+// ── section order and Word of Life / LASM headlines ─────────────────────────
+group('section order and ministry headlines');
+{
+  eq(normalizeSectionOrder(null), null, 'nothing stored keeps the legacy layout');
+  eq(normalizeSectionOrder('classes,news').join(','), 'classes,news,secondary,ministry,tertiary,extras', 'a partial order keeps every section, missing ones appended');
+  eq(normalizeSectionOrder('bogus,news,news').join(','), ['news', ...SECTION_ORDER_DEFAULT.filter((k) => k !== 'news')].join(','), 'unknown and repeated keys are dropped');
+
+  const args = (order, wol = '') => ['Weekly', '<p>Note</p>', [], wol, '', '2026-11-16', [], 'SECOND-NOTE', 7, 'weekly', '', '', 'THIRD-NOTE', '', '', [{ topic: 'CLASS-ROW' }], [], "Pastor's Note", undefined, order];
+  const html = buildEmailHtml(...args(['classes', 'tertiary', 'secondary']));
+  ok(html.indexOf('CLASS-ROW') < html.indexOf('THIRD-NOTE') && html.indexOf('THIRD-NOTE') < html.indexOf('SECOND-NOTE'), 'the email follows the dragged order');
+  const legacy = buildEmailHtml(...args(null));
+  ok(legacy.indexOf('SECOND-NOTE') < legacy.indexOf('THIRD-NOTE') && legacy.indexOf('THIRD-NOTE') < legacy.indexOf('CLASS-ROW'), 'no stored order keeps the old sequence');
+
+  const item = (h) => `<p><strong>${h}</strong><br>${'Details about this item. '.repeat(12)}</p>`;
+  const longWol = item('Fall Portraits') + item('Kindergarten Night') + item('Restaurant Fundraiser &amp; More');
+  const digest = buildEmailHtml(...args(null, longWol));
+  ok(digest.includes('<li style="margin:0 0 5px;">Fall Portraits</li>'), 'long Word of Life content shows headlines');
+  ok(!digest.includes('Details about this item.'), 'and not the full text');
+  ok(digest.includes('Restaurant Fundraiser &amp; More</li>'), 'headline entities are not double-escaped');
+  ok(digest.includes('https://timothystl.org/news/7') && digest.includes('Read all on our website'), 'with a link to the full issue');
+  const short = buildEmailHtml(...args(null, item('Just One').slice(0, 120) + '</p>'));
+  ok(short.includes('Just One</strong>'), 'short content prints in full');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
