@@ -1222,6 +1222,13 @@ group('removing a menu item leaves the page alone');
 
   const body = await (await call(env, '/menu', { cookie })).text();
   has(body, 'Live pages not in the menu', 'and it reappears in the orphan panel');
+
+  // Reported 2026-11-16: removed items came back after a release, because
+  // every SCHEMA_VERSION bump re-ran the menu seed by fixed id.
+  db.prepare("UPDATE _schema_version SET value='forced-rerun' WHERE key='version'").run();
+  await call(env, '/login');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE id = ?').get(item.id).n, 0,
+    'a SCHEMA_VERSION bump does not put a removed item back');
 }
 
 group('reordering renumbers from scratch');
