@@ -1530,7 +1530,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-11-06-staff-phone-ext'; // staff_members.phone_ext for the Staff grid's contact line.
+    const SCHEMA_VERSION = '2026-11-16-newsletter-footer-switches'; // newsletters.show_website_button / show_give_button / show_calendar_link.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
