@@ -164,7 +164,8 @@ jobs:
   # cost buys coverage of the production rendering path changed most often.
   public-page-browser:
     name: Public page browser suite
-    runs-on: ubuntu-latest
+    # Playwright 1.55 does not install Chromium on Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

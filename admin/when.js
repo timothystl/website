@@ -99,7 +99,8 @@ export function churchInstant(date, time = '00:00') {
   const [y, m, d] = String(date || '').slice(0, 10).split('-').map(Number);
   const [hh, mm] = String(time || '').split(':').map(Number);
   if (!y || !m || !d) return '';
-  let t = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
+  const wall = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
+  let t = wall;
   if (!Number.isFinite(t)) return '';
   for (let i = 0; i < 2; i++) {
     const p = parts(new Date(t), {
@@ -109,7 +110,9 @@ export function churchInstant(date, time = '00:00') {
     // `hour12: false` renders midnight as "24" in some engines — the same trap
     // churchHour() carries, and it would push the instant a whole day out here.
     const seen = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute);
-    const off = seen - t;
+    // Compare with the FIXED picked wall time, not the moving UTC candidate.
+    // Comparing seen to t applies Central's offset again on the second pass.
+    const off = seen - wall;
     if (!off) break;
     t -= off;
   }

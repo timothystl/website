@@ -232,6 +232,10 @@ const CAL_SEED_PALETTE = {
 };
 
 const PAGES_CACHE_URL = 'https://admin.timothystl.org/api/pages';
+// Change only when published HTML needs to be rebuilt without a content edit.
+// A release number would rebuild every page on unrelated deployments. This
+// generation also changes the public stamp so already-warm Site isolates notice.
+const PAGES_RENDERER_GENERATION = 'church-instant-v1';
 
 // Per-binding: a database that has at least one user account. The first-run
 // /setup redirect needs a COUNT until then; after that the count can only
@@ -325,7 +329,8 @@ async function pagesCacheKey(env, { fresh = false } = {}) {
     pagesStampMemo = (row && row.value) || '';
     pagesStampMemoTime = now;
   }
-  return new Request(PAGES_CACHE_URL + (pagesStampMemo ? '?stamp=' + encodeURIComponent(pagesStampMemo) : ''));
+  return new Request(PAGES_CACHE_URL + '?renderer=' + PAGES_RENDERER_GENERATION
+    + (pagesStampMemo ? '&stamp=' + encodeURIComponent(pagesStampMemo) : ''));
 }
 
 // Per-DATABASE memo: the schema version and all four one-time seed markers
@@ -3568,7 +3573,8 @@ export default {
     if (path === '/api/content-stamp' && method === 'GET') {
       const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?')
         .bind(CONTENT_STAMP_KEY).first().catch(() => null);
-      return new Response(JSON.stringify({ stamp: (row && row.value) || '' }), {
+      const stamp = (row && row.value) || '';
+      return new Response(JSON.stringify({ stamp: stamp ? PAGES_RENDERER_GENERATION + ':' + stamp : '' }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
     }
