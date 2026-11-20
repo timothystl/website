@@ -6999,15 +6999,17 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
   const before = readStamp();
   const r0 = await call(env, '/api/content-stamp');
   eq(r0.status, 200, 'the stamp route answers without a session — the site Worker has none');
-  eq((await r0.clone().json()).stamp, before, 'and reports exactly what is stored, blank or not');
+  eq((await r0.clone().json()).stamp, before ? 'church-instant-v1:' + before : '',
+    'a nonblank stamp includes the renderer generation; blank stays blank');
   has(r0.headers.get('cache-control') || '', 'max-age=60',
     'held briefly at the edge — a probe every minute per isolate, not per request');
 
   await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
   const after = readStamp();
   ok(after && after !== before, `publishing writes a new stamp — ${JSON.stringify(after)}`);
-  eq((await (await call(env, '/api/content-stamp')).json()).stamp, after,
-    'and the route hands the site the value it will compare against');
+  eq((await (await call(env, '/api/content-stamp')).json()).stamp, 'church-instant-v1:' + after,
+    'and the route hands the site the content and renderer identity it will compare against');
+  eq(readStamp(), after, 'reading the public stamp never changes the stored value');
 
   // A write that cannot change what a visitor sees leaves it alone, or the
   // site re-fetches the whole bundle for nothing — which is the cost this
@@ -7136,6 +7138,43 @@ group('/voters is fully editable, ordinary blocks now — backfilled once from t
     const after = await (await call(env, '/api/pages?fresh=1', { fresh: true })).json();
     ok(!JSON.stringify(after.menu).includes('STALE'), 'the copy from before the publish is not served');
     ok(store.size > keysBefore, 'the new bundle is cached under a new key');
+  } finally {
+    delete globalThis.caches;
+  }
+}
+
+// A renderer fix must bypass cached HTML even when nobody republishes a page.
+// Site can fetch the old Admin bundle while Site deploys first, so changing
+// only the Admin cache key would leave Site holding it until its daily ceiling.
+{
+  group('renderer generation invalidates old bundles without changing stored content stamps');
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  await call(env, '/pages/api/page/home/publish', { cookie, method: 'POST' });
+  const rawStamp = db.prepare("SELECT value FROM site_settings WHERE key='site_content_stamp'").get().value;
+  const store = new Map();
+  globalThis.caches = { default: {
+    match: async (req) => store.get(req.url)?.clone(),
+    put: async (req, res) => { store.set(req.url, res.clone()); },
+    delete: async () => true,
+  } };
+  try {
+    for (const stamp of [rawStamp, '']) {
+      if (!stamp) db.prepare("DELETE FROM site_settings WHERE key='site_content_stamp'").run();
+      const legacyKey = 'https://admin.timothystl.org/api/pages' + (stamp ? '?stamp=' + encodeURIComponent(stamp) : '');
+      store.set(legacyKey, Response.json({ rendered: { home: 'OLD RENDERER' } }));
+      const res = await call(env, '/api/pages?fresh=1', { fresh: true });
+      const body = await res.json();
+      ok(body.rendered.home && body.rendered.home !== 'OLD RENDERER', 'old-generation HTML is not reused, even with a blank stamp');
+      const newKey = 'https://admin.timothystl.org/api/pages?renderer=church-instant-v1'
+        + (stamp ? '&stamp=' + encodeURIComponent(stamp) : '');
+      ok(store.has(newKey), 'the rebuilt bundle uses a generation-specific cache key');
+      has(res.headers.get('cache-control') || '', 'max-age=3600', 'the bundle lifetime is unchanged');
+      eq((await (await call(env, '/api/content-stamp')).json()).stamp, stamp ? 'church-instant-v1:' + stamp : '',
+        'Site observes the same generation without turning a blank stamp into a change');
+      eq((db.prepare("SELECT value FROM site_settings WHERE key='site_content_stamp'").get() || {}).value || '', stamp,
+        'rebuilding and probing are read-only against the stored stamp');
+    }
   } finally {
     delete globalThis.caches;
   }

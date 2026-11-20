@@ -100,6 +100,19 @@ advance(20);
 await load();
 ok(admin.pages === 2, `a failed stamp probe leaves the cached bundle alone — got ${admin.pages}`);
 
+group('a renderer deployment refreshes a warm Site copy without a content edit');
+admin.reachable = true;
+const beforeRenderer = admin.pages;
+// The underlying content is still v2. Only the Admin renderer generation
+// changes, including when Site deployed first and cached the old Admin HTML.
+admin.stamp = 'church-instant-v1:v2';
+advance(2);
+await load();
+ok(admin.pages === beforeRenderer + 1, 'a renderer generation change refreshes the old bundle');
+advance(20);
+await load();
+ok(admin.pages === beforeRenderer + 1, 'the unchanged generation does not trigger repeated rebuilds');
+
 Date.now = realNow;
 globalThis.fetch = realFetch;
 if (realRW === undefined) delete globalThis.HTMLRewriter; else globalThis.HTMLRewriter = realRW;

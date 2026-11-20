@@ -474,20 +474,29 @@ console.log('\na block ships its own script, and both paths run it');
   //
   // The countdown is the block that proves it, because it is the one whose
   // browser half changes something a visitor can see.
-  const blocks = sanitizeBlocks([Object.assign(newBlock('photobanner'),
-    { title: 'Christmas Market', countdown: true })]);
-  const data = { news: [{ id: 1, title: 'Christmas Market', event_date: '2099-12-06' }] };
-  const html = renderPage(blocks, { slug: 'news', withCss: false, data });
+  const blocks = sanitizeBlocks([
+    newBlock('photobanner', { title: 'Christmas Market', countdown: true,
+      countdownSrc: 'custom', customAt: '2026-12-05T11:00' }),
+    newBlock('countdown', { newsId: 'custom', title: 'Doors open', customAt: '2026-12-05T11:00' }),
+  ]);
+  const html = renderPage(blocks, { slug: 'news', withCss: false });
   ok(/<script/.test(html), 'the countdown block really does ship a script');
 
-  const { page, ctx, errors } = await visitEdged('news', html, { edged: false });
-  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
-  eq(await page.evaluate(() => !!window.__tlcCountdown), true,
-    'the block script ran after a client-side takeover');
-  const reads = (await page.textContent('[data-countdown]')).trim();
-  ok(reads !== '—' && /\d+d /.test(reads),
-    `the countdown is ticking rather than frozen — reads ${JSON.stringify(reads)}`);
-  await ctx.close();
+  for (const edged of [true, false]) {
+    const { page, ctx, errors } = await visitEdged('news', html, { edged, edgeBody: html });
+    eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+    eq(await page.evaluate(() => !!window.__tlcCountdown), true,
+      'the block script ran for ' + (edged ? 'edge HTML' : 'client-side takeover'));
+    const clocks = await page.locator('[data-countdown]').evaluateAll((els) =>
+      els.map((el) => ({ at: el.getAttribute('data-countdown'), text: el.textContent.trim() })));
+    eq(clocks.length, 2, 'the Photo banner and standalone countdown both render');
+    for (const clock of clocks) {
+      eq(clock.at, '2026-12-05T17:00:00.000Z', '11am Central reaches the browser as the exact UTC instant');
+      ok(clock.text !== '—' && /\d+d /.test(clock.text),
+        `the countdown is painted rather than frozen — reads ${JSON.stringify(clock.text)}`);
+    }
+    await ctx.close();
+  }
 }
 
 console.log('\nthe Give button is legible on every field');

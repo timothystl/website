@@ -4,7 +4,7 @@
 // St. Louis, and every evening from about 7pm they disagree about the date.
 // The cases below are real instants pinned in UTC, so they assert the offset
 // rather than describing it.
-import { CHURCH_TZ, churchDate, churchDatePlus, churchHour, partOfDay, churchFormat } from './when.js';
+import { CHURCH_TZ, churchDate, churchDatePlus, churchHour, partOfDay, churchFormat, churchInstant } from './when.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : (fail++, console.error('  ✗ ' + m)); };
@@ -96,6 +96,33 @@ group('the shape is what the database already stores');
   ok(/^\d{4}-\d{2}-\d{2}$/.test(churchDatePlus(90)), 'and so is churchDatePlus: ' + churchDatePlus(90));
   // Zero-padded, so string comparison and date comparison agree.
   eq(churchDate(new Date('2026-03-05T18:00:00Z')), '2026-03-05', 'single digits are padded');
+}
+
+group('picked church wall times become exact UTC instants, not twice-offset guesses');
+{
+  const cases = [
+    ['2026-12-05', '11:00', '2026-12-05T17:00:00.000Z', 'Christmas Market opens at 11am Central'],
+    ['2026-07-01', '11:00', '2026-07-01T16:00:00.000Z', 'summer uses daylight time'],
+    ['2026-12-05', '00:00', '2026-12-05T06:00:00.000Z', 'winter midnight stays on its picked day'],
+    ['2026-07-01', '00:30', '2026-07-01T05:30:00.000Z', 'summer midnight preserves minutes'],
+    ['2026-12-31', '23:45', '2027-01-01T05:45:00.000Z', 'late winter time crosses the UTC year'],
+    // These are unambiguous, existing wall times on both sides of the DST
+    // transitions. The second pass must use the offset at the corrected guess.
+    ['2026-03-08', '01:30', '2026-03-08T07:30:00.000Z', 'before spring forward'],
+    ['2026-03-08', '03:30', '2026-03-08T08:30:00.000Z', 'after spring forward'],
+    ['2026-11-01', '00:30', '2026-11-01T05:30:00.000Z', 'before fall back'],
+    ['2026-11-01', '02:30', '2026-11-01T08:30:00.000Z', 'after fall back'],
+  ];
+  for (const [date, time, expected, label] of cases) {
+    const actual = churchInstant(date, time);
+    eq(actual, expected, label);
+    eq(churchDate(new Date(actual)), date, label + ' round-trips the picked date');
+    eq(churchFormat({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }, new Date(actual)), time,
+      label + ' round-trips the picked time');
+  }
+  eq(churchInstant('2026-12-05'), '2026-12-05T06:00:00.000Z', 'omitted time still means church midnight');
+  eq(churchInstant(''), '', 'missing date still suppresses a countdown');
+  eq(churchInstant('not-a-date', '11:00'), '', 'unparseable date still suppresses a countdown');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
