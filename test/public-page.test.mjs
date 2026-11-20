@@ -487,6 +487,12 @@ console.log('\na block ships its own script, and both paths run it');
     eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
     eq(await page.evaluate(() => !!window.__tlcCountdown), true,
       'the block script ran for ' + (edged ? 'edge HTML' : 'client-side takeover'));
+    // In edge HTML the first script can run before the second block is parsed;
+    // the shared one-second timer paints that later block on its next tick.
+    await page.waitForFunction(() => {
+      const els = [...document.querySelectorAll('[data-countdown]')];
+      return els.length === 2 && els.every((el) => /\d+d /.test(el.textContent));
+    });
     const clocks = await page.locator('[data-countdown]').evaluateAll((els) =>
       els.map((el) => ({ at: el.getAttribute('data-countdown'), text: el.textContent.trim() })));
     eq(clocks.length, 2, 'the Photo banner and standalone countdown both render');
