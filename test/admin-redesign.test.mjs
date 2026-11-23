@@ -3443,6 +3443,21 @@ group('per-screen, part two');
   ok(titles.indexOf('VBS') < titles.indexOf('Christmas Market'), 'the soonest event leads the next one: ' + titles.join(', '));
   ok(titles.indexOf('Christmas Market') < titles.indexOf('New announcement'),
     'every event leads every plain announcement, however far out the event is');
+
+  // The admin list reads soonest-first too: current posts by the day they
+  // matter, and a finished event sinks to the bottom marked Past, outside the
+  // Upcoming filter the list opens on.
+  const adminNews = await (await call(env, '/newsitems', { cookie })).text();
+  // Find each row by its title cell — the sidebar also says "Christmas Market".
+  const at = (t) => adminNews.search(new RegExp('tlc-primary-title">(?:<span[^>]*>[^<]*</span>)?' + t));
+  ok(at('Pinned post') > 0 && at('Pinned post') < at('VBS'), 'pinned still leads');
+  ok(at('VBS') < at('Christmas Market'), 'the soonest event comes before a later one');
+  ok(at('Christmas Market') < at('Last month'), 'a past event sinks below every upcoming one');
+  ok(adminNews.indexOf('data-value="upcoming"') < adminNews.indexOf('data-value="all"'), 'the list opens on Upcoming');
+  const rummageRow = adminNews.slice(adminNews.lastIndexOf('data-filter="', at('Last month')), at('Last month'));
+  ok(/data-filter="past/.test(rummageRow) && !/upcoming/.test(rummageRow), 'a past event is filed as Past, not Upcoming');
+  const vbsRow = adminNews.slice(adminNews.lastIndexOf('data-filter="', at('VBS')), at('VBS'));
+  ok(/upcoming/.test(vbsRow), 'an upcoming event is in Upcoming');
   ok(titles.indexOf('New announcement') < titles.indexOf('Old announcement'),
     'within plain announcements, the newest published still leads');
   ok(titles.indexOf('Pinned post') < titles.indexOf('VBS'), 'pinned still always leads everything else');

@@ -69,8 +69,8 @@ export const SECTIONS = {
     note: 'An issue pulls from News & Events and Christian Ed rather than asking you to retype them — change a post and the unsent issue follows.'
   },
   news: {
-    label: 'News & Events', glyph: '◫', title: 'News & Events', purpose: 'One list behind one page — announcements and dated events together, with the calendar embedded below them. Posts here also get pulled into the weekly email. Pinned items stay on top; expired ones drop off on their own.',
-    action: '+ New post', search: 'Search posts', filters: ['All', 'Live', 'Scheduled', 'Expired', 'Calendar only'], valueChips: true,
+    label: 'News & Events', glyph: '◫', title: 'News & Events', purpose: 'One list behind one page — announcements and dated events together, with the calendar embedded below them. Posts here also get pulled into the weekly email. Soonest first, pinned items on top; past and expired ones drop to the bottom.',
+    action: '+ New post', search: 'Search posts', filters: ['Upcoming', 'All', 'Live', 'Scheduled', 'Past', 'Expired', 'Calendar only'], valueChips: true,
     columns: [['Post', '2.4fr'], ['Date', '1.2fr'], ['Expires', '1fr'], ['Status', '1.1fr']],
     note: 'Expiry is what keeps the site honest — a post with an expire date disappears without anyone remembering to delete it.'
   },
