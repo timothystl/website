@@ -3347,8 +3347,11 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFFFF 0%,#F7F9FB 100%);borde
 .tlcb-nl-full-news-t{font-family:var(--tlcb-serif);font-size:16px;color:#0B3C5C;margin-bottom:4px;}
 .tlcb-nl-full-news-s{font-size:13px;line-height:1.65;color:#3A3A4A;}
 .tlcb-nl-full-more{margin-top:14px;padding-top:14px;border-top:1px solid #DCE1E7;}
-.tlcb-nl-full-more-item{padding:7px 0;border-top:1px solid #EEF2F6;}
+.tlcb-nl-full-more-item{padding:7px 0;border-top:1px solid #EEF2F6;display:flex;gap:12px;align-items:flex-start;}
 .tlcb-nl-full-more-item:first-child{border-top:0;}
+.tlcb-nl-full-news-img{display:block;width:100%;max-height:220px;object-fit:contain;background:#F7F3EC;border-radius:8px;margin:6px 0 8px;}
+.tlcb-nl-full-more-img{flex:0 0 96px;width:96px;height:72px;object-fit:cover;border-radius:6px;background:#F7F3EC;}
+.tlcb-nl-full-parts{margin:4px 0 6px;padding-left:18px;font-size:13px;line-height:1.6;color:#3A3A4A;}
 .tlcb-nl-full-ministry{margin-top:16px;padding-top:14px;border-top:1px solid #DCE1E7;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .tlcb-nl-full-ministry--one{grid-template-columns:1fr;max-width:340px;}
 .tlcb-nl-full-ministry-block{background:#F7F9FB;border-left:3px solid #1A5C3E;border-radius:0 8px 8px 0;padding:12px;}
@@ -4668,20 +4671,35 @@ const NEWSLETTER_ARCHIVE_SCRIPT = '<script>' + `
           var mainNews = n.news_items[0];
           var secondaryNews = n.news_items[1] || null;
           var moreNews = n.news_items.slice(2);
+          // Same picture and combined date list the email carries.
+          var newsImg = function (item, cls) {
+            var src = item.image_url || '';
+            if (src.indexOf('/images/') === 0) src = 'https://admin.timothystl.org' + src;
+            return (src.indexOf('https://') === 0 || src.indexOf('http://') === 0) ?'<img class="' + cls + '" src="' + esc(src) + '" alt="" loading="lazy">' : '';
+          };
+          var newsParts = function (item) {
+            if (!item.parts || !item.parts.length) return '';
+            return '<ul class="tlcb-nl-full-parts">' + item.parts.map(function (p) {
+              return '<li>' + (p.when ? '<strong>' + esc(p.when) + '</strong> &#183; ' : '') + esc(p.title || '') + '</li>';
+            }).join('') + '</ul>';
+          };
           html += '<div class="tlcb-nl-full-news"><div class="tlcb-nl-full-eyebrow">Featured</div>' +
             '<div class="tlcb-nl-full-news-t">' + esc(mainNews.title || '') + '</div>' +
+            newsImg(mainNews, 'tlcb-nl-full-news-img') + newsParts(mainNews) +
             (mainNews.summary ? '<div class="tlcb-nl-full-news-s">' + esc(mainNews.summary) + '</div>' : '') +
             '</div>';
           if (secondaryNews) {
             html += '<div class="tlcb-nl-full-news"><div class="tlcb-nl-full-news-t">' + esc(secondaryNews.title || '') + '</div>' +
+              newsImg(secondaryNews, 'tlcb-nl-full-news-img') + newsParts(secondaryNews) +
               (secondaryNews.summary ? '<div class="tlcb-nl-full-news-s">' + esc(secondaryNews.summary) + '</div>' : '') +
               '</div>';
           }
           if (moreNews.length) {
             html += '<div class="tlcb-nl-full-more"><div class="tlcb-nl-full-eyebrow">More from Timothy</div>' +
               moreNews.map(function (item) {
-                return '<div class="tlcb-nl-full-more-item"><div class="tlcb-nl-full-news-t">' + esc(item.title || '') + '</div>' +
-                  (item.summary ? '<div class="tlcb-nl-full-news-s">' + esc(item.summary) + '</div>' : '') + '</div>';
+                return '<div class="tlcb-nl-full-more-item">' + newsImg(item, 'tlcb-nl-full-more-img') +
+                  '<div><div class="tlcb-nl-full-news-t">' + esc(item.title || '') + '</div>' + newsParts(item) +
+                  (item.summary ? '<div class="tlcb-nl-full-news-s">' + esc(item.summary) + '</div>' : '') + '</div></div>';
               }).join('') + '</div>';
           }
         }

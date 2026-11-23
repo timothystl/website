@@ -677,7 +677,7 @@ async function buildNewsletterEmailPayload(env, id) {
   if (selectedNewsIds.length > 0) {
     const placeholders = selectedNewsIds.map(() => '?').join(',');
     const newsRows = await env.DB.prepare(
-      `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
+      `SELECT id, title, summary, body, image_url, event_date, event_time, newsletter_group FROM news_items WHERE id IN (${placeholders})`
     ).bind(...selectedNewsIds).all();
     const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
@@ -1353,7 +1353,7 @@ document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : '
     if (selectedNewsIds.length > 0) {
       const placeholders = selectedNewsIds.map(() => '?').join(',');
       const newsRows = await env.DB.prepare(
-        `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
+        `SELECT id, title, summary, body, image_url, event_date, event_time, newsletter_group FROM news_items WHERE id IN (${placeholders})`
       ).bind(...selectedNewsIds).all();
       const newsMap = Object.fromEntries(newsRows.results.map(r => [r.id, r]));
       selectedNewsItems = selectedNewsIds.map(id => newsMap[id]).filter(Boolean);
@@ -2416,7 +2416,7 @@ ${classesJs}
     if (newsIds.length) {
       try {
         const ph = newsIds.map(() => '?').join(',');
-        const nr = await env.DB.prepare(`SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${ph})`).bind(...newsIds).all();
+        const nr = await env.DB.prepare(`SELECT id, title, summary, body, image_url, event_date, event_time, newsletter_group FROM news_items WHERE id IN (${ph})`).bind(...newsIds).all();
         const map = Object.fromEntries((nr.results || []).map((r) => [String(r.id), r]));
         newsItems = newsIds.map((n) => map[n]).filter(Boolean);
       } catch (_) { newsItems = []; }
@@ -2573,6 +2573,11 @@ ${classesJs}
         // Calendar-only posts keep their own chip to isolate them.
         filter: [state, (state === 'live' || state === 'scheduled') ? 'upcoming' : '', item.value || '', calOnly ? 'calendar-only' : ''].filter(Boolean),
         search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
+        sortKeys: {
+          date: item.event_date || item.publish_date || '',
+          added: String(item.id).padStart(10, '0'),
+          title: String(item.title || '').toLowerCase(),
+        },
         cells: [
           // The pin marker sits BEFORE the title, where the eye starts —
           // the rows are already sorted pinned-first, so the marker's job is
@@ -2616,6 +2621,13 @@ ${renderListSection({
   valueChips: sectionCfg('news').valueChips,
   columns: columnsOf('news'),
   rows: listRows,
+  sorts: [
+    { label: 'Soonest first', key: '' },
+    { label: 'Latest date first', key: 'date', dir: 'desc' },
+    { label: 'Earliest date first', key: 'date', dir: 'asc' },
+    { label: 'Recently added', key: 'added', dir: 'desc' },
+    { label: 'Title A–Z', key: 'title', dir: 'asc' },
+  ],
   noun: 'post',
   empty: 'No news posts yet.',
   note: sectionCfg('news').note,
@@ -2631,6 +2643,10 @@ ${renderListSection({
   // The live category list, for the picker below. Read once per render
   // rather than per field, and falling back to the shipped list so the form
   // still offers something sensible if the table cannot be read.
+  // Names already in use for combining posts in the newsletter, offered as
+  // suggestions so "Thanksgiving Worship" is not typed three different ways.
+  const newsGroups = (((await env.DB.prepare("SELECT DISTINCT newsletter_group g FROM news_items WHERE newsletter_group IS NOT NULL AND newsletter_group <> '' ORDER BY g")
+    .all().catch(() => ({ results: [] }))).results) || []).map((r) => r.g);
   const newsCalCats = activeCategories(mergedCategories(
     ((await env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories')
       .all().catch(() => ({ results: [] }))).results) || []
@@ -2726,6 +2742,7 @@ ${renderListSection({
         { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
           <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_calendar', 'Church calendar only', on('calendar'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
           <p class="tlc-hint">A dated post is on the calendar either way. <strong>Church calendar only</strong> keeps it off the news page.</p></div>` },
+        { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label" for="fld-newsletter_group">Combine in the newsletter under</label><input type="text" id="fld-newsletter_group" name="newsletter_group" list="nl-groups" value="${escapeHtml(item ? (item.newsletter_group || '') : '')}" placeholder="e.g. Thanksgiving Worship"><datalist id="nl-groups">${newsGroups.map((g) => `<option value="${escapeHtml(g)}"></option>`).join('')}</datalist><p class="tlc-hint">Optional. Posts with the same name here show as one item in the newsletter, under that name, with each date and time listed. The calendar still shows each one separately at its own time.</p></div>` },
         { kind: 'row', fields: [
         { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
         { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
@@ -2796,8 +2813,8 @@ ${newsEventTimeScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       form.get('ch_social') === '1' && 'social',
     ].filter(Boolean).join(',') || 'web';
     const newItemResult = await env.DB.prepare(
-      'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_end_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
+      'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_end_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category, newsletter_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, String(form.get('newsletter_group') || '').trim().slice(0, 80) || null).run();
     await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
     return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
   }
@@ -2874,8 +2891,8 @@ ${newsEventTimeScript()}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     ].filter(Boolean).join(',') || 'web';
     const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
     await env.DB.prepare(
-      `UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_date ELSE ? END, event_end_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_date ELSE ? END, event_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_time ELSE ? END, event_end_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_time ELSE ? END, event_location=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_location ELSE ? END, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?`
-    ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
+      `UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_date ELSE ? END, event_end_date=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_date ELSE ? END, event_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_time ELSE ? END, event_end_time=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_end_time ELSE ? END, event_location=CASE WHEN EXISTS(SELECT 1 FROM calendar_event_links WHERE source_key='n:' || news_items.id) THEN event_location ELSE ? END, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=?, newsletter_group=? WHERE id=?`
+    ).bind(title, summary, body, image_url, publish_date, event_date || null, event_end_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, String(form.get('newsletter_group') || '').trim().slice(0, 80) || null, id).run();
     await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
     return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
   }

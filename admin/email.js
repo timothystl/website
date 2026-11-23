@@ -148,9 +148,61 @@ export function normalizeSectionOrder(raw) {
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
+// ── COMBINED NEWSLETTER ITEMS ───────────────────────────────────────────────
+// Posts that are really one occasion at several times — Thanksgiving Eve and
+// Thanksgiving Day, an Advent Wednesday's meal and service — share a
+// `newsletter_group` name. In the newsletter they read as ONE item under that
+// name, with each date and time listed inside it; on the calendar they stay
+// separate rows, each at its own time. A group with a single post in this
+// issue is just that post. The combined item sits where its first post sat.
+function fmtGroupTime(t) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t || ''));
+  if (!m) return '';
+  const h = Number(m[1]);
+  const ampm = h >= 12 ? 'p.m.' : 'a.m.';
+  const h12 = h % 12 || 12;
+  return `${h12}${m[2] === '00' ? '' : ':' + m[2]} ${ampm}`;
+}
+export function newsWhenLabel(item) {
+  if (!item || !item.event_date) return '';
+  const d = new Date(item.event_date + 'T12:00:00Z');
+  if (isNaN(d)) return '';
+  const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const time = fmtGroupTime(item.event_time);
+  return time ? `${day}, ${time}` : day;
+}
+export function groupNewsItems(items) {
+  const out = [];
+  const groups = new Map();
+  for (const it of items || []) {
+    const name = String((it && it.newsletter_group) || '').trim();
+    if (!name) { out.push(it); continue; }
+    const key = name.toLowerCase();
+    let g = groups.get(key);
+    if (!g) {
+      g = { id: it.id, title: name, summary: '', body: '', image_url: '', parts: [], members: [] };
+      groups.set(key, g);
+      out.push(g);
+    }
+    g.members.push(it);
+    if (!g.image_url && it.image_url) g.image_url = it.image_url;
+    if (!g.summary && !g.body && (it.summary || it.body)) { g.summary = it.summary || ''; g.body = it.body || ''; }
+  }
+  return out.map((x) => {
+    if (!x || !x.members) return x;
+    if (x.members.length === 1) return x.members[0];
+    const sorted = x.members.slice().sort((a, b) =>
+      String(a.event_date || '9999').localeCompare(String(b.event_date || '9999'))
+      || String(a.event_time || '').localeCompare(String(b.event_time || '')));
+    const { members, ...rest } = x;
+    return { ...rest, parts: sorted.map((m) => ({ title: m.title || '', when: newsWhenLabel(m) })) };
+  });
+}
+
 export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = [], pastorNoteHeading = "Pastor's Note", footerButtons = { web: true, give: true }, sectionOrder = null) {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
+  newsItems = groupNewsItems(newsItems);
 
   // Relative /images/... paths only resolve against the admin domain — fine in a
   // browser tab, but emails have no page origin to resolve them against.
@@ -329,6 +381,9 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   ${showCalendar ? `<div style="margin-top:12px;text-align:center;">${calendarLink}</div>` : ''}
 </div>` : (showCalendar ? `<div style="background:#F7F3EC;border-radius:8px;padding:14px 14px 12px;text-align:center;">${calendarLink}</div>` : '');
 
+  // A combined item lists each of its dates and times under its one heading.
+  const partsHtml = (item, size) => (item && item.parts && item.parts.length) ? `<table cellpadding="0" cellspacing="0" style="margin:0 0 8px;">${item.parts.map((p) => `<tr><td style="font-family:'Source Sans 3',Arial,sans-serif;font-size:${size}px;color:#1A1A2A;line-height:1.6;padding:1px 0;">${p.when ? `<strong style="color:#1E2D4A;">${esc(p.when)}</strong> &middot; ` : ''}${esc(p.title)}</td></tr>`).join('')}</table>` : '';
+
   // Main news (first item — featured)
   const mainNews = newsItems[0] || null;
   const secondaryNews = newsItems[1] || null;
@@ -340,6 +395,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Featured</div>
   <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#1E2D4A;margin-bottom:8px;">${esc(mainNews.title)}</div>
   ${mainNewsImg}
+  ${partsHtml(mainNews, 14)}
   ${(mainNews.summary || mainNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#1A1A2A;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary || fixBodyImgSrcs(mainNews.body), 280)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
@@ -349,6 +405,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
 <tr><td style="padding:18px 0 0;border-top:1px solid #E7DFD1;">
   <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#1E2D4A;margin-bottom:6px;">${esc(secondaryNews.title)}</div>
   ${secondaryNewsImg}
+  ${partsHtml(secondaryNews, 13)}
   ${(secondaryNews.summary || secondaryNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#1A1A2A;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary || fixBodyImgSrcs(secondaryNews.body), 200)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
@@ -424,9 +481,14 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <table width="100%" cellpadding="0" cellspacing="0">
     ${additionalNews.map(item => `
     <tr><td style="padding:11px 0;border-bottom:1px solid #F0E8DC;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      ${item.image_url ? `<td width="96" valign="top" style="padding-right:12px;"><img src="${esc(safeUrl(fixImgSrc(item.image_url)))}" alt="" width="96" style="width:96px;height:72px;object-fit:cover;border-radius:6px;display:block;background:#F7F3EC;"></td>` : ''}
+      <td valign="top">
       <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#1E2D4A;margin-bottom:4px;">${esc(item.title)}</div>
+      ${partsHtml(item, 12)}
       ${(item.summary || item.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#1A1A2A;line-height:1.65;margin-bottom:6px;">${truncate(item.summary || fixBodyImgSrcs(item.body), 150)}</div>` : ''}
       <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">Read more</a>
+      </td></tr></table>
     </td></tr>`).join('')}
   </table>
 </td></tr>` : '';

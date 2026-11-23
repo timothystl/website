@@ -43,7 +43,7 @@ import { hashPassword, verifyPasswordOrDummy, loginThrottled, resetRequestThrott
 import { resolvePayrollContractCaller } from './admin/payroll-contract-auth.js';
 import { handleGymIncomeContract } from './admin/gym-income-report.js';
 import { handleWebsiteAccessLogin } from './admin/shared-staff-login.js';
-import { sendTransactionalEmail, buildWebHtml, getBrevoListCount, requestNewsletterOptin } from './admin/email.js';
+import { sendTransactionalEmail, buildWebHtml, getBrevoListCount, requestNewsletterOptin, groupNewsItems } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildReportPdf } from './admin/pdf.js';
 import { SCHOOL_YEAR, schoolEventRows } from './admin/school-calendar-seed.js';
@@ -2187,6 +2187,9 @@ export default {
     // A run of days — a break, a camp, an assessment week. One row rather than
     // five, so a week off school is one chip a reader takes in at a glance.
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_date TEXT').run(); } catch (_) {}
+    // Posts that read as one item in the newsletter (groupNewsItems) while
+    // staying separate on the calendar.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN newsletter_group TEXT').run(); } catch (_) {}
     // ⚠ WHICH POST AN ISSUE'S EVENT ROW CAME FROM. The rows themselves stay
     // materialized — a sent issue's archive has to keep saying what was
     // actually sent — and this is only what lets the composer tick the right
@@ -3672,10 +3675,10 @@ export default {
       if (newsIds.length > 0) {
         const placeholders = newsIds.map(() => '?').join(',');
         const newsRows = await env.DB.prepare(
-          `SELECT id, title, summary, image_url FROM news_items WHERE id IN (${placeholders})`
+          `SELECT id, title, summary, image_url, event_date, event_time, newsletter_group FROM news_items WHERE id IN (${placeholders})`
         ).bind(...newsIds).all();
         const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
-        newsItems = newsIds.map(nid => newsMap[nid]).filter(Boolean);
+        newsItems = groupNewsItems(newsIds.map(nid => newsMap[nid]).filter(Boolean));
       }
       let bibleClasses = [];
       try { bibleClasses = JSON.parse(row.bible_classes || '[]'); } catch (_) {}
