@@ -54,8 +54,8 @@ group('the values that had drifted');
   // Sunday. The property the original assertion was really protecting still
   // holds: there is no Pinned filter, because pinned rows already sort to the
   // top and a filter for them would be a control with nothing to find.
-  eq(section('news').filters.join(','), 'All,Live,Scheduled,Expired,Calendar only',
-    'News keeps the design\'s four and adds Calendar only');
+  eq(section('news').filters.join(','), 'Upcoming,All,Live,Scheduled,Past,Expired,Calendar only',
+    'News opens on Upcoming, keeps the design\'s four, and adds Past and Calendar only');
   ok(!section('news').filters.includes('Pinned'), 'and still has no Pinned filter');
   eq(section('ed').filters.join(','), 'All,Running,Paused', 'Christian Ed filters on Running, not "On the website"');
   eq(section('notices').filters.join(','), 'All,Showing,Hidden', 'Notices filters on Showing/Hidden');
@@ -88,7 +88,7 @@ group('filter values are derivable and stable');
 {
   // The client filters on these strings, so they have to be predictable from
   // the label rather than hand-maintained in parallel.
-  eq(filtersOf('news').map((f) => f.value).join(','), 'all,live,scheduled,expired,calendar-only', 'simple labels');
+  eq(filtersOf('news').map((f) => f.value).join(','), 'upcoming,all,live,scheduled,past,expired,calendar-only', 'simple labels');
   eq(filtersOf('ministries').map((f) => f.value).join(','), 'all,with-posts,draft-edits,not-in-menu',
     'multi-word labels hyphenate');
   eq(filtersOf('media').map((f) => f.value).join(','), 'all,photos,files,needs-alt-text,over-1-mb,unused',

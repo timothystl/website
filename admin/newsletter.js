@@ -2514,19 +2514,36 @@ ${classesJs}
     // "Expired" pill showing for the one visit before the row is actually
     // removed — the same screen already shows that state on purpose.
     ctx.waitUntil(sweepExpiredItems(env, new URL(request.url).origin));
-    const itemsRes = await env.DB.prepare(
-      'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC'
-    ).all();
+    const itemsRes = await env.DB.prepare('SELECT * FROM news_items').all();
     const today = churchDate();
     const soon = churchDatePlus(3);
+    // Soonest first. Current posts lead (pinned ones on top), ordered by the
+    // day they matter: an event by its date, an announcement by the day it
+    // goes up — a live one counts as today. Anything whose day is over (an
+    // event that has ended, a post past its expiry) drops to the bottom,
+    // most recent first, so last spring never sits above next Sunday.
+    const stateOf = (item) => {
+      if (item.publish_date && item.publish_date > today) return 'scheduled';
+      if (item.expire_date && item.expire_date < today) return 'expired';
+      const lastDay = item.event_end_date || item.event_date;
+      if (lastDay && lastDay < today) return 'past';
+      return 'live';
+    };
+    const sortKey = (item) => item.event_date
+      || (item.publish_date && item.publish_date > today ? item.publish_date : today);
+    const ranked = itemsRes.results.map((item) => {
+      const state = stateOf(item);
+      const done = state === 'past' || state === 'expired';
+      return { item, state, group: done ? 2 : (item.pinned ? 0 : 1),
+        key: done ? (item.event_end_date || item.event_date || item.expire_date || item.publish_date || '') : sortKey(item) };
+    }).sort((a, b) => a.group - b.group
+      || (a.group === 2 ? b.key.localeCompare(a.key) : a.key.localeCompare(b.key))
+      || b.item.id - a.item.id);
     const msgParam = url.searchParams.get('msg');
     const alertHtml = msgParam === 'saved' ? `<div class="alert alert-success">✓ News post saved.</div>`
       : msgParam === 'deleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
 
-    const listRows = itemsRes.results.map((item) => {
-      let state = 'live';
-      if (item.publish_date && item.publish_date > today) state = 'scheduled';
-      else if (item.expire_date && item.expire_date < today) state = 'expired';
+    const listRows = ranked.map(({ item, state }) => {
       const expiringSoon = state === 'live' && item.expire_date && item.expire_date <= soon;
       // A post that goes on the month and deliberately not into the news
       // feed — a school break, a week of testing. `channels` is a list, so a
@@ -2535,6 +2552,7 @@ ${classesJs}
 
       const status = state === 'scheduled' ? statusPill('auto', 'Scheduled')
         : state === 'expired' ? statusPill('plain', 'Expired')
+        : state === 'past' ? statusPill('plain', 'Past')
         : expiringSoon ? statusPill('warn', 'Expiring')
         : statusPill('good', 'Live');
 
@@ -2550,12 +2568,10 @@ ${classesJs}
 
       return {
         href: `/newsitems/edit/${item.id}`,
-        // ⚠ A CALENDAR-ONLY POST IS ITS OWN FILTER, because there are
-        // twenty-nine of them and this list sorts furthest-future first —
-        // so the school year sits on top of whatever the office wrote for
-        // next Sunday. The chip isolates them; it does not hide them from
-        // All, which would make the list a half-truth.
-        filter: [state, item.value || '', calOnly ? 'calendar-only' : ''].filter(Boolean),
+        // The list opens on Upcoming — everything still current — so past
+        // events are out of the way without being hidden from All.
+        // Calendar-only posts keep their own chip to isolate them.
+        filter: [state, (state === 'live' || state === 'scheduled') ? 'upcoming' : '', item.value || '', calOnly ? 'calendar-only' : ''].filter(Boolean),
         search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
         cells: [
           // The pin marker sits BEFORE the title, where the eye starts —
