@@ -5905,6 +5905,21 @@ group('classic rich fields cannot carry script to the public site (FX-04)');
   has(stored.body, '<table>', "and so does the table — this is the half a naive fix breaks");
   has(stored.body, 'text-align:center', 'including the alignment inside it');
 
+  // The newsletter group name is saved on create and update, and offered
+  // back on the form as a suggestion.
+  await call(env, '/newsitems/create', { cookie, method: 'POST', form: {
+    title: 'Grouped post', summary: 'x', publish_date: churchDate(), ch_web: '1', newsletter_group: '  Thanksgiving Worship  ',
+  }});
+  const grouped = db.prepare("SELECT id, newsletter_group FROM news_items WHERE title = 'Grouped post'").get();
+  eq(grouped.newsletter_group, 'Thanksgiving Worship', 'a newsletter group is saved, trimmed');
+  const groupedForm = await (await call(env, `/newsitems/edit/${grouped.id}`, { cookie })).text();
+  has(groupedForm, 'Combine in the newsletter under', 'the form offers the combine field');
+  has(groupedForm, '<option value="Thanksgiving Worship">', 'with existing names suggested');
+  await call(env, `/newsitems/update/${grouped.id}`, { cookie, method: 'POST', form: {
+    title: 'Grouped post', summary: 'x', publish_date: churchDate(), ch_web: '1', newsletter_group: '',
+  }});
+  eq(db.prepare('SELECT newsletter_group FROM news_items WHERE id = ?').get(grouped.id).newsletter_group, null, 'and cleared when emptied');
+
   // ── the legacy read path ──
   // A row written before FX-04 existed, inserted straight into the table the
   // way six years of them already sit there. Nothing sanitized it on the way

@@ -1135,21 +1135,31 @@ async function loadNewsletterDetail(id) {
       const mainNews = n.news_items[0];
       const secondaryNews = n.news_items[1] || null;
       const additionalNews = n.news_items.slice(2);
+      // The same picture and combined date list the email carries.
+      const nImg = (item, style) => {
+        let src = item.image_url || '';
+        if (src.indexOf('/images/') === 0) src = 'https://admin.timothystl.org' + src;
+        return (src.indexOf('https://') === 0 || src.indexOf('http://') === 0) ? '<img src="'+escText(src)+'" alt="" loading="lazy" style="'+style+'">' : '';
+      };
+      const nParts = (item) => (item.parts && item.parts.length) ? '<ul style="margin:4px 0 8px;padding-left:18px;font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.6;">' + item.parts.map(p => '<li>' + (p.when ? '<strong>'+escText(p.when)+'</strong> &#183; ' : '') + escText(p.title || '') + '</li>').join('') + '</ul>' : '';
+      const bigImg = 'display:block;width:100%;max-height:240px;object-fit:contain;background:#F7F3EC;border-radius:8px;margin:0 0 10px;';
       newsHtml += '<div style="margin-top:24px;padding-top:20px;border-top:2px solid var(--amber);">' +
         '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Featured</div>' +
         '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:8px;">'+escText(mainNews.title)+'</div>' +
+        nImg(mainNews, bigImg) + nParts(mainNews) +
         (mainNews.summary ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">'+escText(mainNews.summary)+'</div>' : '') +
         '</div>';
       if (secondaryNews) {
         newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
           '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:6px;">'+escText(secondaryNews.title)+'</div>' +
+          nImg(secondaryNews, bigImg) + nParts(secondaryNews) +
           (secondaryNews.summary ? '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+escText(secondaryNews.summary)+'</div>' : '') +
           '</div>';
       }
       if (additionalNews.length) {
         newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
           '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">More from Timothy</div>' +
-          additionalNews.map(item => '<div style="padding:9px 0;border-bottom:1px solid var(--border);"><div style="font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:3px;">'+escText(item.title)+'</div>'+(item.summary ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.6;">'+escText(item.summary)+'</div>' : '')+'</div>').join('') +
+          additionalNews.map(item => '<div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;">'+nImg(item, 'flex:0 0 96px;width:96px;height:72px;object-fit:cover;border-radius:6px;background:#F7F3EC;')+'<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:3px;">'+escText(item.title)+'</div>'+nParts(item)+(item.summary ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.6;">'+escText(item.summary)+'</div>' : '')+'</div></div>').join('') +
           '</div>';
       }
     }

@@ -185,6 +185,10 @@ export function renderListSection(cfg) {
     key, title, purpose = '', action = null, altActions = [], search = '', filters = [], valueChips = false,
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
     empty = 'Nothing here yet.', headerExtra = '', pageSize = 0,
+    // Optional sort menu: [{ label, key, dir }]. The first entry is the order
+    // the server sent (key ''); the others reorder rows on their
+    // `sortKeys[key]` value, blanks last.
+    sorts = [],
     // Width of the trailing actions track. 118px fits a lone "Edit"; a list
     // whose rows carry several actions passes a wider one, or they run
     // leftward over the status pill (the actions cell does not wrap).
@@ -233,7 +237,8 @@ export function renderListSection(cfg) {
     // list. It is a visual relationship only; filtering and search still treat
     // every row independently, so searching for a sermon finds it whether or
     // not its series matches.
-    return `<div class="tlc-row-wrap${r.child ? ' tlc-row-child' : ''}" data-filter="${esc(filterVals.join(' '))}" data-search="${esc(String(r.search || '').toLowerCase())}">
+    const sortAttrs = r.sortKeys ? Object.keys(r.sortKeys).map((k) => ` data-sk-${esc(k)}="${esc(String(r.sortKeys[k] == null ? '' : r.sortKeys[k]))}"`).join('') : '';
+    return `<div class="tlc-row-wrap${r.child ? ' tlc-row-child' : ''}" data-filter="${esc(filterVals.join(' '))}" data-search="${esc(String(r.search || '').toLowerCase())}"${sortAttrs}>
       ${warnHtml}<div class="tlc-row"${r.href ? ` data-href="${esc(r.href)}" tabindex="0" role="link"` : ''} style="grid-template-columns:${grid};">
         ${cells}<span class="tlc-td tlc-right tlc-actions">${actions}</span>
       </div>
@@ -281,6 +286,7 @@ export function renderListSection(cfg) {
   ${(search || filters.length) ? `<div class="tlc-bar">
     ${search ? `<label class="tlc-search"><span class="tlc-search-icon" aria-hidden="true">⌕</span><input type="search" placeholder="${esc(search)}" aria-label="${esc(search)}"></label>` : ''}
     ${filtersHtml ? `<div class="tlc-filters">${filtersHtml}</div>` : ''}
+    ${sorts.length ? `<label class="tlc-sort">Sort <select aria-label="Sort">${sorts.map((o) => `<option data-key="${esc(o.key || '')}" data-dir="${esc(o.dir || 'asc')}">${esc(o.label)}</option>`).join('')}</select></label>` : ''}
     ${chipsHtml ? '' : '<span class="tlc-count"></span>'}
   </div>` : ''}
   ${chipsHtml ? `<div class="tlc-bar tlc-bar--chips">
@@ -505,6 +511,33 @@ function wire(sec){
     else{chips.forEach(function(o){o.classList.remove('is-on');});c.classList.add('is-on');chip=v;}
     applyFromFilter();
   });});
+  // The sort menu reorders the rows in place; the first choice is the order
+  // the server sent. The choice is remembered per list in this browser.
+  var sortSel=sec.querySelector('.tlc-sort select');
+  var served=rows.slice();
+  var sortStore='tlc-sort-'+(sec.id||'');
+  function sortRows(){
+    var o=sortSel.options[sortSel.selectedIndex];
+    var k=o.getAttribute('data-key');
+    var dir=o.getAttribute('data-dir')==='desc'?-1:1;
+    var ordered=served.slice();
+    if(k){
+      ordered.sort(function(a,b){
+        var x=a.getAttribute('data-sk-'+k)||'', y=b.getAttribute('data-sk-'+k)||'';
+        if(!x&&y) return 1; if(x&&!y) return -1;
+        return x<y?-dir:(x>y?dir:0);
+      });
+    }
+    ordered.forEach(function(r){ body.appendChild(r); });
+    rows=ordered;
+  }
+  if(sortSel){
+    try{ var saved=localStorage.getItem(sortStore); if(saved!==null&&sortSel.options[+saved]){ sortSel.selectedIndex=+saved; sortRows(); } }catch(_){}
+    sortSel.addEventListener('change',function(){
+      try{ localStorage.setItem(sortStore,String(sortSel.selectedIndex)); }catch(_){}
+      sortRows(); applyFromFilter();
+    });
+  }
   if(pagerPrev) pagerPrev.addEventListener('click',function(){ page--; apply(); });
   if(pagerNext) pagerNext.addEventListener('click',function(){ page++; apply(); });
   // The whole row is the target, but a link or button inside it wins — the ⋯
@@ -857,6 +890,8 @@ export const ADMIN_UI_CSS = `
 .tlc-filters{display:flex;gap:7px;flex-wrap:wrap;}
 .tlc-filter{font:600 11.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:7px 12px;cursor:pointer;}
 .tlc-filter:hover{border-color:var(--tlc-blue);}
+.tlc-sort{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--tlc-sans);color:var(--tlc-body);}
+.tlc-sort select{font:600 11.5px var(--tlc-sans);color:var(--tlc-ink);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:6px 8px;cursor:pointer;}
 .tlc-filter.is-on{background:#E7EEF7;border:2px solid var(--tlc-ink);color:var(--tlc-ink);padding:6px 11px;}
 .tlc-count{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);white-space:nowrap;}
 .tlc-bar--chips{margin-top:-6px;}
