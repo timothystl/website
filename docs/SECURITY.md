@@ -31,6 +31,13 @@ If this protection fails operationally, repair its storage or use the authorized
 do not restore audit-dependent permissive fallback.
 
 Protect subscriber, contact/prayer, renter, vendor, gift, payroll, authentication, and audit data.
+
+Worker observability must redact URL query strings so password-reset tokens and webhook URL
+credentials cannot be included in invocation URLs. The checked-in Worker configurations preserve
+this on release. `enforce-query-redaction.yml` verifies the allowlisted non-childcare services with
+managed credentials; it cannot modify myMDO, which requires its own reviewed release. Query-string
+redaction does not delete old logs or sanitize application-generated strings and provider payloads.
+Review sink access and retention separately; never export private logs to demonstrate redaction.
 Do not include those values in issues or logs. The `CONNECT_WORKER` binding is an intentional
 narrow backend dependency; durable replay and bounded retries prevent silent loss without making
 the Website authoritative for Connect data.

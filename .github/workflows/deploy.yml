@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 # Hold the lock across ALL production writes, including versioning. Never
 # cancel halfway through a release. Pending runs may be reordered by GitHub;
@@ -25,6 +25,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -42,7 +43,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          test -z "$(git status --porcelain)"
+          test "$(git diff --name-only)" = 'admin/helpers.js'
+          test -z "$(git ls-files --others --exclude-standard)"
           wrangler deploy --config wrangler-site.toml
           wrangler deploy --config wrangler.toml
           wrangler deploy --config wrangler-links.toml

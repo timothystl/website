@@ -89,9 +89,9 @@ editor changes also need the TinyMCE asset and self-hosted boot checks.
 This repository has no root `package.json`, build step, or Connect-style built-scripts check.
 
 Every push to main triggers `.github/workflows/deploy.yml`, deploying Site, Admin, and Links.
-One serialized release records an Admin version-only commit, then deploys all three Workers
-from the same revision. Superseded runs skip; failed releases can resume their own version
-commit. The completed workflow, rather than the version commit alone, confirms deployment.
+One serialized release derives an Admin cache version from the approved commit SHA, then deploys
+all three Workers from that revision without writing to main. Product-version changes are reviewed
+in PRs. Superseded runs skip and reruns are deterministic. The completed workflow confirms deployment.
 Merge completed work after applicable checks and verify that automatic release; no extra
 permission is needed merely because a merge deploys. For Markdown-only changes, the same
 automatic workflow may run, but do not add a manual redeploy or version bump.
