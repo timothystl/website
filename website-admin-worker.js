@@ -1536,7 +1536,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-11-16-newsletter-section-order'; // newsletters.show_* footer switches and section_order.
+    const SCHEMA_VERSION = '2026-11-23-news-newsletter-group'; // news_items.newsletter_group.
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {

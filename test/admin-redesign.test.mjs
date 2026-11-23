@@ -7483,6 +7483,24 @@ group('an existing database gets the Bible class columns on the next deploy');
   eq(db.prepare('SELECT start_time FROM bible_classes WHERE id = ?').get(id).start_time, '09:30', 'and the meeting time is stored');
 }
 
+group('an existing database gets the newsletter group column on the next deploy');
+{
+  // Same trap as above, sprung again: the newsletter_group release added the
+  // ALTER without bumping SCHEMA_VERSION, so production never got the column
+  // and every news list, post form and newsletter build failed.
+  const { db, env } = await boot();
+  db.exec('ALTER TABLE news_items DROP COLUMN newsletter_group');
+  db.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', '2026-11-16-newsletter-section-order')").run();
+  const prod = { ...env, DB: d1(db) };
+  const { cookie } = signIn(db);
+  eq((await call(prod, '/newsitems', { cookie })).status, 200, 'the News & Events list opens on a previously migrated database');
+  eq((await call(prod, '/newsitems/new', { cookie })).status, 200, 'and so does the new-post form');
+  eq((await call(prod, '/newsitems/create', { cookie, method: 'POST', form: {
+    title: 'After upgrade', summary: 'x', publish_date: churchDate(), ch_web: '1', newsletter_group: 'Advent' } })).status, 302,
+    'and a post saves');
+  ok(db.prepare("SELECT 1 FROM pragma_table_info('news_items') WHERE name = 'newsletter_group'").get(), 'because the column was added');
+}
+
 group('Bible classes: one calendar slot, and possible matches');
 {
   const { db, env } = await boot();
