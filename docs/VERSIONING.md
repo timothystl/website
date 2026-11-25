@@ -8,4 +8,9 @@ A lower display version after this reset is deliberate. Never compare a release 
 
 Caching: any reset must change the effective cache key and should distinguish the exact deployment when assets may change without a product-version increment. A rollback to an older commit is identified by its deployment SHA, regardless of the displayed version.
 
-Website's serialized release workflow increments the Admin alpha suffix and deploys Site, Admin, and Links together. The release commit SHA is its exact identity. The public Site and Links Workers do not expose independent product counters.
+Website's serialized release workflow deploys Site, Admin, and Links from one reviewed commit.
+It never writes a version commit directly to main. Product-version changes belong in reviewed PRs;
+the release adds a deterministic `-g<12-character commit SHA>` suffix to the deployed Admin version
+without committing that generated cache identity. Repeated releases of one revision use the same
+identity, and a different revision changes it even when the product-version counter is unchanged.
+The public Site and Links Workers do not expose independent product counters.

@@ -125,9 +125,9 @@ restore = {r['key']: r for r in json.load(open(sys.argv[2]))}
 only_source = sorted(source.keys() - restore.keys())
 only_restore = sorted(restore.keys() - source.keys())
 changed = sorted(k for k in source.keys() & restore.keys() if source[k] != restore[k])
-if only_source: print('Present in source only:', ', '.join(only_source[:20]))
-if only_restore: print('Present in restored copy only:', ', '.join(only_restore[:20]))
-if changed: print('ETag/size mismatch:', ', '.join(changed[:20]))
+if only_source: print('Objects missing from restored copy:', len(only_source))
+if only_restore: print('Unexpected objects in restored copy:', len(only_restore))
+if changed: print('Objects with ETag/size mismatch:', len(changed))
 PY
   exit 31
 fi
