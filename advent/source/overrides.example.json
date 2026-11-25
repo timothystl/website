@@ -1,0 +1,6 @@
+{
+  "_help": "Copy this file to overrides.json only if the build can't find a day. Page numbers are the PDF's own page numbers (1 = cover).",
+  "days": {
+    "dec-9": { "page": 24, "title": "Every valley" }
+  }
+}
