@@ -55,7 +55,9 @@ await check('desktop: ?date=2026-12-09 opens the Dec 9 spread as two pages', asy
   const cookies = await ctx.cookies();
   assert.deepEqual(cookies, []);
   assert.deepEqual(external, [], 'no third-party requests');
-  const imgs = await page.locator('.page img[src]').count();
+  const srcs = await page.$$eval('.page img[src]', (els) => els.map((e) => e.getAttribute('src')));
+  assert.ok(srcs.every((s) => s.includes(`?v=${m.source.sha256}`)), 'page images are tied to this PDF');
+  const imgs = srcs.length;
   assert.ok(imgs > 0 && imgs <= 10, `only nearby pages load (${imgs})`);
   const next = await page.locator('#btn-next').boundingBox();
   assert.ok(next.y + next.height <= 900, `page-turn buttons visible without scrolling (bottom ${next.y + next.height})`);
@@ -158,10 +160,13 @@ await check('days list: grouped by week, jumps to the chosen day', async () => {
   await page.waitForTimeout(200);
   assert.match(await counter(page), new RegExp(dayBy('dec-20').label));
   assert.equal(new URL(page.url()).pathname, '/dec-20');
-  await page.click('#btn-contents');
-  await page.click('#contents-list a:has-text("About the art")');
-  await page.waitForTimeout(200);
-  assert.match(await counter(page), /About the art/);
+  const extra = m.extras.at(-1);
+  if (extra) {
+    await page.click('#btn-contents');
+    await page.click(`#contents-list a[data-page="${extra.page}"]`);
+    await page.waitForTimeout(200);
+    assert.ok((await counter(page)).includes(extra.label));
+  }
   await ctx.close();
 });
 
@@ -180,7 +185,8 @@ await check('read as text: larger type, day navigation, back to booklet', async 
   await art.scrollIntoViewIfNeeded();
   await page.waitForFunction(() => { const i = document.querySelector('#tv-article .tv-art img'); return i && i.complete && i.naturalWidth > 0; });
   const order = await page.$$eval('#tv-article > *', (els) => els.map((e) => e.tagName + (e.className ? '.' + e.className : '')));
-  assert.ok(order.indexOf('FIGURE.tv-art') < order.lastIndexOf('H3'), `art comes before the prayer: ${order.join(' ')}`);
+  const fig = order.indexOf('FIGURE.tv-art');
+  assert.ok(fig > order.indexOf('HR') && fig < order.length - 1, `art sits between the reflection and the prayer: ${order.join(' ')}`);
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'phone-text.png'), fullPage: true });
   await page.click('#tv-next');
   assert.equal(await page.locator('#tv-article h2').textContent(), dayBy('dec-10').title);
@@ -210,18 +216,20 @@ await check('without JavaScript a day page still shows its text', async () => {
 await check('download button serves the PDF', async () => {
   const { ctx, page } = await open(DESKTOP, '/');
   const href = await page.locator('a.download').getAttribute('href');
+  assert.match(href, /\?v=[0-9a-f]{16}$/, 'download link changes with each new PDF');
   const res = await page.request.get(BASE + href);
   assert.equal(res.status(), 200);
   assert.equal(res.headers()['content-type'], 'application/pdf');
   assert.equal((await res.body()).subarray(0, 5).toString(), '%PDF-');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('a.download')]);
-  assert.equal(dl.suggestedFilename(), path.basename(href));
+  assert.equal(dl.suggestedFilename(), path.basename(href.split('?')[0]));
   await ctx.close();
 });
 
 await check('tablet portrait (768×1024) shows two-page spreads', async () => {
   const { ctx, page } = await open({ viewport: { width: 768, height: 1024 } }, '/dec-9');
-  assert.match(await counter(page), /Pages 24–25/);
+  const d = dayBy('dec-9');
+  assert.ok((await counter(page)).includes(`Pages ${d.page}–${d.page + 1}`));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'tablet-dec-9.png') });
   await ctx.close();
 });

@@ -2,3 +2,4 @@ node_modules/
 dist/
 .render-*/
 source/overrides.json.bak
+.dist-*/

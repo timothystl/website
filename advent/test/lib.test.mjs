@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collapseSpaced, cleanPageText, parseDateLine, extractDays, dayRange, findExtras, bodyAfterTitle } from '../scripts/lib.mjs';
+import { collapseSpaced, parseDateLine, extractDays, dayRange, findExtras, bodyAfterTitle, parsePdfXml, bookMetrics, pageBlocks } from '../scripts/lib.mjs';
 
-const page = (n, text) => ({ n, ...cleanPageText(text, { measure: 60 }) });
+// A page as the day finder sees it: its lines of text.
+const page = (n, text) => ({ n, rows: text.split('\n').map((l) => collapseSpaced(l) ?? l.trim()).filter(Boolean) });
 
 test('letter-spaced eyebrows collapse to sentence case', () => {
   assert.equal(collapseSpaced('W E E K   O N E'), 'Week one');
+  assert.equal(collapseSpaced('W E E K   T W O   ·   L I F T E D'), 'Week two · Lifted');
   assert.equal(collapseSpaced('   C H R I S T M A S   D A Y  '), 'Christmas day');
   assert.equal(collapseSpaced('A word here'), null);
   assert.equal(collapseSpaced('Read: Isaiah 9'), null);
@@ -25,18 +27,61 @@ test('day range covers Nov 29 through Dec 25', () => {
   assert.deepEqual(r.at(-1), { month: 12, day: 25 });
 });
 
-test('prose reflows; short lineated text keeps its breaks; folio dropped', () => {
-  const t = cleanPageText([
-    'Prayer', '',
-    'Hold us today,', 'and keep us. Amen.', '',
-    'This is a long line of prose that runs right to the measure of', 'the page and keeps on going.', '',
-    '                 12',
-  ].join('\n'), { measure: 62 });
-  assert.deepEqual(t.paragraphs, [
-    'Prayer',
-    'Hold us today,\nand keep us. Amen.',
-    'This is a long line of prose that runs right to the measure of the page and keeps on going.',
+const XML = `<pdf2xml>
+<fontspec id="0" size="7" family="A" color="#000"/>
+<fontspec id="1" size="9" family="A" color="#000"/>
+<fontspec id="2" size="18" family="A" color="#000"/>
+<fontspec id="3" size="11" family="A" color="#000"/>
+<fontspec id="4" size="10" family="A" color="#000"/>
+<page number="23" position="absolute" top="0" left="0" height="612" width="504">
+<text top="582" left="248" width="8" height="9" font="0">23</text>
+<text top="37" left="54" width="94" height="9" font="0">W E E K   T W O   ·   L I F T E D</text>
+<text top="49" left="54" width="95" height="11" font="1">Wednesday, December 9</text>
+<text top="60" left="54" width="71" height="21" font="2">The leap</text>
+<text top="135" left="54" width="393" height="12" font="3">Everyone needs one person they can call when the news comes. The friend who doesn&#8217;t </text>
+<text top="150" left="54" width="300" height="12" font="3">need the backstory.</text>
+<text top="169" left="54" width="390" height="12" font="3">Mary goes &#8220;with haste&#8221; into the hill country to find hers. Elizabeth: too old to be </text>
+<text top="183" left="54" width="120" height="12" font="3">six months along.</text>
+<text top="200" left="54" width="390" height="12" font="3">A third paragraph of prose that runs the whole measure of the column and then some more</text>
+<text top="214" left="54" width="24" height="11" font="3">Read </text>
+<text top="214" left="78" width="56" height="11" font="3">Luke 1:39&#8211;45</text>
+<text top="428" left="54" width="139" height="10" font="4">O God who began your kingdom</text>
+<text top="440" left="54" width="100" height="10" font="4">in a kitchen in the hills,</text>
+<text top="452" left="54" width="177" height="10" font="4">someone who will believe what you have</text>
+<text top="428" left="270" width="59" height="10" font="4">spoken to me</text>
+<text top="440" left="270" width="152" height="10" font="4">when I can hardly believe it.</text>
+<text top="456" left="270" width="128" height="10" font="4">Amen.</text>
+</page>
+</pdf2xml>`;
+
+test('reads lines in order, joins pieces, drops the folio, collapses eyebrows', () => {
+  const p = parsePdfXml(XML)[23];
+  assert.equal(p.width, 504);
+  const texts = p.lines.map((l) => l.text);
+  assert.equal(texts[0], 'Week two · Lifted');
+  assert.ok(!texts.includes('23'), 'folio dropped');
+  assert.ok(texts.includes('Read Luke 1:39–45'), 'pieces on one line are joined');
+  assert.ok(texts.includes('Everyone needs one person they can call when the news comes. The friend who doesn’t'));
+});
+
+test('blocks: headings, eyebrow, paragraphs by spacing, verse kept, columns joined mid-sentence', () => {
+  const pages = parsePdfXml(XML);
+  const metrics = bookMetrics(pages);
+  assert.equal(metrics.body, 11);
+  const blocks = pageBlocks(pages[23], metrics);
+  assert.deepEqual(blocks, [
+    { k: 'e', t: 'Week two · Lifted' },
+    { k: 'p', t: 'Wednesday, December 9' },
+    { k: 'h', t: 'The leap' },
+    { k: 'p', t: 'Everyone needs one person they can call when the news comes. The friend who doesn’t need the backstory.' },
+    { k: 'p', t: 'Mary goes “with haste” into the hill country to find hers. Elizabeth: too old to be six months along.' },
+    { k: 'p', t: 'A third paragraph of prose that runs the whole measure of the column and then some more Read Luke 1:39–45' },
+    { k: 'p', t: 'O God who began your kingdom\nin a kitchen in the hills,\nsomeone who will believe what you have\nspoken to me\nwhen I can hardly believe it.' },
+    { k: 'p', t: 'Amen.' },
   ]);
+  const { eyebrow, body } = bodyAfterTitle(blocks, 'Wednesday, December 9', 'The leap');
+  assert.deepEqual(eyebrow, [{ k: 'e', t: 'Week two · Lifted' }]);
+  assert.match(body[0].t, /^Everyone needs/);
 });
 
 function bookletPages(skip = []) {
@@ -95,9 +140,7 @@ test('wrong weekday for the year is flagged', () => {
 test('contents extras found by text; body strips date and title', () => {
   const pages = bookletPages();
   assert.deepEqual(findExtras(pages, [{ label: 'About the art' }, { label: 'Nope' }]), [{ label: 'About the art', page: 59 }]);
-  const { eyebrow, body } = bodyAfterTitle(pages[3].paragraphs, 'Sunday, November 29', 'Title nov-29');
-  assert.deepEqual(eyebrow, ['Week one']);
-  assert.deepEqual(body, ['Read: Psalm 1']);
+  assert.deepEqual(findExtras(pages, [{ label: 'About the art' }], new Set([59])), []);
 });
 
 test('artwork regions: ornaments ignored, pieces merged, full-page art flagged', async () => {

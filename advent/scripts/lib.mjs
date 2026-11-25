@@ -9,75 +9,123 @@ const MON_ABBR = MONTHS.map((m) => m.slice(0, 3).toLowerCase());
 const pad = (n) => String(n).padStart(2, '0');
 export const slugFor = (month, day) => `${MON_ABBR[month - 1]}-${day}`;
 
-// "W E E K   O N E" → "Week one". Returns null when the line isn't letter-spaced.
+// "W E E K   T W O   ·   L I F T E D" → "Week two · Lifted". Null when the line isn't letter-spaced.
 export function collapseSpaced(line) {
   const t = line.trim();
   const words = t.split(/\s{2,}/);
-  if (!words.every((w) => /^(\S )+\S$/.test(w))) return null;
+  if (words.length < 2 && !/^(\S ){2,}\S$/.test(t)) return null;
+  if (!words.every((w) => /^\S( \S)*$/.test(w))) return null;
   const joined = words.map((w) => w.replace(/ /g, '')).join(' ');
-  if (joined.replace(/\s/g, '').length < 3) return null;
+  if (joined.replace(/[\s·•|–—-]/g, '').length < 3) return null;
   return sentenceCase(joined);
 }
 
+// ALL CAPS → sentence case; each part after a "·" separator starts a new sentence.
 export function sentenceCase(s) {
   if (s !== s.toUpperCase()) return s;
-  const lower = s.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+  return s.toLowerCase().split(/(\s*[·•|]\s*)/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('');
 }
 
-// Layout-mode pdftotext output for one page → raw rows (letter-spaced eyebrows collapsed).
-export function pageRows(raw) {
-  const rows = raw.replace(/\f/g, '').replace(/\r/g, '').split('\n').map((l) => l.replace(/\s+$/, ''));
-  // Drop a lone page number (folio) at the bottom.
-  while (rows.length && !rows.at(-1).trim()) rows.pop();
-  if (rows.length && /^\s*\d{1,3}\s*$/.test(rows.at(-1))) rows.pop();
-  return rows.map((l) => (l.trim() ? collapseSpaced(l) ?? l.trim().replace(/\s{2,}/g, ' ') : ''));
-}
+const decode = (s) => s.replace(/<[^>]+>/g, '')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+  .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-// The booklet's text measure: the length of a typical full line of prose.
-export function textMeasure(allRows) {
-  const lens = allRows.filter(Boolean).map((l) => l.length).sort((a, b) => a - b);
-  if (!lens.length) return 60;
-  return lens[Math.floor(lens.length * 0.9)] || lens.at(-1);
-}
-
-// Clean reading text. Paragraphs are separated by a blank line. A paragraph whose
-// lines all fall well short of the measure (a heading, a prayer set line by line)
-// keeps its line breaks; prose is rejoined so it can reflow at a larger size.
-export function cleanPageText(raw, { measure } = {}) {
-  const cleaned = pageRows(raw);
-  measure ||= textMeasure(cleaned);
-  const paras = [];
-  let cur = [];
-  for (const l of cleaned) {
-    if (!l) { if (cur.length) paras.push(cur); cur = []; continue; }
-    cur.push(l);
-  }
-  if (cur.length) paras.push(cur);
-  const out = paras.map((p) => {
-    const lineated = Math.max(...p.map((l) => l.length)) < measure * 0.85;
-    let s = p[0];
-    for (let i = 1; i < p.length; i++) {
-      const prev = p[i - 1];
-      if (!lineated && /[a-z]-$/.test(prev) && /^[a-z]/.test(p[i])) s = s.slice(0, -1) + p[i];
-      else s += (lineated ? '\n' : ' ') + p[i];
+// pdftohtml -xml → for each page, its text lines in reading (content) order:
+// { [n]: { width, height, lines: [{ top, left, width, size, text }] } }
+// Pieces that sit on the same baseline are joined into one line. The page number
+// (folio) at the top or bottom margin is dropped.
+export function parsePdfXml(xml) {
+  const fonts = {};
+  for (const f of xml.matchAll(/<fontspec id="(\d+)" size="([\d.]+)"/g)) fonts[f[1]] = +f[2];
+  const out = {};
+  for (const pm of xml.matchAll(/<page number="(\d+)"[^>]*height="([\d.]+)" width="([\d.]+)"[^>]*>([\s\S]*?)<\/page>/g)) {
+    const H = +pm[2];
+    const lines = [];
+    let cur = null;
+    for (const t of pm[4].matchAll(/<text top="(-?[\d.]+)" left="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)" font="(\d+)">([\s\S]*?)<\/text>/g)) {
+      const item = { top: +t[1], left: +t[2], width: +t[3], height: +t[4], size: fonts[t[5]] || +t[4], text: decode(t[6]) };
+      if (!item.text.trim()) continue;
+      const sameLine = cur && Math.abs(item.top - cur.top) <= Math.max(3, item.height * 0.4)
+        && item.left >= cur.left + cur.width - 3;
+      if (sameLine) {
+        const gap = item.left - (cur.left + cur.width);
+        cur.text += (gap > 1.5 && !/\s$/.test(cur.text) && !/^\s/.test(item.text) ? ' ' : '') + item.text;
+        cur.width = item.left + item.width - cur.left;
+        cur.size = Math.max(cur.size, item.size);
+      } else {
+        cur = { ...item };
+        lines.push(cur);
+      }
     }
-    return s;
-  });
-  return { paragraphs: out, rows: cleaned.filter(Boolean) };
+    for (const l of lines) {
+      const c = collapseSpaced(l.text);
+      l.wasSpaced = c !== null;
+      l.text = c ?? l.text.replace(/\s+/g, ' ').trim();
+    }
+    const kept = lines.filter((l) => !(/^\d{1,3}$/.test(l.text) && (l.top > H * 0.88 || l.top < H * 0.06)));
+    out[+pm[1]] = { width: +pm[3], height: H, lines: kept };
+  }
+  return out;
 }
 
-// Paragraphs of a devotion's left page that follow the date and title.
-export function bodyAfterTitle(paragraphs, label, title) {
-  const at = paragraphs.findIndex((p) => p.split('\n')[0].trim() === label);
-  const before = at > 0 ? paragraphs.slice(0, at) : [];
-  let rest = at >= 0 ? paragraphs.slice(at) : paragraphs.slice();
-  const strip = (p, line) => (p.split('\n')[0].trim() === line ? p.split('\n').slice(1).join('\n').trim() : p);
-  if (rest.length) rest[0] = strip(rest[0], label);
-  if (!rest[0]) rest.shift();
-  if (rest.length && title) rest[0] = strip(rest[0], title);
-  if (rest.length && !rest[0]) rest.shift();
-  return { eyebrow: before, body: rest };
+// Typical body type size and full-line width across the booklet.
+export function bookMetrics(pagesXml) {
+  const bySize = new Map();
+  const all = Object.values(pagesXml).flatMap((p) => p.lines);
+  for (const l of all) bySize.set(l.size, (bySize.get(l.size) || 0) + l.text.length);
+  const body = [...bySize.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 11;
+  const widths = all.filter((l) => Math.abs(l.size - body) < 0.6).map((l) => l.width).sort((a, b) => a - b);
+  const measure = widths[Math.floor(widths.length * 0.9)] || 300;
+  return { body, measure };
+}
+
+// One page's lines → reading blocks: { k: 'h' (heading) | 'e' (eyebrow) | 'p', t: text }.
+// A new block starts at a larger-than-line gap, a change of type size, or a jump back
+// up the page (the next column). Prose is rejoined so it reflows; a block whose lines
+// all stop well short of the measure (a prayer or liturgy) keeps its line breaks.
+export function pageBlocks(page, { body, measure }) {
+  if (!page) return [];
+  const groups = [];
+  let g = null;
+  for (const l of page.lines) {
+    const prev = g && g.at(-1);
+    const split = !prev
+      || Math.abs(l.size - prev.size) > 0.6
+      || (l.top < prev.top - 2 || Math.abs(l.left - prev.left) > 40 && l.top - prev.top > prev.size * 0.5)
+        // a new column — unless a sentence carries over into it
+        && !(/[^.!?:;”"’)]$/.test(prev.text) && /^[a-z]/.test(l.text))
+      || l.top - prev.top > Math.max(prev.size, l.size) * 1.45;
+    if (split) { g = [l]; groups.push(g); } else g.push(l);
+  }
+  return groups.map((ls) => {
+    const size = ls[0].size;
+    const spaced = ls.length === 1 && ls[0].wasSpaced;
+    const lineated = ls.length > 1 && Math.max(...ls.map((l) => l.width)) < measure * 0.8;
+    let t = ls[0].text;
+    for (let i = 1; i < ls.length; i++) {
+      const prev = ls[i - 1].text;
+      if (!lineated && /[a-z]-$/.test(prev) && /^[a-z]/.test(ls[i].text)) t = t.slice(0, -1) + ls[i].text;
+      else t += (lineated ? '\n' : ' ') + ls[i].text;
+    }
+    const k = size >= body * 1.35 ? 'h' : spaced || (size < body * 0.8 && /^[A-Z0-9 ·•|’'–—-]+$/.test(t) && t.length < 60) ? 'e' : 'p';
+    return { k, t: k === 'e' ? sentenceCase(t) : t };
+  });
+}
+
+// The blocks of a devotion's left page that follow the date and title, plus any eyebrow above.
+export function bodyAfterTitle(blocks, label, title) {
+  const at = blocks.findIndex((b) => b.t.split('\n').some((l) => l.trim() === label));
+  if (at < 0) return { eyebrow: [], body: blocks.filter((b) => b.t !== title) };
+  const eyebrow = blocks.slice(0, at);
+  const rest = blocks.slice(at);
+  // The date (and the title, if it shares the date's block) come off the front.
+  const lines = rest[0].t.split('\n');
+  const after = lines.slice(lines.findIndex((l) => l.trim() === label) + 1).filter((l) => l.trim() !== title);
+  if (after.length) rest[0] = { ...rest[0], t: after.join('\n') }; else rest.shift();
+  if (rest.length && title && rest[0].t.trim() === title) rest.shift();
+  return { eyebrow, body: rest };
 }
 
 const DATE_RE = new RegExp(
@@ -173,12 +221,12 @@ export function extractDays(pages, { overrides = {}, year: fixedYear, first, las
 }
 
 // Contents entries such as "How to use this devotional": first page whose text contains `find`.
-export function findExtras(pages, extras = []) {
+export function findExtras(pages, extras = [], skip = new Set()) {
   const out = [];
   for (const e of extras) {
     if (e.page) { out.push({ label: e.label, page: e.page }); continue; }
     const needle = (e.find || e.label).toLowerCase();
-    const p = pages.find((pg) => pg.rows.some((r) => r.toLowerCase().includes(needle)));
+    const p = pages.find((pg) => !skip.has(pg.n) && pg.rows.some((r) => r.toLowerCase().includes(needle)));
     if (p) out.push({ label: e.label, page: p.n, ...(e.position ? { position: e.position } : {}) });
   }
   return out;
