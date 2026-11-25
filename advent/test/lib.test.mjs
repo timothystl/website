@@ -99,3 +99,21 @@ test('contents extras found by text; body strips date and title', () => {
   assert.deepEqual(eyebrow, ['Week one']);
   assert.deepEqual(body, ['Read: Psalm 1']);
 });
+
+test('artwork regions: ornaments ignored, pieces merged, full-page art flagged', async () => {
+  const { parseImageBoxes, artRegions } = await import('../scripts/lib.mjs');
+  const xml = `<page number="5" position="absolute" top="0" left="0" height="612" width="396">
+<image top="34" left="43" width="310" height="150" src="a.jpg"/>
+<image top="184" left="43" width="310" height="108" src="b.jpg"/>
+<image top="560" left="180" width="30" height="20" src="ornament.png"/>
+</page>
+<page number="6" position="absolute" top="0" left="0" height="612" width="396">
+<image top="-9" left="-9" width="414" height="630" src="bleed.jpg"/>
+</page>
+<page number="7" position="absolute" top="0" left="0" height="612" width="396"></page>`;
+  const boxes = parseImageBoxes(xml);
+  assert.deepEqual(artRegions(boxes[5]), { regions: [{ left: 43, top: 34, width: 310, height: 258 }], fullPage: false });
+  assert.deepEqual(artRegions(boxes[6]), { regions: [], fullPage: true });
+  assert.deepEqual(artRegions(boxes[7]), { regions: [], fullPage: false });
+  assert.deepEqual(artRegions(undefined), { regions: [], fullPage: false });
+});

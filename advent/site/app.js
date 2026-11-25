@@ -116,6 +116,9 @@
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+  // Artwork cut from a page by the build; shown in the text view where the page has it.
+  const artHtml = (k, alt) => ((m.pages[k] && m.pages[k].art) || []).map((a) =>
+    `<figure class="tv-art"><img src="${a.src}" width="${a.width}" height="${a.height}" alt="${esc(alt)}" loading="lazy" decoding="async"></figure>`).join('');
   const paras = (text) => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   const isHeading = (p) => !p.includes('\n') && p.length <= 32 && !/[.,;:!?”"]$/.test(p);
   const pHtml = (p, cls) => (!cls && isHeading(p) ? `<h3>${esc(p)}</h3>`
@@ -139,8 +142,10 @@
       html += before.map((p) => pHtml(p, 'tv-eyebrow')).join('');
       html += `<p class="tv-date">${esc(day.label)}</p><h2 tabindex="-1">${esc(day.title)}</h2>`;
       html += rest.map((p) => pHtml(p)).join('');
+      html += artHtml(day.page - 1, `Artwork for ${day.label}`);
       const right = m.pages[day.page] ? paras(m.pages[day.page].text) : [];
-      if (right.length) html += '<hr>' + right.map((p) => pHtml(p)).join('');
+      const rightArt = artHtml(day.page, `Artwork for ${day.label}`);
+      if (right.length || rightArt) html += '<hr>' + rightArt + right.map((p) => pHtml(p)).join('');
       const k = m.days.indexOf(day);
       const prev = m.days[k - 1];
       const next = m.days[k + 1];
@@ -157,7 +162,8 @@
       const extra = m.extras.find((e) => sp.includes(e.page - 1));
       const name = sp[0] === 0 ? m.title : extra ? extra.label : `Page ${sp[0] + 1}`;
       html += `<h2 tabindex="-1">${esc(name)}</h2>`;
-      html += sp.map((k) => paras(m.pages[k].text).filter((p) => p !== name).map((p) => pHtml(p)).join('')).join('<hr>');
+      html += sp.map((k) => artHtml(k, `Image from page ${k + 1}`)
+        + paras(m.pages[k].text).filter((p) => p !== name).map((p) => pHtml(p)).join('')).join('<hr>');
       $('tv-nav').hidden = true;
     }
     art.innerHTML = html;

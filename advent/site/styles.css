@@ -128,6 +128,8 @@ main { flex: 1; display: flex; flex-direction: column; outline: none; }
 .tv-article p { margin: 0 0 1em; }
 .tv-article .tv-date { color: var(--muted); font-size: 1.0625rem; margin-bottom: 4px; }
 .tv-article .tv-eyebrow { color: var(--muted); font-size: .9375rem; font-weight: 600; letter-spacing: .06em; margin-bottom: 8px; }
+.tv-art { margin: 24px 0; }
+.tv-art img { display: block; width: 100%; height: auto; border-radius: 4px; background: var(--cloud); }
 .tv-article hr { border: 0; border-top: 1px solid var(--divider); margin: 24px 0; }
 .tv-article ul { padding-left: 1.2em; }
 .tv-nav { display: flex; justify-content: space-between; gap: 8px; max-width: 38rem; margin: 16px auto 0; }

@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { extractDays, cleanPageText, findExtras, pageRows, textMeasure, bodyAfterTitle } from './lib.mjs';
+import { extractDays, cleanPageText, findExtras, pageRows, textMeasure, bodyAfterTitle, parseImageBoxes, artRegions } from './lib.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = path.join(ROOT, 'site');
@@ -91,10 +91,16 @@ console.log(`Found all ${days.length} days (${days[0].label} p${days[0].page} �
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.cpSync(SITE, DIST, { recursive: true, filter: (src) => !src.endsWith('.tmpl.html') });
 fs.mkdirSync(path.join(DIST, 'pages'), { recursive: true });
+fs.mkdirSync(path.join(DIST, 'art'), { recursive: true });
 
 // ── 5. Page images ──────────────────────────────────────────────────────────
 const tmp = fs.mkdtempSync(path.join(ROOT, '.render-'));
+const ART_PAGES = new Set(days.flatMap((d) => [d.page, d.page + 1]).concat(extras.map((e) => e.page)));
 try {
+  // Where the pictures sit on each page, so the text view can show the artwork.
+  fs.mkdirSync(path.join(tmp, 'xml'));
+  run('pdftohtml', ['-xml', '-q', '-zoom', '1', '-nodrm', pdf, path.join(tmp, 'xml', 'b')]);
+  const imageBoxes = parseImageBoxes(fs.readFileSync(path.join(tmp, 'xml', 'b.xml'), 'utf8'));
   console.log('Rendering pages…');
   run('pdftoppm', ['-png', '-r', String(Math.ceil((SIZES.lg / (wPt / 72)) * 1.15)), '-aa', 'yes', '-aaVector', 'yes', pdf, path.join(tmp, 'p')]);
   const rendered = fs.readdirSync(tmp).filter((f) => f.endsWith('.png')).sort();
@@ -107,6 +113,25 @@ try {
         .toFile(path.join(DIST, 'pages', `${base}-${key}.webp`));
     }
     pages[i].img = { sm: `/pages/${base}-sm.webp`, lg: `/pages/${base}-lg.webp` };
+    pages[i].art = [];
+    if (ART_PAGES.has(n)) {
+      const { regions, fullPage } = artRegions(imageBoxes[n]);
+      const meta = await sharp(path.join(tmp, file)).metadata();
+      const scale = meta.width / +wPt;
+      const crops = fullPage ? [{ left: 0, top: 0, width: +wPt, height: +hPt }] : regions;
+      for (const [k, r] of crops.entries()) {
+        const left = Math.max(0, Math.round(r.left * scale));
+        const top = Math.max(0, Math.round(r.top * scale));
+        const width = Math.min(meta.width - left, Math.round(r.width * scale));
+        const height = Math.min(meta.height - top, Math.round(r.height * scale));
+        if (width < 20 || height < 20) continue;
+        const outW = Math.min(width, 1200);
+        const name = `/art/${base}-${k + 1}.webp`;
+        await sharp(path.join(tmp, file)).extract({ left, top, width, height }).resize({ width: outW })
+          .webp({ quality: 82, effort: 5 }).toFile(path.join(DIST, name));
+        pages[i].art.push({ src: name, width: outW, height: Math.round((height * outW) / width) });
+      }
+    }
     if (n === 1) {
       await sharp(path.join(tmp, file)).resize({ width: 1200, height: 630, fit: 'contain', background: '#F3F7FA' })
         .jpeg({ quality: 82 }).toFile(path.join(DIST, 'share.jpg'));
@@ -135,7 +160,7 @@ const manifest = {
   source: { file: path.basename(pdf), sha256: createHash('sha256').update(fs.readFileSync(pdf)).digest('hex').slice(0, 16) },
   pageSize: { width: +wPt, height: +hPt },
   pageCount,
-  pages: pages.map(({ n, img, paragraphs }) => ({ n, img, text: paragraphs.join('\n\n') })),
+  pages: pages.map(({ n, img, art, paragraphs }) => ({ n, img, ...(art.length ? { art } : {}), text: paragraphs.join('\n\n') })),
   days: days.map(({ slug, date, label, title, page, week }) => ({ slug, date, label, title, page, week })),
   weeks: weeks.map(({ name, label, days: d }) => ({ name, label, days: d })),
   extras,
@@ -154,7 +179,8 @@ const paraHtml = (text) => text.split(/\n{2,}/).map((p) => p.trim()).filter(Bool
 const dayText = (d) => {
   const { body } = bodyAfterTitle(pages[d.page - 1].paragraphs, d.label, d.title);
   const right = manifest.pages[d.page]?.text || '';
-  return `<p class="tv-date">${esc(d.label)}</p><h2>${esc(d.title)}</h2>\n${paraHtml(body.join('\n\n'))}\n<hr>\n${paraHtml(right)}`;
+  const artHtml = (pg) => (pages[pg - 1]?.art || []).map((a) => `<figure class="tv-art"><img src="${a.src}" width="${a.width}" height="${a.height}" alt="Artwork for ${esc(d.label)}" loading="lazy" decoding="async"></figure>`).join('\n');
+  return `<p class="tv-date">${esc(d.label)}</p><h2>${esc(d.title)}</h2>\n${paraHtml(body.join('\n\n'))}\n${artHtml(d.page)}\n<hr>\n${artHtml(d.page + 1)}\n${paraHtml(right)}`;
 };
 function page({ title, description, canonical, day, body }) {
   return tmpl
@@ -200,5 +226,9 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   '',
 ].join('\n'));
 
+const artCount = pages.reduce((s, p) => s + (p.art?.length || 0), 0);
+const daysWithoutArt = days.filter((d) => !pages[d.page - 1].art.length && !pages[d.page]?.art?.length).map((d) => d.label);
+console.log(`Artwork: ${artCount} picture(s) cut out for the text view.`);
+if (daysWithoutArt.length) console.warn(`⚠ No picture found for ${daysWithoutArt.length} day(s) (drawn art isn't detected): ${daysWithoutArt.slice(0, 5).join('; ')}${daysWithoutArt.length > 5 ? '…' : ''}`);
 const total = fs.readdirSync(path.join(DIST, 'pages')).reduce((s, f) => s + fs.statSync(path.join(DIST, 'pages', f)).size, 0);
 console.log(`✔ Built ${pageCount} pages (${(total / 1048576).toFixed(1)} MB of images), ${days.length} day pages → ${path.relative(ROOT, DIST)}/`);

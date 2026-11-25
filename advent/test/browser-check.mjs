@@ -174,6 +174,13 @@ await check('read as text: larger type, day navigation, back to booklet', async 
   const size = await page.locator('#tv-article p:not([class])').first().evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
   assert.ok(size >= 18, `text size ${size}`);
   assert.ok((await page.locator('#tv-article').textContent()).includes('Amen'), 'prayer from the right page is included');
+  const art = page.locator('#tv-article .tv-art img');
+  assert.equal(await art.count(), 1, 'the day\'s artwork is in the text view');
+  assert.equal(await art.getAttribute('alt'), `Artwork for ${d.label}`);
+  await art.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => { const i = document.querySelector('#tv-article .tv-art img'); return i && i.complete && i.naturalWidth > 0; });
+  const order = await page.$$eval('#tv-article > *', (els) => els.map((e) => e.tagName + (e.className ? '.' + e.className : '')));
+  assert.ok(order.indexOf('FIGURE.tv-art') < order.lastIndexOf('H3'), `art comes before the prayer: ${order.join(' ')}`);
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'phone-text.png'), fullPage: true });
   await page.click('#tv-next');
   assert.equal(await page.locator('#tv-article h2').textContent(), dayBy('dec-10').title);
@@ -196,6 +203,7 @@ await check('without JavaScript a day page still shows its text', async () => {
   await page.goto(`${BASE}/dec-9`);
   assert.equal(await page.locator('#tv-article h2').textContent(), dayBy('dec-9').title);
   assert.equal(await page.locator('#tv-article').isVisible(), true);
+  assert.equal(await page.locator('#tv-article .tv-art img').count(), 1);
   await ctx.close();
 });
 

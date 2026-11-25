@@ -183,3 +183,51 @@ export function findExtras(pages, extras = []) {
   }
   return out;
 }
+
+// ── Artwork ──────────────────────────────────────────────────────────────────
+// pdftohtml -xml output → { [pageNumber]: { width, height, boxes: [{ top, left, width, height }] } }
+export function parseImageBoxes(xml) {
+  const out = {};
+  const pageRe = /<page number="(\d+)"[^>]*height="([\d.]+)" width="([\d.]+)"[^>]*>([\s\S]*?)<\/page>/g;
+  let pm;
+  while ((pm = pageRe.exec(xml))) {
+    const boxes = [];
+    const imgRe = /<image top="(-?[\d.]+)" left="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"/g;
+    let im;
+    while ((im = imgRe.exec(pm[4]))) boxes.push({ top: +im[1], left: +im[2], width: +im[3], height: +im[4] });
+    out[+pm[1]] = { width: +pm[3], height: +pm[2], boxes };
+  }
+  return out;
+}
+
+// The artwork regions on one page: images big enough to be art (not ornaments),
+// clipped to the page, with overlapping or touching pieces merged into one.
+// An image that fills nearly the whole page means the page itself is the art.
+export function artRegions(info) {
+  if (!info) return { regions: [], fullPage: false };
+  const { width: W, height: H } = info;
+  let boxes = info.boxes.map((b) => {
+    const x0 = Math.max(0, b.left), y0 = Math.max(0, b.top);
+    const x1 = Math.min(W, b.left + b.width), y1 = Math.min(H, b.top + b.height);
+    return { x0, y0, x1, y1 };
+  }).filter((b) => b.x1 - b.x0 >= W * 0.15 && b.y1 - b.y0 >= H * 0.08 && (b.x1 - b.x0) * (b.y1 - b.y0) >= W * H * 0.04);
+  const GAP = 4;
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (a.x0 <= b.x1 + GAP && b.x0 <= a.x1 + GAP && a.y0 <= b.y1 + GAP && b.y0 <= a.y1 + GAP) {
+          boxes[i] = { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
+          boxes.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+  }
+  if (boxes.some((b) => (b.x1 - b.x0) * (b.y1 - b.y0) >= W * H * 0.85)) return { regions: [], fullPage: true };
+  boxes.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+  return { regions: boxes.map((b) => ({ left: b.x0, top: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 })), fullPage: false };
+}
