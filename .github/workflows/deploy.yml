@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # The Advent booklet publishes on its own (advent.yml); a booklet-only change
+    # does not need a website release.
+    paths-ignore: ['advent/**', '.github/workflows/advent.yml']
 
 permissions:
   contents: write

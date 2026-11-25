@@ -8,6 +8,11 @@ Production has three Cloudflare Workers:
   and runs scheduled-page promotion every 15 minutes.
 - `timothy-links` (`links-worker.js`) serves the utility links surface.
 
+Separately, the seasonal Advent devotional (`advent/`) is a static Cloudflare Pages project,
+`timothy-advent`, built from the booklet PDF and published by `.github/workflows/advent.yml`
+(not by the website release). `timothystl.org/advent*` reaches it through a zone Redirect Rule
+(302), which runs before the Site Worker. See [advent/README.md](../advent/README.md).
+
 Published page blocks are authoritative ([ADR 0002](adr/0002-published-blocks-are-authoritative.md)). The Site Worker edge-renders initial page bodies; client
 navigation uses the same published-block model. `/api/pages?chrome=1` returns global chrome and
 `/api/pages?id=<pageId>` returns one page body when needed.

@@ -1,0 +1,28 @@
+{
+  "title": "Held",
+  "subtitle": "Advent devotions from Timothy Lutheran Church",
+  "description": "A daily Advent devotional from Timothy Lutheran Church, St. Louis: one reading, one image, and one prayer for each day from November 29 through Christmas Day.",
+  "pdf": "source/booklet.pdf",
+  "downloadName": "timothy-advent-devotional.pdf",
+  "downloadLabel": "Download the booklet (PDF)",
+  "extraDownloads": [
+    { "file": "source/booklet-7x8.5.pdf", "as": "timothy-advent-devotional-7x8.5.pdf", "label": "Larger 7 × 8.5 edition (PDF)" }
+  ],
+  "timeZone": "America/Chicago",
+  "year": null,
+  "publicUrl": "https://timothystl.org/advent",
+  "cloudflareAnalyticsToken": "",
+  "weeks": [
+    { "name": "Remembered", "label": "Week one: Remembered", "from": "11-29" },
+    { "name": "Lifted", "label": "Week two: Lifted", "from": "12-06" },
+    { "name": "Covered", "label": "Week three: Covered", "from": "12-13" },
+    { "name": "Carried", "label": "Week four: Carried", "from": "12-20" },
+    { "name": "Christmas Day", "label": "Christmas Day", "from": "12-25" }
+  ],
+  "extras": [
+    { "label": "How to use this devotional", "find": "How to use this devotional", "position": "start" },
+    { "label": "Midweek services", "find": "Midweek", "position": "start" },
+    { "label": "Prayer list", "find": "Prayer list", "position": "end" },
+    { "label": "About the art", "find": "About the art", "position": "end" }
+  ]
+}

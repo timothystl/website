@@ -1,0 +1,21 @@
+{
+  "name": "timothy-advent",
+  "private": true,
+  "type": "module",
+  "description": "Page-turning online edition of the Timothy Lutheran Advent devotional",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/browser-check.mjs",
+    "test-pdf": "python3 scripts/make-test-pdf.py source/booklet.pdf"
+  },
+  "dependencies": {
+    "sharp": "0.34.5"
+  },
+  "devDependencies": {
+    "@fontsource-variable/source-sans-3": "5.2.8",
+    "page-flip": "2.0.7"
+  }
+}

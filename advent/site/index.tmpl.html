@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-US" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESCRIPTION}}">
+<link rel="canonical" href="{{CANONICAL}}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:image" content="/share.jpg">
+<meta name="theme-color" content="#F3F7FA">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v={{VERSION}}">
+<script>document.documentElement.classList.replace('no-js', 'js');</script>
+</head>
+<body data-day="{{DAY}}" data-version="{{VERSION}}">
+<a class="skip" href="#main">Skip to the devotional</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="{{SITE_TITLE}}, Advent devotions home">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="brand-text">
+      <span class="brand-title">{{SITE_TITLE}}</span>
+      <span class="brand-sub">Advent devotions · Timothy Lutheran Church</span>
+    </span>
+  </a>
+  <a class="btn btn-secondary download" href="{{DOWNLOAD_HREF}}" download>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="long">Download the booklet (PDF)</span><span class="short">PDF</span>
+  </a>
+</header>
+
+<p class="notice" id="notice" role="status" hidden></p>
+
+<nav class="toolbar" aria-label="Devotional">
+  <button type="button" class="btn btn-primary" id="btn-today" hidden>Today</button>
+  <button type="button" class="btn btn-secondary" id="btn-contents" aria-haspopup="dialog">
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    Days
+  </button>
+  <button type="button" class="btn btn-secondary" id="btn-text" aria-pressed="false">Read as text</button>
+</nav>
+
+<main id="main" tabindex="-1">
+  <section class="reader" id="reader" aria-label="Booklet">
+    <div class="stage" id="stage">
+      <div class="book-wrap" id="book-wrap"><div id="book" class="book" aria-hidden="true"></div></div>
+    </div>
+    <div class="controls">
+      <button type="button" class="btn btn-secondary nav-btn" id="btn-prev" aria-label="Previous page">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="nav-label">Previous</span>
+      </button>
+      <p class="counter" id="counter" aria-live="polite"></p>
+      <button type="button" class="btn btn-secondary nav-btn" id="btn-next" aria-label="Next page">
+        <span class="nav-label">Next</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <p class="hint" id="hint">Use the arrow keys, the buttons, or swipe to turn pages.</p>
+  </section>
+
+  <section class="textview" id="textview" aria-label="Text of this devotion">
+    <article class="tv-article" id="tv-article">
+{{NOSCRIPT_TEXT}}
+    </article>
+    <div class="tv-nav" id="tv-nav" hidden>
+      <button type="button" class="btn btn-secondary" id="tv-prev"></button>
+      <button type="button" class="btn btn-secondary" id="tv-next"></button>
+    </div>
+    <p class="tv-back" id="tv-back-wrap" hidden><button type="button" class="btn btn-primary" id="tv-back">Back to the booklet</button></p>
+  </section>
+</main>
+
+<dialog class="contents" id="contents" aria-labelledby="contents-title">
+  <div class="contents-head">
+    <h2 id="contents-title">Days of Advent</h2>
+    <button type="button" class="btn btn-secondary icon-btn" id="contents-close" aria-label="Close">
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <nav id="contents-list" aria-labelledby="contents-title"></nav>
+</dialog>
+
+<footer class="foot">
+  <p>Timothy Lutheran Church · 6704 Fyler Ave · St. Louis, MO 63139 · <a href="https://timothystl.org">timothystl.org</a></p>
+</footer>
+
+<script src="/vendor/page-flip/page-flip.browser.js?v={{VERSION}}" defer></script>
+<script src="/app.js?v={{VERSION}}" defer></script>
+{{ANALYTICS}}
+</body>
+</html>
