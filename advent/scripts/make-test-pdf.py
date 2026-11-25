@@ -7,6 +7,8 @@ import sys, datetime
 from reportlab.lib.pagesizes import inch
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
+from reportlab.lib.utils import ImageReader
+from PIL import Image, ImageDraw
 
 out = sys.argv[1]
 year = int(sys.argv[2]) if len(sys.argv) > 2 else 2026
@@ -75,8 +77,13 @@ for i in range(27):
           "Ask: Where do you feel forgotten this week? Where has God", "already been remembering you?"],
          0.6 * inch, H - 2.2 * inch)
     end(n); n += 1
-    c.setFillColor(TINT); c.rect(0.6 * inch, H / 2 - 0.2 * inch, W - 1.2 * inch, H / 2 - 0.5 * inch, stroke=0, fill=1)
-    c.setFillColor(ACTION); c.circle(W / 2, H * 0.72, 40 + i, stroke=0, fill=1)
+    # Stand-in artwork: a raster picture, as placed art in the real booklet would be.
+    art = Image.new("RGB", (900, 760), (223, 235, 242))
+    dr = ImageDraw.Draw(art)
+    r = 160 + i * 6
+    dr.ellipse((450 - r, 380 - r, 450 + r, 380 + r), fill=(56, 103, 129))
+    dr.rectangle((0, 700, 900, 760), fill=(201, 151, 58))
+    c.drawImage(ImageReader(art), 0.6 * inch, H / 2 - 0.2 * inch, W - 1.2 * inch, H / 2 - 0.5 * inch)
     para(["Prayer"], 0.6 * inch, H / 2 - 0.6 * inch, 12, font="Helvetica-Bold", color=MUTED)
     para(["Lord Jesus, you came near when we could not climb to you.", "Hold us today as you held Mary and Joseph,",
           "and keep us in your mercy. Amen."], 0.6 * inch, H / 2 - 0.95 * inch, font="Times-Italic")

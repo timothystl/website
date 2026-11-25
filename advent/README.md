@@ -38,6 +38,11 @@ The build reads the PDF's text, so nothing is tied to page numbers. It only need
 
 A page listing several dates (like the midweek services page) is ignored for this.
 
+**Pictures in "Read as text."** The build finds each picture placed on a devotion's pages (photos,
+scans, paintings), cuts it out of the page, and shows it in the text view between the reflection
+and the prayer. Art drawn directly in InDesign as shapes, rather than placed as an image, can't be
+found this way; the build lists any days where no picture was found.
+
 ### When a day can't be found
 
 Copy `source/overrides.example.json` to `source/overrides.json` and list the day with its PDF
