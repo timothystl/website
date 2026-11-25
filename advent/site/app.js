@@ -119,10 +119,19 @@
   // Artwork cut from a page by the build; shown in the text view where the page has it.
   const artHtml = (k, alt) => ((m.pages[k] && m.pages[k].art) || []).map((a) =>
     `<figure class="tv-art"><img src="${a.src}" width="${a.width}" height="${a.height}" alt="${esc(alt)}" loading="lazy" decoding="async"></figure>`).join('');
-  const paras = (text) => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  const isHeading = (p) => !p.includes('\n') && p.length <= 32 && !/[.,;:!?”"]$/.test(p);
-  const pHtml = (p, cls) => (!cls && isHeading(p) ? `<h3>${esc(p)}</h3>`
-    : `<p${cls ? ` class="${cls}"` : ''}>${esc(p).replace(/\n/g, '<br>')}</p>`);
+  const blocksHtml = (blocks) => blocks.map((b) => (b.k === 'h' ? `<h3>${esc(b.t)}</h3>`
+    : b.k === 'e' ? `<p class="tv-eyebrow">${esc(b.t)}</p>` : `<p>${esc(b.t).replace(/\n/g, '<br>')}</p>`)).join('');
+  // Blocks after a devotion's date and title (same rule as the build's bodyAfterTitle).
+  function afterTitle(blocks, label, title) {
+    const at = blocks.findIndex((b) => b.t.split('\n').some((l) => l.trim() === label));
+    if (at < 0) return { eyebrow: [], body: blocks.filter((b) => b.t !== title) };
+    const rest = blocks.slice(at);
+    const lines = rest[0].t.split('\n');
+    const after = lines.slice(lines.findIndex((l) => l.trim() === label) + 1).filter((l) => l.trim() !== title);
+    if (after.length) rest[0] = { k: rest[0].k, t: after.join('\n') }; else rest.shift();
+    if (rest.length && title && rest[0].t.trim() === title) rest.shift();
+    return { eyebrow: blocks.slice(0, at), body: rest };
+  }
 
   function renderText(target) {
     textTarget = target;
@@ -130,22 +139,14 @@
     let html = '';
     const day = target.day;
     if (day) {
-      const left = paras(m.pages[day.page - 1].text);
-      const at = left.findIndex((p) => p.split('\n')[0].trim() === day.label);
-      const before = at > 0 ? left.slice(0, at) : [];
-      const rest = at >= 0 ? left.slice(at) : left.slice();
-      const strip = (p, line) => (p && p.split('\n')[0].trim() === line ? p.split('\n').slice(1).join('\n').trim() : p);
-      rest[0] = strip(rest[0], day.label);
-      if (!rest[0]) rest.shift();
-      if (day.title) rest[0] = strip(rest[0], day.title);
-      if (!rest[0]) rest.shift();
-      html += before.map((p) => pHtml(p, 'tv-eyebrow')).join('');
+      const { eyebrow, body } = afterTitle(m.pages[day.page - 1].blocks || [], day.label, day.title);
+      html += eyebrow.map((b) => `<p class="tv-eyebrow">${esc(b.t)}</p>`).join('');
       html += `<p class="tv-date">${esc(day.label)}</p><h2 tabindex="-1">${esc(day.title)}</h2>`;
-      html += rest.map((p) => pHtml(p)).join('');
+      html += blocksHtml(body);
       html += artHtml(day.page - 1, `Artwork for ${day.label}`);
-      const right = m.pages[day.page] ? paras(m.pages[day.page].text) : [];
+      const right = m.pages[day.page] ? m.pages[day.page].blocks || [] : [];
       const rightArt = artHtml(day.page, `Artwork for ${day.label}`);
-      if (right.length || rightArt) html += '<hr>' + rightArt + right.map((p) => pHtml(p)).join('');
+      if (right.length || rightArt) html += '<hr>' + rightArt + blocksHtml(right);
       const k = m.days.indexOf(day);
       const prev = m.days[k - 1];
       const next = m.days[k + 1];
@@ -163,7 +164,7 @@
       const name = sp[0] === 0 ? m.title : extra ? extra.label : `Page ${sp[0] + 1}`;
       html += `<h2 tabindex="-1">${esc(name)}</h2>`;
       html += sp.map((k) => artHtml(k, `Image from page ${k + 1}`)
-        + paras(m.pages[k].text).filter((p) => p !== name).map((p) => pHtml(p)).join('')).join('<hr>');
+        + blocksHtml((m.pages[k].blocks || []).filter((b) => b.t !== name))).join('<hr>');
       $('tv-nav').hidden = true;
     }
     art.innerHTML = html;

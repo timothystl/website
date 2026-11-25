@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { extractDays, cleanPageText, findExtras, pageRows, textMeasure, bodyAfterTitle, parseImageBoxes, artRegions } from './lib.mjs';
+import { extractDays, findExtras, bodyAfterTitle, parseImageBoxes, artRegions, parsePdfXml, bookMetrics, pageBlocks } from './lib.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = path.join(ROOT, 'site');
@@ -43,6 +43,11 @@ function run(cmd, args, opts = {}) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 if (!fs.existsSync(pdf)) fail(`No booklet found at ${pdf}.`);
+const PDF_VERSION = createHash('sha256').update(fs.readFileSync(pdf)).digest('hex').slice(0, 16);
+// Changes when either the booklet or the viewer code changes (for app.js, styles.css, manifest.json).
+const BUILD_VERSION = createHash('sha256').update(PDF_VERSION)
+  .update(fs.readFileSync(path.join(SITE, 'app.js'))).update(fs.readFileSync(path.join(SITE, 'styles.css')))
+  .update(JSON.stringify(config)).digest('hex').slice(0, 16);
 const sharp = (await import('sharp')).default;
 
 // ── 1. Page count and size ──────────────────────────────────────────────────
@@ -54,12 +59,28 @@ console.log(`Booklet: ${path.relative(ROOT, pdf)} · ${pageCount} pages · ${(wP
 if (pageCount % 2) console.warn('⚠ Odd page count; spreads may not line up as expected.');
 
 // ── 2. Text for every page ──────────────────────────────────────────────────
-const raws = [];
-for (let n = 1; n <= pageCount; n++) {
-  raws.push(run('pdftotext', ['-layout', '-enc', 'UTF-8', '-f', String(n), '-l', String(n), pdf, '-']));
+// pdftohtml -xml gives every line of text in reading order with its position and
+// type size (so columns, paragraphs and headings survive), and where each picture sits.
+const xmlDir = fs.mkdtempSync(path.join(ROOT, '.xml-'));
+let pdfXml;
+try {
+  run('pdftohtml', ['-xml', '-q', '-zoom', '1', '-nodrm', '-enc', 'UTF-8', pdf, path.join(xmlDir, 'b')]);
+  pdfXml = fs.readFileSync(path.join(xmlDir, 'b.xml'), 'utf8');
+} finally {
+  fs.rmSync(xmlDir, { recursive: true, force: true });
 }
-const measure = textMeasure(raws.flatMap(pageRows));
-const pages = raws.map((raw, i) => ({ n: i + 1, ...cleanPageText(raw, { measure }) }));
+const textByPage = parsePdfXml(pdfXml);
+const imageBoxes = parseImageBoxes(pdfXml);
+const metrics = bookMetrics(textByPage);
+const pages = [];
+// Eyebrows are set in tracked capitals; restore the booklet's own capitalization of
+// names such as "Christmas Day" after converting them to sentence case.
+const NAMES = [...new Set(config.weeks.flatMap((w) => [w.name, ...(config.properNames || [])]))];
+const fixNames = (t) => NAMES.reduce((s, name) => s.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), name), t);
+for (let n = 1; n <= pageCount; n++) {
+  const blocks = pageBlocks(textByPage[n], metrics).map((b) => (b.k === 'e' ? { ...b, t: fixNames(b.t) } : b));
+  pages.push({ n, blocks, rows: (textByPage[n]?.lines || []).map((l) => l.text) });
+}
 
 // ── 3. Day → page map ───────────────────────────────────────────────────────
 const { days, missing, problems, year } = extractDays(pages, { overrides, year: config.year });
@@ -83,7 +104,7 @@ for (const d of days) {
   d.week = wk.name;
   wk.days.push(d.slug);
 }
-const extras = findExtras(pages, config.extras);
+const extras = findExtras(pages, config.extras, new Set(days.flatMap((d) => [d.page, d.page + 1])));
 for (const e of config.extras) if (!extras.find((x) => x.label === e.label)) console.warn(`⚠ Contents entry "${e.label}" not found; left out.`);
 console.log(`Found all ${days.length} days (${days[0].label} p${days[0].page} … ${days.at(-1).label} p${days.at(-1).page}) for ${year}.`);
 
@@ -97,10 +118,6 @@ fs.mkdirSync(path.join(DIST, 'art'), { recursive: true });
 const tmp = fs.mkdtempSync(path.join(ROOT, '.render-'));
 const ART_PAGES = new Set(days.flatMap((d) => [d.page, d.page + 1]).concat(extras.map((e) => e.page)));
 try {
-  // Where the pictures sit on each page, so the text view can show the artwork.
-  fs.mkdirSync(path.join(tmp, 'xml'));
-  run('pdftohtml', ['-xml', '-q', '-zoom', '1', '-nodrm', pdf, path.join(tmp, 'xml', 'b')]);
-  const imageBoxes = parseImageBoxes(fs.readFileSync(path.join(tmp, 'xml', 'b.xml'), 'utf8'));
   console.log('Rendering pages…');
   run('pdftoppm', ['-png', '-r', String(Math.ceil((SIZES.lg / (wPt / 72)) * 1.15)), '-aa', 'yes', '-aaVector', 'yes', pdf, path.join(tmp, 'p')]);
   const rendered = fs.readdirSync(tmp).filter((f) => f.endsWith('.png')).sort();
@@ -112,7 +129,8 @@ try {
       await sharp(path.join(tmp, file)).resize({ width }).webp({ quality: key === 'lg' ? 82 : 78, effort: 5 })
         .toFile(path.join(DIST, 'pages', `${base}-${key}.webp`));
     }
-    pages[i].img = { sm: `/pages/${base}-sm.webp`, lg: `/pages/${base}-lg.webp` };
+    // ?v= changes with every new PDF, so browsers never show a previous booklet's pages.
+    pages[i].img = { sm: `/pages/${base}-sm.webp?v=${PDF_VERSION}`, lg: `/pages/${base}-lg.webp?v=${PDF_VERSION}` };
     pages[i].art = [];
     if (ART_PAGES.has(n)) {
       const { regions, fullPage } = artRegions(imageBoxes[n]);
@@ -129,7 +147,7 @@ try {
         const name = `/art/${base}-${k + 1}.webp`;
         await sharp(path.join(tmp, file)).extract({ left, top, width, height }).resize({ width: outW })
           .webp({ quality: 82, effort: 5 }).toFile(path.join(DIST, name));
-        pages[i].art.push({ src: name, width: outW, height: Math.round((height * outW) / width) });
+        pages[i].art.push({ src: `${name}?v=${PDF_VERSION}`, width: outW, height: Math.round((height * outW) / width) });
       }
     }
     if (n === 1) {
@@ -147,7 +165,7 @@ for (const dl of [{ file: pdf, as: config.downloadName, label: config.downloadLa
   const src = path.resolve(ROOT, dl.file);
   if (!fs.existsSync(src)) { console.warn(`⚠ Optional download ${dl.file} not found; skipped.`); continue; }
   fs.copyFileSync(src, path.join(DIST, dl.as));
-  downloads.push({ href: `/${dl.as}`, label: dl.label, sizeMB: +(fs.statSync(src).size / 1048576).toFixed(1) });
+  downloads.push({ href: `/${dl.as}?v=${PDF_VERSION}`, label: dl.label, sizeMB: +(fs.statSync(src).size / 1048576).toFixed(1) });
 }
 
 // ── 7. Manifest ─────────────────────────────────────────────────────────────
@@ -157,10 +175,10 @@ const manifest = {
   year,
   timeZone: config.timeZone,
   generated: new Date().toISOString(),
-  source: { file: path.basename(pdf), sha256: createHash('sha256').update(fs.readFileSync(pdf)).digest('hex').slice(0, 16) },
+  source: { file: path.basename(pdf), sha256: PDF_VERSION },
   pageSize: { width: +wPt, height: +hPt },
   pageCount,
-  pages: pages.map(({ n, img, art, paragraphs }) => ({ n, img, ...(art.length ? { art } : {}), text: paragraphs.join('\n\n') })),
+  pages: pages.map(({ n, img, art, blocks }) => ({ n, img, ...(art.length ? { art } : {}), blocks })),
   days: days.map(({ slug, date, label, title, page, week }) => ({ slug, date, label, title, page, week })),
   weeks: weeks.map(({ name, label, days: d }) => ({ name, label, days: d })),
   extras,
@@ -173,14 +191,18 @@ const tmpl = fs.readFileSync(path.join(SITE, 'index.tmpl.html'), 'utf8');
 const analytics = config.cloudflareAnalyticsToken
   ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: config.cloudflareAnalyticsToken })}'></script>`
   : '';
-const paraHtml = (text) => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
-  .map((p) => (!p.includes('\n') && p.length <= 32 && !/[.,;:!?”"]$/.test(p) ? `<h3>${esc(p)}</h3>`
-    : `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)).join('\n');
+const blockHtml = (blocks) => blocks.map((b) => (b.k === 'h' ? `<h3>${esc(b.t)}</h3>`
+  : b.k === 'e' ? `<p class="tv-eyebrow">${esc(b.t)}</p>` : `<p>${esc(b.t).replace(/\n/g, '<br>')}</p>`)).join('\n');
 const dayText = (d) => {
-  const { body } = bodyAfterTitle(pages[d.page - 1].paragraphs, d.label, d.title);
-  const right = manifest.pages[d.page]?.text || '';
+  const { eyebrow, body } = bodyAfterTitle(pages[d.page - 1].blocks, d.label, d.title);
+  const right = pages[d.page]?.blocks || [];
   const artHtml = (pg) => (pages[pg - 1]?.art || []).map((a) => `<figure class="tv-art"><img src="${a.src}" width="${a.width}" height="${a.height}" alt="Artwork for ${esc(d.label)}" loading="lazy" decoding="async"></figure>`).join('\n');
-  return `<p class="tv-date">${esc(d.label)}</p><h2>${esc(d.title)}</h2>\n${paraHtml(body.join('\n\n'))}\n${artHtml(d.page)}\n<hr>\n${artHtml(d.page + 1)}\n${paraHtml(right)}`;
+  return `${eyebrow.map((b) => `<p class="tv-eyebrow">${esc(b.t)}</p>`).join('')}<p class="tv-date">${esc(d.label)}</p><h2>${esc(d.title)}</h2>
+${blockHtml(body)}
+${artHtml(d.page)}
+<hr>
+${artHtml(d.page + 1)}
+${blockHtml(right)}`;
 };
 function page({ title, description, canonical, day, body }) {
   return tmpl
@@ -193,7 +215,7 @@ function page({ title, description, canonical, day, body }) {
     .replace('{{NOSCRIPT_TEXT}}', body)
     .replace('{{ANALYTICS}}', analytics)
     .replaceAll('{{DOWNLOAD_HREF}}', esc(downloads[0]?.href || ''))
-    .replaceAll('{{VERSION}}', manifest.source.sha256);
+    .replaceAll('{{VERSION}}', BUILD_VERSION);
 }
 const base = (config.publicUrl || '').replace(/\/$/, '');
 const contents = days.map((d) => `<li><a href="/${d.slug}">${esc(d.label)}: ${esc(d.title)}</a></li>`).join('');
